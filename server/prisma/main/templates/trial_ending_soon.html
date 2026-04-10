@@ -1,0 +1,28 @@
+{% extends "base_email.html" %}
+{% block title %}Trial ending soon – Prisma Fleet{% endblock %}
+{% block content %}
+<div class="greeting">Hello,</div>
+
+<div class="intro-text">
+  Your <strong>{{ plan_name }}</strong> trial for <strong>{{ fleet_name }}</strong> ends on
+  <strong>{{ trial_end_date }}</strong>. Paid billing is scheduled to begin on <strong>{{ billing_start_date }}</strong>.
+</div>
+
+<div class="details-card">
+  <div class="details-title">Billing preview</div>
+  <div class="details-grid">
+    <div class="detail-row">
+      <div class="detail-item detail-label">Plan</div>
+      <div class="detail-item detail-value">{{ plan_name }}</div>
+    </div>
+    <div class="detail-row">
+      <div class="detail-item detail-label">Estimated amount</div>
+      <div class="detail-item detail-value">{{ billing_amount }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="intro-text">
+  No action is required unless you wish to change your plan or payment method in the Prisma app before billing starts.
+</div>
+{% endblock %}

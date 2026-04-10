@@ -1,0 +1,37 @@
+{% extends "base_email.html" %}
+{% block title %}Transfer request declined – Prisma Car Care{% endblock %}
+{% block content %}
+<div class="greeting">Hello {{ requester_name }},</div>
+
+<div class="intro-text">
+  {{ owner_name }} has declined to transfer this vehicle to you.
+</div>
+
+<div class="details-card">
+  <div class="details-title">Vehicle</div>
+  <div class="details-grid">
+    <div class="detail-row">
+      <div class="detail-item detail-label">Vehicle</div>
+      <div class="detail-item detail-value">{{ vehicle_make }} {{ vehicle_model }} ({{ vehicle_year }})</div>
+    </div>
+    <div class="detail-row">
+      <div class="detail-item detail-label">Registration</div>
+      <div class="detail-item detail-value">{{ vehicle_registration }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="contact-box">
+  <div class="contact-title">Need help?</div>
+  <div class="contact-text">
+    If you have questions, contact the vehicle owner or <a href="mailto:support@prismavalet.com" class="contact-link">support@prismavalet.com</a>.
+  </div>
+</div>
+
+<div class="closing">
+  <div class="signature">
+    Best regards,<br />
+    <span class="signature-name">The Prisma Car Care Team</span>
+  </div>
+</div>
+{% endblock %}

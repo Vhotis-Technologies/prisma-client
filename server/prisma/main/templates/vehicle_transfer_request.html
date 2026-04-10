@@ -1,0 +1,45 @@
+{% extends "base_email.html" %}
+{% block title %}Vehicle transfer request – Prisma Car Care{% endblock %}
+{% block content %}
+<div class="greeting">Hello {{ owner_name }},</div>
+
+<div class="intro-text">
+  Someone has requested to take over ownership of your vehicle. Details are below.
+</div>
+
+<div class="details-card">
+  <div class="details-title">Transfer request</div>
+  <div class="details-grid">
+    <div class="detail-row">
+      <div class="detail-item detail-label">Vehicle</div>
+      <div class="detail-item detail-value">{{ vehicle_make }} {{ vehicle_model }} ({{ vehicle_year }})</div>
+    </div>
+    <div class="detail-row">
+      <div class="detail-item detail-label">Registration</div>
+      <div class="detail-item detail-value">{{ vehicle_registration }}</div>
+    </div>
+    <div class="detail-row">
+      <div class="detail-item detail-label">Requested by</div>
+      <div class="detail-item detail-value">{{ requester_name }}</div>
+    </div>
+    <div class="detail-row">
+      <div class="detail-item detail-label">Expires</div>
+      <div class="detail-item detail-value">{{ expires_at }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="contact-box">
+  <div class="contact-title">What to do</div>
+  <div class="contact-text">
+    Open the Prisma Car Care app to view this request and approve or reject it. The vehicle stays in your garage until you respond.
+  </div>
+</div>
+
+<div class="closing">
+  <div class="signature">
+    Best regards,<br />
+    <span class="signature-name">The Prisma Car Care Team</span>
+  </div>
+</div>
+{% endblock %}

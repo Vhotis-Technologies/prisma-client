@@ -1,0 +1,150 @@
+# Client — standalone staging. docker compose -f docker-compose-staging.yml up -d --build
+# Requires: docker network create prisma_shared_net
+# client_staging_redis is the single shared Redis for all staging apps (detailer/support use other DB indexes).
+# Ngrok: point the tunnel at this stack’s nginx — e.g. `ngrok http 8080` (see client_staging_nginx ports below).
+# If ngrok shows ERR_NGROK_8012 with undefined://undefined, the agent has no forward URL/host set in CLI or dashboard.
+
+name: prisma_client_staging
+
+services:
+  client_postgres:
+    image: postgres:16-alpine
+    container_name: client_postgres_staging
+    env_file:
+      - .env.staging
+    volumes:
+      - client_staging_pgdata:/var/lib/postgresql/data
+    networks:
+      - prisma_shared_net
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  client_staging_redis:
+    image: redis:7-alpine
+    container_name: client_staging_redis
+    env_file:
+      - .env.staging
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - client_staging_redis_data:/data
+    networks:
+      prisma_shared_net:
+        aliases:
+          - prisma_redis_staging
+    ports:
+      - "6480:6379"
+
+  client_staging_server:
+    container_name: client_staging_server
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    ports:
+      - "8100:8000"
+    volumes:
+      - ./server/prisma:/app
+    env_file:
+      - .env.staging
+    environment:
+      - DJANGO_SETTINGS_MODULE=prisma.settings
+      - DJANGO_ALLOWED_HOSTS=*
+      - PRISMA_ENV=staging
+    command: python manage.py runserver 0.0.0.0:8000
+    depends_on:
+      client_postgres:
+        condition: service_healthy
+      client_staging_redis:
+        condition: service_started
+    networks:
+      - prisma_shared_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  client_staging_celery_worker:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: client_staging_celery_worker
+    command: celery -A prisma.celery worker --loglevel=info
+    volumes:
+      - ./server/prisma:/app
+    env_file:
+      - .env.staging
+    environment:
+      - DJANGO_SETTINGS_MODULE=prisma.settings
+      - PRISMA_ENV=staging
+      - CELERY_BROKER_URL=redis://client_staging_redis:6379/0
+      - REDIS_HOST=client_staging_redis
+      - CELERY_RESULT_BACKEND=redis://client_staging_redis:6379/1
+      - CELERY_WORKER_CONCURRENCY=3
+    depends_on:
+      client_staging_redis:
+        condition: service_started
+      client_staging_server:
+        condition: service_started
+      client_postgres:
+        condition: service_healthy
+    networks:
+      - prisma_shared_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  client_staging_nginx:
+    image: nginx:alpine
+    container_name: client_staging_nginx
+    restart: unless-stopped
+    env_file:
+      - .env.staging
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/html/static:/usr/share/nginx/html/static:ro
+    depends_on:
+      - client_staging_server
+    networks:
+      - prisma_shared_net
+
+
+  client_staging_job_subscriber:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: client_staging_job_subscriber
+    command: python manage.py subscribe_redis
+    volumes:
+      - ./server/prisma:/app
+    env_file:
+      - .env.staging
+    environment:
+      - DJANGO_SETTINGS_MODULE=prisma.settings
+      - PRISMA_ENV=staging
+      - REDIS_HOST=client_staging_redis
+    depends_on:
+      client_staging_redis:
+        condition: service_started
+      client_postgres:
+        condition: service_healthy
+    restart: always
+    networks:
+      - prisma_shared_net
+
+volumes:
+  client_staging_pgdata:
+  client_staging_redis_data:
+
+networks:
+  prisma_shared_net:
+    external: true

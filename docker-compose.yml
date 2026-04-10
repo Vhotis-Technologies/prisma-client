@@ -1,0 +1,90 @@
+services:
+  client_server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./server/prisma:/app
+    env_file:
+      - .env
+    environment:
+      - DJANGO_SETTINGS_MODULE=prisma.settings
+      - DJANGO_ALLOWED_HOSTS=*
+      - PRISMA_ENV=production
+    command: python manage.py runserver 0.0.0.0:8000
+
+    networks:
+      - prisma_shared_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  client_celery_worker:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    command: celery -A prisma.celery worker --loglevel=info
+    volumes:
+      - ./server/prisma:/app
+    env_file:
+      - .env
+    environment:
+      - DJANGO_SETTINGS_MODULE=prisma.settings
+      - PRISMA_ENV=production
+      - CELERY_BROKER_URL=redis://prisma_redis:6379/0
+      - REDIS_HOST=prisma_redis
+      - CELERY_RESULT_BACKEND=redis://prisma_redis:6379/1
+      - CELERY_WORKER_CONCURRENCY=3
+    depends_on:
+      prisma_redis:
+        condition: service_started
+      client_server:
+        condition: service_started
+    networks:
+      - prisma_shared_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  prisma_redis:
+    image: redis:7-alpine
+    env_file:
+      - .env
+    ports:
+      - "6380:6379"
+    volumes:
+      - ./redis/data:/data
+    networks:
+      - prisma_shared_net
+
+  job_acceptance_subscriber:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    command: python manage.py subscribe_redis
+    volumes:
+      - ./server/prisma:/app
+    env_file:
+      - .env
+    environment:
+      - DJANGO_SETTINGS_MODULE=prisma.settings
+      - PRISMA_ENV=production
+      - REDIS_HOST=prisma_redis
+    depends_on:
+      - prisma_redis
+    restart: always
+    networks:
+      - prisma_shared_net
+
+volumes:
+  redis_data:
+
+networks:
+  prisma_shared_net:
+    external: true

@@ -1,0 +1,13 @@
+{% extends "base_email.html" %}
+{% block title %}Payment method updated{% endblock %}
+{% block content %}
+<div class="greeting">Hello,</div>
+
+<div class="intro-text">
+  The default payment method for <strong>{{ fleet_name }}</strong> was updated successfully. Future subscription charges will use this method unless you change it again in the Prisma app.
+</div>
+
+<div class="intro-text">
+  If you did not make this change, secure your account and contact support immediately.
+</div>
+{% endblock %}

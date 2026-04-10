@@ -1,0 +1,27 @@
+{% extends "base_email.html" %}
+{% block title %}Welcome to your trial – Prisma Fleet{% endblock %}
+{% block content %}
+<div class="greeting">Hello,</div>
+
+<div class="intro-text">
+  Welcome to <strong>{{ plan_name }}</strong> for <strong>{{ fleet_name }}</strong>. Your trial is now active.
+</div>
+
+<div class="details-card">
+  <div class="details-title">Trial summary</div>
+  <div class="details-grid">
+    <div class="detail-row">
+      <div class="detail-item detail-label">Trial length</div>
+      <div class="detail-item detail-value">{{ trial_days }} days</div>
+    </div>
+    <div class="detail-row">
+      <div class="detail-item detail-label">Trial ends</div>
+      <div class="detail-item detail-value">{{ trial_end_date }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="intro-text">
+  Explore fleet features in the Prisma app. We will email you again before billing begins. Thank you for choosing Prisma.
+</div>
+{% endblock %}

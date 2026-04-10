@@ -1,0 +1,44 @@
+{% extends "base_email.html" %}
+{% block title %}Welcome to Prisma Car Care{% endblock %}
+{% block content %}
+<div class="greeting">Welcome to Prisma Car Care</div>
+
+<div class="intro-text">
+  Thank you for joining. We're excited to have you and look forward to providing exceptional valet and vehicle care.
+</div>
+
+<div class="details-card">
+  <div class="details-title">Getting started</div>
+  <div class="details-grid">
+    <div class="detail-row">
+      <div class="detail-item detail-label">Your account</div>
+      <div class="detail-item detail-value">Ready to use</div>
+    </div>
+    <div class="detail-row">
+      <div class="detail-item detail-label">Support</div>
+      <div class="detail-item detail-value">Here when you need us</div>
+    </div>
+    <div class="detail-row">
+      <div class="detail-item detail-label">Next step</div>
+      <div class="detail-item detail-value">Book your first valet service</div>
+    </div>
+  </div>
+</div>
+
+<div class="contact-box">
+  <div class="contact-title">Need help?</div>
+  <div class="contact-text">
+    Contact us at <a href="mailto:support@prismavalet.com" class="contact-link">support@prismavalet.com</a>
+  </div>
+</div>
+
+<div class="closing">
+  <div class="closing-text">
+    We're thrilled to have you. Get ready for premium vehicle care.
+  </div>
+  <div class="signature">
+    Best regards,<br />
+    <span class="signature-name">The Prisma Car Care Team</span>
+  </div>
+</div>
+{% endblock %}

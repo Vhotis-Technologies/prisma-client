@@ -1,0 +1,32 @@
+{% extends "base_email.html" %}
+{% block title %}Upcoming subscription renewal – Prisma Fleet{% endblock %}
+{% block content %}
+<div class="greeting">Hello,</div>
+
+<div class="intro-text">
+  Your fleet subscription <strong>{{ plan_name }}</strong> for <strong>{{ fleet_name }}</strong> has an upcoming charge.
+  This is a reminder from Prisma in case Stripe invoice emails are turned off for your account.
+</div>
+
+<div class="details-card">
+  <div class="details-title">Renewal summary</div>
+  <div class="details-grid">
+    <div class="detail-row">
+      <div class="detail-item detail-label">Plan</div>
+      <div class="detail-item detail-value">{{ plan_name }}</div>
+    </div>
+    <div class="detail-row">
+      <div class="detail-item detail-label">Billing date</div>
+      <div class="detail-item detail-value">{{ renewal_date }}</div>
+    </div>
+    <div class="detail-row">
+      <div class="detail-item detail-label">Amount due</div>
+      <div class="detail-item detail-value"><strong>{{ currency }} {{ amount_due }}</strong></div>
+    </div>
+  </div>
+</div>
+
+<div class="intro-text">
+  If your payment method is up to date, no action is needed. To update billing details, use the subscription or billing section in the Prisma app.
+</div>
+{% endblock %}

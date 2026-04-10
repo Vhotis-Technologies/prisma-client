@@ -1,0 +1,55 @@
+{% extends "base_email.html" %}
+{% block title %}Special offer – Prisma Car Care{% endblock %}
+{% block content %}
+<div class="greeting">Hello {{ customer_name }},</div>
+
+<div class="intro-text">
+  You have an exclusive promotion: <strong>5% off your next valet services</strong>. Valid for 30 days from today. The discount is applied automatically at checkout.
+</div>
+
+<div class="details-card">
+  <div class="details-title">Offer</div>
+  <div class="details-grid">
+    <div class="detail-row">
+      <div class="detail-item detail-label">Discount</div>
+      <div class="detail-item detail-value">5% off</div>
+    </div>
+    <div class="detail-row">
+      <div class="detail-item detail-label">Valid for</div>
+      <div class="detail-item detail-value">30 days</div>
+    </div>
+    <div class="detail-row">
+      <div class="detail-item detail-label">Applies to</div>
+      <div class="detail-item detail-value">All valet services</div>
+    </div>
+  </div>
+</div>
+
+<p style="margin: 20px 0;">
+  <a href="{{ booking_url }}" class="btn-primary">Book now & save 5%</a>
+</p>
+
+<div class="reminders-box">
+  <div class="contact-title">Terms</div>
+  <div class="contact-text">
+    Valid for 30 days from this email. Cannot be combined with other promotions. Subject to availability and standard booking terms.
+  </div>
+</div>
+
+<div class="contact-box">
+  <div class="contact-title">Questions?</div>
+  <div class="contact-text">
+    <a href="mailto:support@prismavalet.com" class="contact-link">support@prismavalet.com</a>
+  </div>
+</div>
+
+<div class="closing">
+  <div class="closing-text">
+    Thank you for being a valued Prisma Car Care customer. We look forward to giving your vehicle the care it deserves at this special price.
+  </div>
+  <div class="signature">
+    Best regards,<br />
+    <span class="signature-name">The Prisma Car Care Team</span>
+  </div>
+</div>
+{% endblock %}

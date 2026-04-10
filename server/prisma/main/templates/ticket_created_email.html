@@ -1,0 +1,52 @@
+{% extends "base_email.html" %}
+{% block title %}Ticket {{ ticket_code }} – Prisma Car Care{% endblock %}
+{% block content %}
+<div class="greeting">Hello {{ customer_name }},</div>
+
+<div class="intro-text">
+  We've received your support request. Your ticket reference is <strong>{{ ticket_code }}</strong>. Please keep this code for your records.
+</div>
+
+<div class="details-card">
+  <div class="details-title">Ticket summary</div>
+  <div class="details-grid">
+    <div class="detail-row">
+      <div class="detail-item detail-label">Ticket code</div>
+      <div class="detail-item detail-value"><strong>{{ ticket_code }}</strong></div>
+    </div>
+    <div class="detail-row">
+      <div class="detail-item detail-label">Issue type</div>
+      <div class="detail-item detail-value">{{ issue_type }}</div>
+    </div>
+    {% if booking_reference %}
+    <div class="detail-row">
+      <div class="detail-item detail-label">Booking reference</div>
+      <div class="detail-item detail-value">{{ booking_reference }}</div>
+    </div>
+    {% endif %}
+    {% if description_preview %}
+    <div class="detail-row">
+      <div class="detail-item detail-label">Your message</div>
+      <div class="detail-item detail-value">{{ description_preview }}</div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="contact-box">
+  <div class="contact-title">Need to add details?</div>
+  <div class="contact-text">
+    Reply in the app or contact <a href="mailto:support@prismavalet.com" class="contact-link">support@prismavalet.com</a> and quote ticket code <strong>{{ ticket_code }}</strong>.
+  </div>
+</div>
+
+<div class="closing">
+  <div class="closing-text">
+    Our team will review your request and get back to you as soon as possible.
+  </div>
+  <div class="signature">
+    Best regards,<br />
+    <span class="signature-name">The Prisma Car Care Team</span>
+  </div>
+</div>
+{% endblock %}

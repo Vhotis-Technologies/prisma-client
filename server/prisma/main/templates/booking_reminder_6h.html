@@ -1,0 +1,83 @@
+{% extends "base_email.html" %}
+{% block title %}Upcoming appointment – Prisma Car Care{% endblock %}
+
+{% block content %}
+<div class="greeting">Hello {{ customer_name }},</div>
+
+<div class="intro-text">
+  This is a friendly reminder that your {% if is_bulk %}bulk {% endif %}valet service is scheduled to begin in about <strong>6 hours</strong>.
+  {% if is_bulk %}
+  <br /><br />
+  We will be caring for <strong>{{ number_of_vehicles }} vehicle{{ number_of_vehicles|pluralize }}</strong> under booking reference <strong>#{{ booking_reference }}</strong>.
+  {% else %}
+  <br /><br />
+  Booking reference: <strong>#{{ booking_reference }}</strong>
+  {% endif %}
+</div>
+
+<div class="details-card">
+  <div class="details-title">Appointment details</div>
+  <div class="details-grid">
+    <div class="detail-row">
+      <div class="detail-item detail-label">Date</div>
+      <div class="detail-item detail-value">{{ booking_date }}</div>
+    </div>
+    <div class="detail-row">
+      <div class="detail-item detail-label">Time</div>
+      <div class="detail-item detail-value">{{ start_time }}</div>
+    </div>
+    <div class="detail-row">
+      <div class="detail-item detail-label">Service</div>
+      <div class="detail-item detail-value">{{ service_type_name }} · {{ valet_type_name }}</div>
+    </div>
+    {% if not is_bulk %}
+    <div class="detail-row">
+      <div class="detail-item detail-label">Vehicle</div>
+      <div class="detail-item detail-value">{{ vehicle_make }} {{ vehicle_model }}</div>
+    </div>
+    {% endif %}
+    <div class="detail-row">
+      <div class="detail-item detail-label">Team</div>
+      <div class="detail-item detail-value">{{ detailer_name }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="reminders-box">
+  <div class="contact-title">Before we arrive</div>
+  <div class="contact-text">
+    Please ensure vehicle access and keys are available. Cancellation and rescheduling are allowed up to 12 hours before the appointment.
+    <a href="{{ terms_of_service_url }}" class="terms-of-service-link">Terms of Service</a>
+  </div>
+</div>
+
+<div class="contact-box">
+  <div class="contact-title">Questions?</div>
+  <div class="contact-text">
+    Reply to this email or contact <a href="mailto:support@prismavalet.com" class="contact-link">support@prismavalet.com</a>
+  </div>
+</div>
+
+<div class="closing">
+  <div class="closing-text">
+    We look forward to seeing you soon.
+  </div>
+  <div class="signature">
+    Best regards,<br />
+    <span class="signature-name">The Prisma Car Care Team</span>
+  </div>
+</div>
+
+<style>
+  .reminders-box {
+    background-color: #eff6ff;
+    border-left: 4px solid #2563eb;
+    border-radius: 6px;
+    padding: 14px 16px;
+    margin-bottom: 20px;
+  }
+  .reminders-box .contact-title {
+    margin-bottom: 6px;
+  }
+</style>
+{% endblock %}

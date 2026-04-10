@@ -1,0 +1,61 @@
+{% extends "base_email.html" %}
+{% block title %}Invalid transfer link – Prisma Car Care{% endblock %}
+{% block content %}
+<div class="greeting">Invalid transfer link</div>
+
+<div class="intro-text">
+  The transfer request link you used is invalid or can't be processed.
+</div>
+
+<div class="reminders-box" style="border-left-color: #dc2626;">
+  <div class="contact-title">Details</div>
+  <div class="contact-text">
+    {{ error }}
+  </div>
+</div>
+
+{% if transfer %}
+<div class="details-card">
+  <div class="details-title">Transfer status</div>
+  <div class="details-grid">
+    <div class="detail-row">
+      <div class="detail-item detail-label">Status</div>
+      <div class="detail-item detail-value">{{ transfer.status|title }}</div>
+    </div>
+    {% if transfer.vehicle %}
+    <div class="detail-row">
+      <div class="detail-item detail-label">Vehicle</div>
+      <div class="detail-item detail-value">{{ transfer.vehicle.make }} {{ transfer.vehicle.model }} {{ transfer.vehicle.year }}</div>
+    </div>
+    {% endif %}
+    {% if transfer.expires_at %}
+    <div class="detail-row">
+      <div class="detail-item detail-label">Expires</div>
+      <div class="detail-item detail-value">{{ transfer.expires_at|date:"F d, Y \a\t g:i A" }}</div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+<div class="info-box">
+  <div class="contact-title">What you can do</div>
+  <div class="contact-text">
+    Check your email for the latest transfer link, contact the requester if needed, or contact support if you believe this is an error.
+  </div>
+</div>
+
+<div class="contact-box">
+  <div class="contact-title">Need help?</div>
+  <div class="contact-text">
+    <a href="mailto:support@prismavalet.com" class="contact-link">support@prismavalet.com</a>
+  </div>
+</div>
+
+<div class="closing">
+  <div class="signature">
+    Best regards,<br />
+    <span class="signature-name">The Prisma Car Care Team</span>
+  </div>
+</div>
+{% endblock %}

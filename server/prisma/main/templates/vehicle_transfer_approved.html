@@ -1,0 +1,38 @@
+{% extends "base_email.html" %}
+{% block title %}Vehicle transfer approved – Prisma Car Care{% endblock %}
+{% block content %}
+<div class="greeting">Hello {{ requester_name }},</div>
+
+<div class="intro-text">
+  {{ owner_name }} has approved your request. The vehicle is now in your garage.
+</div>
+
+<div class="details-card">
+  <div class="details-title">Transferred vehicle</div>
+  <div class="details-grid">
+    <div class="detail-row">
+      <div class="detail-item detail-label">Vehicle</div>
+      <div class="detail-item detail-value">{{ vehicle_make }} {{ vehicle_model }} ({{ vehicle_year }})</div>
+    </div>
+    <div class="detail-row">
+      <div class="detail-item detail-label">Registration</div>
+      <div class="detail-item detail-value">{{ vehicle_registration }}</div>
+    </div>
+    <div class="detail-row">
+      <div class="detail-item detail-label">Transferred</div>
+      <div class="detail-item detail-value">{{ transfer_date }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="intro-text">
+  You can view and manage it in the Prisma Car Care app.
+</div>
+
+<div class="closing">
+  <div class="signature">
+    Best regards,<br />
+    <span class="signature-name">The Prisma Car Care Team</span>
+  </div>
+</div>
+{% endblock %}

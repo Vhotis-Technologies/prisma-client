@@ -1,0 +1,49 @@
+# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+
+# macOS
+.DS_Store
+*.pem
+
+# local IDE
+.vscode/settings.json
+.idea/
+
+# typescript
+*.tsbuildinfo
+
+
+app-example
+
+.env
+.env.staging
+env
+
+redis/data/dump.rdb
+
+prisma_client/node_modules
+prisma_client/google-services.json
+prisma_client/prisma-client-f1fb0-firebase-adminsdk-fbsvc-ccf1ad777b.json

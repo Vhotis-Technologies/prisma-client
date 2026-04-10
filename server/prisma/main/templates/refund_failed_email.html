@@ -1,0 +1,59 @@
+{% extends "base_email.html" %}
+{% block title %}Refund issue – Prisma Car Care{% endblock %}
+{% block content %}
+<div class="greeting">Hello {{ customer_name }},</div>
+
+<div class="intro-text">
+  We're writing about your recent cancellation and refund request. We encountered an issue processing the refund.
+</div>
+
+<div class="details-card">
+  <div class="details-title">Booking & refund</div>
+  <div class="details-grid">
+    <div class="detail-row">
+      <div class="detail-item detail-label">Booking reference</div>
+      <div class="detail-item detail-value">{{ booking_reference }}</div>
+    </div>
+    <div class="detail-row">
+      <div class="detail-item detail-label">Original date</div>
+      <div class="detail-item detail-value">{{ original_date }}</div>
+    </div>
+    <div class="detail-row">
+      <div class="detail-item detail-label">Vehicle</div>
+      <div class="detail-item detail-value">{{ vehicle_make }} {{ vehicle_model }}</div>
+    </div>
+    <div class="detail-row">
+      <div class="detail-item detail-label">Refund amount</div>
+      <div class="detail-item detail-value">€{{ refund_amount }}</div>
+    </div>
+    <div class="detail-row">
+      <div class="detail-item detail-label">Issue reported</div>
+      <div class="detail-item detail-value">{{ issue_date }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="reminders-box" style="border-left-color: #dc2626;">
+  <div class="contact-title">What we're doing</div>
+  <div class="contact-text">
+    Our team has been notified and will resolve this within 24–48 hours. You may receive the refund by an alternative method. We'll contact you if we need any further information. No action is required from you at this time.
+  </div>
+</div>
+
+<div class="contact-box">
+  <div class="contact-title">Questions?</div>
+  <div class="contact-text">
+    <a href="mailto:support@prismavalet.com" class="contact-link">support@prismavalet.com</a>
+  </div>
+</div>
+
+<div class="closing">
+  <div class="closing-text">
+    We apologise for the inconvenience and thank you for your patience.
+  </div>
+  <div class="signature">
+    Best regards,<br />
+    <span class="signature-name">The Prisma Car Care Team</span>
+  </div>
+</div>
+{% endblock %}

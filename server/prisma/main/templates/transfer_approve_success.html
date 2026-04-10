@@ -1,0 +1,52 @@
+{% extends "base_email.html" %}
+{% block title %}Transfer approved – Prisma Car Care{% endblock %}
+{% block content %}
+<div class="greeting">Transfer approved</div>
+
+<div class="intro-text">
+  The vehicle has been successfully transferred to {{ requester.name }}'s account.
+</div>
+
+<div class="details-card">
+  <div class="details-title">Details</div>
+  <div class="details-grid">
+    <div class="detail-row">
+      <div class="detail-item detail-label">Vehicle</div>
+      <div class="detail-item detail-value">{{ vehicle.make }} {{ vehicle.model }} {{ vehicle.year }}</div>
+    </div>
+    <div class="detail-row">
+      <div class="detail-item detail-label">Registration</div>
+      <div class="detail-item detail-value">{{ vehicle.registration_number }}</div>
+    </div>
+    <div class="detail-row">
+      <div class="detail-item detail-label">New owner</div>
+      <div class="detail-item detail-value">{{ requester.name }}</div>
+    </div>
+    <div class="detail-row">
+      <div class="detail-item detail-label">Transfer date</div>
+      <div class="detail-item detail-value">{{ transfer.responded_at|date:"F d, Y \a\t g:i A" }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="info-box">
+  <div class="contact-title">What happens next</div>
+  <div class="contact-text">
+    {{ requester.name }} has been notified. The vehicle has been removed from your garage and is now in {{ requester.name }}'s garage.
+  </div>
+</div>
+
+<div class="contact-box">
+  <div class="contact-title">Need help?</div>
+  <div class="contact-text">
+    <a href="mailto:support@prismavalet.com" class="contact-link">support@prismavalet.com</a>
+  </div>
+</div>
+
+<div class="closing">
+  <div class="signature">
+    Best regards,<br />
+    <span class="signature-name">The Prisma Car Care Team</span>
+  </div>
+</div>
+{% endblock %}

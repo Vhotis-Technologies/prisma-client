@@ -1,0 +1,46 @@
+{% extends "base_email.html" %}
+{% block title %}Ticket {{ ticket_code }} resolved – Prisma Car Care{% endblock %}
+{% block content %}
+<div class="greeting">Hello {{ customer_name }},</div>
+
+<div class="intro-text">
+  Your support ticket <strong>{{ ticket_code }}</strong> has been marked resolved by our team. If you still need help, you can open a new ticket in the app or reply to this thread by email.
+</div>
+
+<div class="details-card">
+  <div class="details-title">Ticket reference</div>
+  <div class="details-grid">
+    <div class="detail-row">
+      <div class="detail-item detail-label">Ticket code</div>
+      <div class="detail-item detail-value"><strong>{{ ticket_code }}</strong></div>
+    </div>
+    <div class="detail-row">
+      <div class="detail-item detail-label">Status</div>
+      <div class="detail-item detail-value">Resolved</div>
+    </div>
+    {% if resolution_message %}
+    <div class="detail-row">
+      <div class="detail-item detail-label">Message from support</div>
+      <div class="detail-item detail-value">{{ resolution_message }}</div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="contact-box">
+  <div class="contact-title">Questions?</div>
+  <div class="contact-text">
+    <a href="mailto:support@prismavalet.com" class="contact-link">support@prismavalet.com</a>
+  </div>
+</div>
+
+<div class="closing">
+  <div class="closing-text">
+    Thank you for using Prisma Car Care.
+  </div>
+  <div class="signature">
+    Best regards,<br />
+    <span class="signature-name">The Prisma Car Care Team</span>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,63 @@
+{% extends "base_email.html" %}
+{% block title %}Refund processed – Prisma Car Care{% endblock %}
+{% block content %}
+<div class="greeting">Hello {{ customer_name }},</div>
+
+<div class="intro-text">
+  Your refund for the cancelled booking has been processed successfully.
+</div>
+
+<div class="details-card">
+  <div class="details-title">Refund details</div>
+  <div class="details-grid">
+    <div class="detail-row">
+      <div class="detail-item detail-label">Booking reference</div>
+      <div class="detail-item detail-value">{{ booking_reference }}</div>
+    </div>
+    <div class="detail-row">
+      <div class="detail-item detail-label">Original date</div>
+      <div class="detail-item detail-value">{{ original_date }}</div>
+    </div>
+    <div class="detail-row">
+      <div class="detail-item detail-label">Vehicle</div>
+      <div class="detail-item detail-value">{{ vehicle_make }} {{ vehicle_model }}</div>
+    </div>
+    <div class="detail-row">
+      <div class="detail-item detail-label">Service</div>
+      <div class="detail-item detail-value">{{ service_type_name }}</div>
+    </div>
+    <div class="detail-row">
+      <div class="detail-item detail-label">Refund amount</div>
+      <div class="detail-item detail-value"><strong>€{{ refund_amount }}</strong></div>
+    </div>
+    <div class="detail-row">
+      <div class="detail-item detail-label">Processed</div>
+      <div class="detail-item detail-value">{{ refund_date }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="info-box">
+  <div class="contact-title">What happens next</div>
+  <div class="contact-text">
+    The amount has been issued to your original payment method. Please allow 3–5 business days for it to appear, depending on your bank.
+  </div>
+</div>
+
+<div class="contact-box">
+  <div class="contact-title">Questions?</div>
+  <div class="contact-text">
+    <a href="mailto:support@prismavalet.com" class="contact-link">support@prismavalet.com</a>
+  </div>
+</div>
+
+<div class="closing">
+  <div class="closing-text">
+    We're sorry the service was cancelled, and we look forward to serving you again.
+  </div>
+  <div class="signature">
+    Best regards,<br />
+    <span class="signature-name">The Prisma Car Care Team</span>
+  </div>
+</div>
+{% endblock %}

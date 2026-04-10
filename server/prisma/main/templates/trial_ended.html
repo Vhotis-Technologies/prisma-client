@@ -1,0 +1,27 @@
+{% extends "base_email.html" %}
+{% block title %}Trial ended – subscription active{% endblock %}
+{% block content %}
+<div class="greeting">Hello,</div>
+
+<div class="intro-text">
+  Your trial for <strong>{{ fleet_name }}</strong> has ended. Your <strong>{{ plan_name }}</strong> subscription is now active and the first charge has been processed.
+</div>
+
+<div class="details-card">
+  <div class="details-title">Billing details</div>
+  <div class="details-grid">
+    <div class="detail-row">
+      <div class="detail-item detail-label">Amount charged</div>
+      <div class="detail-item detail-value">{{ billing_amount }}</div>
+    </div>
+    <div class="detail-row">
+      <div class="detail-item detail-label">Next billing date</div>
+      <div class="detail-item detail-value">{{ next_billing_date }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="intro-text">
+  Thank you for choosing Prisma Fleet. You can review invoices and manage billing anytime in the app.
+</div>
+{% endblock %}

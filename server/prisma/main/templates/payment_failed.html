@@ -1,0 +1,31 @@
+{% extends "base_email.html" %}
+{% block title %}Payment failed – update billing{% endblock %}
+{% block content %}
+<div class="greeting">Hello,</div>
+
+<div class="intro-text">
+  We could not charge your payment method for <strong>{{ fleet_name }}</strong> (<strong>{{ plan_name }}</strong>). Please update your billing details to avoid an interruption.
+</div>
+
+<div class="details-card">
+  <div class="details-title">Payment details</div>
+  <div class="details-grid">
+    <div class="detail-row">
+      <div class="detail-item detail-label">Amount due</div>
+      <div class="detail-item detail-value"><strong>{{ failed_amount }}</strong></div>
+    </div>
+    <div class="detail-row">
+      <div class="detail-item detail-label">Next retry</div>
+      <div class="detail-item detail-value">{{ retry_date }}</div>
+    </div>
+    <div class="detail-row">
+      <div class="detail-item detail-label">Grace period ends</div>
+      <div class="detail-item detail-value">{{ grace_period_until }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="intro-text">
+  <a href="{{ update_payment_url }}" style="color: #2563eb; font-weight: 600;">Update payment method</a>
+</div>
+{% endblock %}
