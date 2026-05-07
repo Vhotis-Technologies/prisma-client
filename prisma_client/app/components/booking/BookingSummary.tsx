@@ -1,11 +1,12 @@
 import React from "react";
-import { StyleSheet, View, ScrollView } from "react-native";
+import { StyleSheet, View, ScrollView, TouchableOpacity } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useThemeColor } from "@/hooks/useThemeColor";
 import {
   ServiceTypeProps,
   ValetTypeProps,
   AddOnsProps,
+  BookingPriceSummaryBreakdown,
 } from "@/app/interfaces/BookingInterfaces";
 import { MyVehiclesProps } from "@/app/interfaces/GarageInterface";
 import {
@@ -13,7 +14,7 @@ import {
   UserProfileProps,
 } from "@/app/interfaces/ProfileInterfaces";
 import StyledText from "@/app/components/helpers/StyledText";
-import useBooking from "@/app/app-hooks/useBooking";
+import SquareCheckbox from "@/app/components/helpers/SquareCheckbox";
 
 interface BookingSummaryProps {
   vehicle: MyVehiclesProps;
@@ -36,7 +37,11 @@ interface BookingSummaryProps {
   originalPrice?: number;
   finalPrice?: number;
   loyaltyDiscount?: number;
+  promotionDiscountAmount?: number;
+  priceSummaryBreakdown?: BookingPriceSummaryBreakdown | null;
   total?: number;
+  coolingOffConsent: boolean;
+  onCoolingOffConsentChange: (agreed: boolean) => void;
 }
 
 const BookingSummary: React.FC<BookingSummaryProps> = ({
@@ -60,8 +65,13 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
   originalPrice,
   finalPrice,
   loyaltyDiscount = 0,
+  promotionDiscountAmount,
+  priceSummaryBreakdown,
   total,
+  coolingOffConsent,
+  onCoolingOffConsentChange,
 }) => {
+  const srv = priceSummaryBreakdown ?? null;
   const cardColor = useThemeColor({}, "cards");
   const textColor = useThemeColor({}, "text");
   const primaryPurpleColor = useThemeColor({}, "primary");
@@ -77,22 +87,31 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
 
   // Calculate promotion discount only if user has an active promotion
   const calculatePromotionDiscount = (): number => {
-    // Only apply promotion discount if user has an active promotion
-    // For now, we'll return 0 unless there's a real promotion
-    // In real implementation, this would check if user has an active promotion
-    return 0; // No promotion discount by default
+    if (promotionDiscountAmount != null && promotionDiscountAmount >= 0) {
+      return promotionDiscountAmount;
+    }
+    return 0;
   };
 
-  const calculatedLoyaltyDiscount =
-    loyaltyDiscount || calculateLoyaltyDiscount();
-  const calculatedPromotionDiscount = calculatePromotionDiscount();
-  const calculatedOriginalPrice =
-    originalPrice ?? basePrice + addonPrice + suvPrice + (expressServicePrice ?? 0);
+  const calculatedLoyaltyDiscount = srv
+    ? srv.loyaltyDiscountIncVat
+    : loyaltyDiscount || calculateLoyaltyDiscount();
+  const calculatedPromotionDiscount = srv
+    ? srv.promotionDiscountIncVat
+    : calculatePromotionDiscount();
+  const calculatedOriginalPrice = srv
+    ? srv.stickerSubtotalIncVat
+    : originalPrice ?? basePrice + addonPrice + suvPrice + (expressServicePrice ?? 0);
 
-  // Total (VAT inclusive) - use provided total or calculate from legacy props
-  const calculatedTotal = total !== undefined
-    ? total
-    : (finalPrice ?? calculatedOriginalPrice - calculatedLoyaltyDiscount - calculatedPromotionDiscount);
+  // Total (VAT inclusive) - server breakdown wins when provided
+  const calculatedTotal = srv
+    ? srv.totalIncVat
+    : total !== undefined
+      ? total
+      : (finalPrice ??
+        calculatedOriginalPrice -
+          calculatedLoyaltyDiscount -
+          calculatedPromotionDiscount);
 
   const formatDate = (date: Date) => {
     return date.toLocaleDateString("en-GB", {
@@ -391,15 +410,15 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
                   user.loyalty_benefits.free_service.length > 0 && (
                     <View style={styles.loyaltyRow}>
                       <StyledText
-                        variant="bodyMedium"
-                        style={[styles.loyaltyLabel, { color: textColor }]}
+                        variant="titleMedium"
+                        style={[styles.loyaltyLabel]}
                       >
                         Free Services:
                       </StyledText>
                       <StyledText
                         variant="bodyMedium"
-                        style={[styles.loyaltyValue, { color: textColor }]}
-                      >
+                          style={[styles.loyaltyValue]}
+                        >
                         {user.loyalty_benefits.free_service.join(", ")}
                       </StyledText>
                     </View>
@@ -483,7 +502,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
               </View>
             )}
 
-            {/* Always show subtotal before discounts */}
+            {/* Subtotal (VAT inc.) before percentage discounts; server quote uses sticker stack */}
             <View
               style={[
                 styles.priceRow,
@@ -515,38 +534,78 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
               </StyledText>
             </View>
 
-            {/* Show loyalty discount if applied */}
+            {srv && srv.complimentaryStickerSavingsIncVat > 0 && (
+              <View style={styles.priceRow}>
+                <StyledText
+                  variant="bodyMedium"
+                  style={[styles.priceLabel, { color: "#38BDF8" }]}
+                >
+                  Complimentary Quick Sparkle:
+                </StyledText>
+                <StyledText
+                  variant="bodyMedium"
+                  style={[styles.priceValue, { color: "#38BDF8" }]}
+                >
+                  −{formatPrice(srv.complimentaryStickerSavingsIncVat)}
+                </StyledText>
+              </View>
+            )}
+
             {calculatedLoyaltyDiscount > 0 && (
               <View style={styles.priceRow}>
                 <StyledText
                   variant="bodyMedium"
                   style={[styles.priceLabel, { color: "#10B981" }]}
                 >
-                  Loyalty Discount:
+                  Loyalty discount
+                  {srv?.loyaltyDiscountPercent != null
+                    ? ` (${srv.loyaltyDiscountPercent}%)`
+                    : ""}
+                  :
                 </StyledText>
                 <StyledText
                   variant="bodyMedium"
                   style={[styles.priceValue, { color: "#10B981" }]}
                 >
-                  -{formatPrice(calculatedLoyaltyDiscount)}
+                  −{formatPrice(calculatedLoyaltyDiscount)}
                 </StyledText>
               </View>
             )}
 
-            {/* Show promotion discount if applied */}
             {calculatedPromotionDiscount > 0 && (
               <View style={styles.priceRow}>
                 <StyledText
                   variant="bodyMedium"
                   style={[styles.priceLabel, { color: "#F59E0B" }]}
                 >
-                  Promotion Discount:
+                  Promotion discount:
                 </StyledText>
                 <StyledText
                   variant="bodyMedium"
                   style={[styles.priceValue, { color: "#F59E0B" }]}
                 >
-                  -{formatPrice(calculatedPromotionDiscount)}
+                  −{formatPrice(calculatedPromotionDiscount)}
+                </StyledText>
+              </View>
+            )}
+
+            {srv && srv.partnerReferralDiscountIncVat > 0 && (
+              <View style={styles.priceRow}>
+                <StyledText
+                  variant="bodyMedium"
+                  style={[styles.priceLabel, { color: "#A78BFA" }]}
+                >
+                  Partner welcome discount
+                  {srv.partnerReferralDiscountPercent != null
+                    ? ` (${srv.partnerReferralDiscountPercent}%)`
+                    : ""}
+                  :
+                </StyledText>
+                <StyledText
+                  variant="bodyMedium"
+                  style={[styles.priceValue, { color: "#A78BFA" }]}
+                >
+                  −{formatPrice(srv.partnerReferralDiscountIncVat)}
                 </StyledText>
               </View>
             )}
@@ -578,6 +637,46 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
               </StyledText>
             </View>
           </View>
+        </View>
+
+        <View
+          style={[styles.section, { backgroundColor: cardColor, borderColor }]}
+        >
+          <TouchableOpacity
+            style={styles.consentRow}
+            onPress={() => onCoolingOffConsentChange(!coolingOffConsent)}
+            activeOpacity={0.7}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: coolingOffConsent }}
+          >
+            <SquareCheckbox
+              checked={coolingOffConsent}
+              borderColor={borderColor}
+              checkedBackgroundColor={buttonColor}
+              checkColor="#fff"
+              size="default"
+              style={styles.consentCheckboxOffset}
+            />
+            <View style={styles.consentTextWrap}>
+              <StyledText variant="bodySmall" style={{ color: textColor }}>
+                I agree to the service starting on{" "}
+                <StyledText style={{ fontWeight: "600" }}>
+                  {formatDate(selectedDate)}
+                </StyledText>{" "}
+                and acknowledge that my right to a full cooling-off period is
+                waived once a specific time slot is{" "}
+                <StyledText style={{ textDecorationLine: "underline" }}>
+                  reserved.
+                </StyledText>
+              </StyledText>
+              <StyledText
+                variant="bodySmall"
+                style={{ color: textColor, marginTop: 8, opacity: 0.9 }}
+              >
+                Please check our refund policy.
+              </StyledText>
+            </View>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </View>
@@ -686,6 +785,7 @@ const styles = StyleSheet.create({
   },
   loyaltyRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     justifyContent: "space-between",
     alignItems: "center",
     paddingVertical: 4,
@@ -695,5 +795,16 @@ const styles = StyleSheet.create({
   },
   loyaltyValue: {
     fontWeight: "600",
+  },
+  consentRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+  },
+  consentCheckboxOffset: {
+    marginTop: 2,
+  },
+  consentTextWrap: {
+    flex: 1,
   },
 });

@@ -4,6 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useThemeColor } from "@/hooks/useThemeColor";
 import { AddOnsProps } from "@/app/interfaces/BookingInterfaces";
 import StyledText from "@/app/components/helpers/StyledText";
+import CircleCheckbox from "@/app/components/helpers/CircleCheckbox";
 import { formatDuration } from "@/app/utils/methods";
 
 interface AddonCardProps {
@@ -55,19 +56,7 @@ const AddonCard: React.FC<AddonCardProps> = ({
           </StyledText>
         </View>
 
-        <View
-          style={[
-            styles.checkbox,
-            {
-              backgroundColor: isSelected ? "white" : "transparent",
-              borderColor: isSelected ? "white" : "#E5E5E5",
-            },
-          ]}
-        >
-          {isSelected && (
-            <Ionicons name="checkmark" size={16} color={primaryPurpleColor} />
-          )}
-        </View>
+        <CircleCheckbox checked={isSelected} accentColor={primaryPurpleColor} />
       </View>
 
       <View style={styles.durationContainer}>
@@ -128,15 +117,6 @@ const styles = StyleSheet.create({
   },
   price: {
     fontWeight: "bold",
-  },
-  checkbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 2,
-    alignItems: "center",
-    justifyContent: "center",
-    marginLeft: 12,
   },
   durationContainer: {
     flexDirection: "row",

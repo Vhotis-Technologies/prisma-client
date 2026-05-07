@@ -3,7 +3,7 @@
  *
  * - Profile summary at top (avatar, name, email, Edit profile) – no subscription
  * - Preferences: notifications, language, theme
- * - Account: Manage subscription (fleet owners only), Help & support
+ * - Account: Manage subscription (fleet or consumer plans), Help & support
  * - Logout at bottom
  */
 
@@ -187,6 +187,22 @@ const SettingScreen = () => {
   const showBusinessName = isFleetOwner || isPartner;
   const canEditProfile = !isBranchAdmin;
 
+  const loyaltyTierLabel = userProfile?.loyalty_tier
+    ? `${userProfile.loyalty_tier.charAt(0).toUpperCase()}${userProfile.loyalty_tier.slice(1).toLowerCase()}`
+    : null;
+  const loyaltyBenefits = userProfile?.loyalty_benefits;
+  const loyaltySummaryParts: string[] = [];
+  if (loyaltyBenefits != null && loyaltyBenefits.discount > 0) {
+    loyaltySummaryParts.push(`${loyaltyBenefits.discount}% off eligible bookings`);
+  }
+  if (loyaltyBenefits?.free_service && loyaltyBenefits.free_service.length > 0) {
+    loyaltySummaryParts.push(loyaltyBenefits.free_service.join(", "));
+  }
+  const loyaltySummary =
+    loyaltySummaryParts.length > 0 ? loyaltySummaryParts.join(" · ") : null;
+  const showLoyaltyPreview =
+    Boolean(loyaltyTierLabel) || Boolean(loyaltySummary);
+
   // import the insets
   const insets = useSafeAreaInsets();
 
@@ -208,14 +224,6 @@ const SettingScreen = () => {
           }
           disabled={!canEditProfile}
         >
-          <View style={[styles.avatar, { backgroundColor: tintColor }]}>
-            <StyledText
-              variant="titleMedium"
-              style={{ color: backgroundColor }}
-            >
-              {userProfile?.name?.charAt(0)?.toUpperCase() ?? "?"}
-            </StyledText>
-          </View>
           <View style={styles.profileInfo}>
             <StyledText
               variant="titleMedium"
@@ -240,6 +248,36 @@ const SettingScreen = () => {
             >
               {userProfile?.email ?? "—"}
             </StyledText>
+            {showLoyaltyPreview ? (
+              <View
+                style={[styles.loyaltySection, { borderTopColor: borderColor }]}
+              >
+                <StyledText
+                  variant="labelSmall"
+                  style={[styles.loyaltySectionLabel, { color: textColor }]}
+                >
+                  Loyalty
+                </StyledText>
+                {loyaltyTierLabel ? (
+                  <StyledText
+                    variant="bodySmall"
+                    style={[styles.loyaltyTierLine, { color: primaryColor }]}
+                    numberOfLines={1}
+                  >
+                    {loyaltyTierLabel} tier
+                  </StyledText>
+                ) : null}
+                {loyaltySummary ? (
+                  <StyledText
+                    variant="bodySmall"
+                    style={[styles.loyaltyBenefitsLine, { color: textColor }]}
+                    numberOfLines={3}
+                  >
+                    {loyaltySummary}
+                  </StyledText>
+                ) : null}
+              </View>
+            ) : null}
           </View>
           {canEditProfile && (
             <View style={styles.editRow}>
@@ -400,10 +438,18 @@ const SettingScreen = () => {
               }
             />
           )}
-          {isFleetOwner && (
+          {isFleetOwner ? (
             <SettingLink
               title="Manage subscription"
               description="View or change your fleet plan"
+              onPress={() =>
+                router.push("/main/settings/SubscriptionPlanScreen" as any)
+              }
+            />
+          ) : (
+            <SettingLink
+              title="Manage subscription"
+              description="View or change your Prisma subscription"
               onPress={() =>
                 router.push("/main/settings/SubscriptionPlanScreen" as any)
               }
@@ -471,9 +517,7 @@ const styles = StyleSheet.create({
   profileBlock: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 15,
-    borderRadius: 5,
-    borderWidth: 0.5,
+    padding: 12,
     marginBottom: 8,
   },
   avatar: {
@@ -494,6 +538,24 @@ const styles = StyleSheet.create({
   },
   businessName: {
     marginTop: 2,
+  },
+  loyaltySection: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: 4,
+  },
+  loyaltySectionLabel: {
+    letterSpacing: 0.6,
+    opacity: 0.75,
+    textTransform: "uppercase",
+  },
+  loyaltyTierLine: {
+    fontWeight: "600",
+  },
+  loyaltyBenefitsLine: {
+    opacity: 0.9,
+    lineHeight: 18,
   },
   editRow: {
     flexDirection: "row",

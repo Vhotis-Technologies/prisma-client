@@ -6,7 +6,7 @@
  * Uses useBooking (single) and useBulkBooking (bulk); payment via usePayment + eventApi (create_payment_sheet, confirm_payment_intent).
  * See docs/BOOKING_FLOW.md for the full flow.
  */
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   StyleSheet,
   ScrollView,
@@ -36,6 +36,8 @@ import AddonSelection from "@/app/components/booking/AddonSelection";
 // Import helpers
 import StyledText from "@/app/components/helpers/StyledText";
 import StyledButton from "@/app/components/helpers/StyledButton";
+import SquareCheckbox from "@/app/components/helpers/SquareCheckbox";
+import CircleCheckbox from "@/app/components/helpers/CircleCheckbox";
 
 // Import hooks
 import useBooking from "@/app/app-hooks/useBooking";
@@ -50,6 +52,7 @@ import {
   useFetchPaymentSheetDetailsMutation,
   useConfirmPaymentIntentMutation,
   useCreateBulkOrderInvoiceLaterMutation,
+  type ComplimentarySparkleSource,
 } from "@/app/store/api/eventApi";
 
 // Import modal
@@ -68,6 +71,15 @@ import { useAlertContext } from "@/app/contexts/AlertContext";
 import dayjs from "dayjs";
 import type { AddOnsProps } from "@/app/interfaces/BookingInterfaces";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+function formatServiceStartDateForConsent(date: Date): string {
+  return date.toLocaleDateString("en-GB", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
 
 const dismissAlert = (
   setAlertConfig: (c: {
@@ -93,6 +105,7 @@ const BookingScreen = () => {
   const primaryPurpleColor = useThemeColor({}, "primary");
   const iconColor = useThemeColor({}, "icons");
   const borderColor = useThemeColor({}, "borders");
+  const buttonColor = useThemeColor({}, "button");
 
   const user = useAppSelector(
     (state) => (state as { auth: AuthState }).auth.user,
@@ -157,6 +170,12 @@ const BookingScreen = () => {
     isProcessingPayment,
     paymentConfirmationStatus,
     promotions,
+    serverQuote,
+    bookingQuoteLoading,
+    complimentarySparkleSource,
+    setComplimentarySparkleSource,
+    applyPartnerBookingDiscount,
+    setApplyPartnerBookingDiscount,
 
     // Addon management state
     selectedAddons,
@@ -229,6 +248,8 @@ const BookingScreen = () => {
     getOriginalPrice,
     getFinalPrice,
     getLoyaltyDiscount,
+    getPromotionDiscount,
+    getPriceSummaryBreakdown,
     calculateFinalPrice,
     winnerVoucherApplied,
     winnerVoucherCode,
@@ -250,6 +271,16 @@ const BookingScreen = () => {
 
   const [showSpecialInstructions, setShowSpecialInstructions] = useState(false);
   const [isAddressModalVisible, setIsAddressModalVisible] = useState(false);
+  const [coolingOffConsent, setCoolingOffConsent] = useState(false);
+  const [bulkCoolingOffConsent, setBulkCoolingOffConsent] = useState(false);
+
+  useEffect(() => {
+    setCoolingOffConsent(false);
+  }, [currentStep]);
+
+  useEffect(() => {
+    setBulkCoolingOffConsent(false);
+  }, [bulkStep]);
 
   const insets = useSafeAreaInsets();
 
@@ -577,6 +608,180 @@ const BookingScreen = () => {
                       </View>
                     ) : null}
                   </View>
+                  {!winnerVoucherApplied ? (
+                    <>
+                      {bookingQuoteLoading && (
+                        <View style={{ alignItems: "center", marginVertical: 12 }}>
+                          <ActivityIndicator color={primaryPurpleColor} />
+                          <StyledText
+                            variant="bodySmall"
+                            style={{ color: textColor }}
+                          >
+                            Verifying price with server…
+                          </StyledText>
+                        </View>
+                      )}
+                      {serverQuote?.quick_sparkle?.is_quick_sparkle &&
+                        [
+                          serverQuote.quick_sparkle.eligible_loyalty,
+                          serverQuote.quick_sparkle.eligible_partner,
+                          serverQuote.quick_sparkle.eligible_subscription,
+                        ].filter(Boolean).length >= 1 && (
+                          <View
+                            style={[
+                              styles.voucherRow,
+                              {
+                                backgroundColor: cardColor,
+                                borderColor,
+                                marginBottom: 12,
+                              },
+                            ]}
+                          >
+                            <StyledText
+                              variant="titleSmall"
+                              style={{ color: textColor, marginBottom: 8 }}
+                            >
+                              Complimentary Quick Sparkle
+                            </StyledText>
+                            <StyledText
+                              variant="bodySmall"
+                              style={{ color: textColor, marginBottom: 8 }}
+                            >
+                              {[
+                                serverQuote.quick_sparkle.eligible_loyalty,
+                                serverQuote.quick_sparkle.eligible_partner,
+                                serverQuote.quick_sparkle.eligible_subscription,
+                              ].filter(Boolean).length >= 2
+                                ? "You have more than one option. Choose how to apply it for this booking."
+                                : "This booking can use your complimentary Quick Sparkle. Confirm the source below."}
+                            </StyledText>
+                            {(
+                              [
+                                {
+                                  key: "loyalty" as ComplimentarySparkleSource,
+                                  label: `Loyalty · ${serverQuote.quick_sparkle.remaining_loyalty ?? 0} left this cycle`,
+                                  show: serverQuote.quick_sparkle.eligible_loyalty,
+                                },
+                                {
+                                  key: "partner" as ComplimentarySparkleSource,
+                                  label:
+                                    "Partner referral complimentary wash",
+                                  show: serverQuote.quick_sparkle.eligible_partner,
+                                },
+                                {
+                                  key:
+                                    "subscription" as ComplimentarySparkleSource,
+                                  label: `Subscription · ${serverQuote.quick_sparkle.remaining_subscription ?? 0} of ${serverQuote.quick_sparkle.max_subscription ?? 0} remaining`,
+                                  show:
+                                    serverQuote.quick_sparkle
+                                      .eligible_subscription,
+                                },
+                              ] as const
+                            )
+                              .filter((option) => option.show)
+                              .map((option) => {
+                                const selected =
+                                  complimentarySparkleSource === option.key;
+                                return (
+                                  <TouchableOpacity
+                                    key={option.key}
+                                    activeOpacity={0.8}
+                                    style={{
+                                      padding: 12,
+                                      borderRadius: 8,
+                                      borderWidth: 1,
+                                      borderColor: selected
+                                        ? primaryPurpleColor
+                                        : borderColor,
+                                      marginBottom: 8,
+                                    }}
+                                    onPress={() =>
+                                      setComplimentarySparkleSource(option.key)
+                                    }
+                                  >
+                                    <StyledText
+                                      variant="bodyMedium"
+                                      style={{
+                                        color: textColor,
+                                        fontWeight: selected ? "600" : "400",
+                                      }}
+                                    >
+                                      {option.label}
+                                    </StyledText>
+                                  </TouchableOpacity>
+                                );
+                              })}
+                          </View>
+                        )}
+                      {!bookingQuoteLoading &&
+                        serverQuote?.partner_booking_offer?.eligible && (
+                          <TouchableOpacity
+                            activeOpacity={0.85}
+                            onPress={() =>
+                              setApplyPartnerBookingDiscount((v) => !v)
+                            }
+                            style={[
+                              styles.voucherRow,
+                              {
+                                backgroundColor: cardColor,
+                                borderColor,
+                                flexDirection: "row",
+                                alignItems: "flex-start",
+                                gap: 12,
+                              },
+                            ]}
+                          >
+                            <SquareCheckbox
+                              checked={applyPartnerBookingDiscount}
+                              borderColor={borderColor}
+                              checkedBackgroundColor={primaryPurpleColor}
+                              checkColor="#fff"
+                              size="default"
+                              style={{ marginTop: 2 }}
+                            />
+                            <View style={{ flex: 1 }}>
+                              <StyledText
+                                variant="titleSmall"
+                                style={{ color: textColor, marginBottom: 4 }}
+                              >
+                                Partner welcome discount
+                              </StyledText>
+                              <StyledText
+                                variant="bodySmall"
+                                style={{ color: textColor, opacity: 0.92 }}
+                              >
+                                Apply{" "}
+                                <StyledText style={{ fontWeight: "700" }}>
+                                  {serverQuote.partner_booking_offer.percent}%
+                                </StyledText>{" "}
+                                off this booking when selected (separate from
+                                complimentary washes).
+                              </StyledText>
+                              {serverQuote.partner_booking_offer.expires_at ? (
+                                <StyledText
+                                  variant="bodySmall"
+                                  style={{
+                                    color: textColor,
+                                    marginTop: 6,
+                                    opacity: 0.75,
+                                  }}
+                                >
+                                  Valid until{" "}
+                                  {new Date(
+                                    serverQuote.partner_booking_offer.expires_at
+                                  ).toLocaleDateString("en-GB", {
+                                    day: "numeric",
+                                    month: "short",
+                                    year: "numeric",
+                                  })}
+                                  .
+                                </StyledText>
+                              ) : null}
+                            </View>
+                          </TouchableOpacity>
+                        )}
+                    </>
+                  ) : null}
                   <BookingSummary
                     vehicle={selectedVehicle}
                     serviceType={selectedServiceType}
@@ -595,10 +800,34 @@ const BookingScreen = () => {
                     addonDuration={getAddonDuration()}
                     formatPrice={formatPrice}
                     user={user || undefined}
-                    originalPrice={getOriginalPrice()}
-                    finalPrice={getFinalPrice()}
-                    loyaltyDiscount={getLoyaltyDiscount()}
+                    originalPrice={
+                      winnerVoucherApplied || getPriceSummaryBreakdown()
+                        ? undefined
+                        : getOriginalPrice()
+                    }
+                    finalPrice={
+                      winnerVoucherApplied || getPriceSummaryBreakdown()
+                        ? undefined
+                        : getFinalPrice()
+                    }
+                    loyaltyDiscount={
+                      getPriceSummaryBreakdown()
+                        ? 0
+                        : getLoyaltyDiscount()
+                    }
+                    promotionDiscountAmount={
+                      getPriceSummaryBreakdown()
+                        ? undefined
+                        : getPromotionDiscount()
+                    }
+                    priceSummaryBreakdown={
+                      winnerVoucherApplied
+                        ? null
+                        : getPriceSummaryBreakdown()
+                    }
                     total={getPayableTotal()}
+                    coolingOffConsent={coolingOffConsent}
+                    onCoolingOffConsentChange={setCoolingOffConsent}
                   />
                 </>
               )}
@@ -649,7 +878,13 @@ const BookingScreen = () => {
           }
           variant="medium"
           onPress={handleBookingConfirmation}
-          disabled={!canProceedToSummary() || isLoading || isProcessingPayment}
+          disabled={
+            !canProceedToSummary() ||
+            !canProceedToNextStep(5) ||
+            !coolingOffConsent ||
+            isLoading ||
+            isProcessingPayment
+          }
           style={styles.confirmButton}
         />
       )}
@@ -808,43 +1043,41 @@ const BookingScreen = () => {
             style={[
               styles.bulkSuvOption,
               {
-                backgroundColor: cardColor,
+                backgroundColor: bulk.isSUV ? primaryPurpleColor : cardColor,
                 borderColor: bulk.isSUV ? primaryPurpleColor : borderColor,
               },
             ]}
             onPress={() => bulk.setIsSUV(!bulk.isSUV)}
             activeOpacity={0.7}
           >
-            <View style={styles.radioContainer}>
-              <View
-                style={[
-                  styles.radioButton,
-                  {
-                    borderColor: bulk.isSUV ? primaryPurpleColor : "#E5E5E5",
-                    backgroundColor: bulk.isSUV
-                      ? primaryPurpleColor
-                      : "transparent",
-                  },
-                ]}
-              >
-                {bulk.isSUV && (
-                  <Ionicons name="checkmark" size={12} color="white" />
-                )}
-              </View>
+            <View style={styles.bulkSuvOptionRow}>
               <View style={styles.suvTextContainer}>
                 <StyledText
                   variant="bodyMedium"
-                  style={[styles.suvText, { color: textColor }]}
+                  style={[
+                    styles.suvText,
+                    { color: bulk.isSUV ? "#FFFFFF" : textColor },
+                  ]}
                 >
                   SUV / MPV vehicles
                 </StyledText>
                 <StyledText
                   variant="bodySmall"
-                  style={[styles.suvDescription, { color: textColor }]}
+                  style={[
+                    styles.suvDescription,
+                    {
+                      color: bulk.isSUV ? "rgba(255,255,255,0.9)" : textColor,
+                      opacity: bulk.isSUV ? 1 : 0.7,
+                    },
+                  ]}
                 >
                   Additional 15% surcharge for SUV / MPV cleaning
                 </StyledText>
               </View>
+              <CircleCheckbox
+                checked={bulk.isSUV}
+                accentColor={primaryPurpleColor}
+              />
             </View>
           </TouchableOpacity>
         </View>
@@ -894,12 +1127,12 @@ const BookingScreen = () => {
             serviceTypeName={bulk.selectedServiceType?.name || ""}
             availableTimeSlots={[]}
             isLoadingSlots={false}
-            currentMonth={dayjs(bulk.selectedDate || new Date())}
+            currentMonth={bulk.calendarMonth}
             selectedDay={dayjs(bulk.selectedDate || new Date())}
             onDaySelection={(dateString) =>
               bulk.setSelectedDate(new Date(dateString))
             }
-            onMonthNavigation={() => {}}
+            onMonthNavigation={bulk.handleCalendarMonthNavigation}
             onTimeSlotSelect={() => {}}
             hasSelectedTimeSlot={false}
             selectedSlotAt={null}
@@ -1075,6 +1308,49 @@ const BookingScreen = () => {
                   ? "Pay with card now. Your booking is confirmed after payment succeeds."
                   : "We will email a Stripe invoice (due in 30 days). Your booking is confirmed now; pay when it suits your accounts team."}
               </StyledText>
+              <View
+                style={[
+                  styles.bulkConsentSection,
+                ]}
+              >
+                <TouchableOpacity
+                  style={styles.bulkConsentRow}
+                  onPress={() => setBulkCoolingOffConsent((prev) => !prev)}
+                  activeOpacity={0.7}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: bulkCoolingOffConsent }}
+                >
+                  <SquareCheckbox
+                    checked={bulkCoolingOffConsent}
+                    borderColor={borderColor}
+                    checkedBackgroundColor={buttonColor}
+                    checkColor="#fff"
+                    size="default"
+                    style={styles.bulkConsentCheckboxOffset}
+                  />
+                  <View style={styles.bulkConsentTextWrap}>
+                    <StyledText variant="bodySmall" style={{ color: textColor }}>
+                      I agree to the service starting on{" "}
+                      <StyledText variant="bodySmall" style={{ fontWeight: "bold" }}>
+                        {formatServiceStartDateForConsent(
+                          bulk.selectedDate ?? new Date(),
+                        )}
+                      </StyledText>{" "}
+                      and acknowledge that my right to a full cooling-off
+                      period is waived once a specific time slot is{" "}
+                      <StyledText style={{ textDecorationLine: "underline" }}>
+                        reserved.
+                      </StyledText>
+                    </StyledText>
+                    <StyledText
+                      variant="bodySmall"
+                      style={{ color: textColor, marginTop: 8, opacity: 0.9 }}
+                    >
+                      Please check our refund policy.
+                    </StyledText>
+                  </View>
+                </TouchableOpacity>
+              </View>
               <View style={{ marginTop: 12 }}>
                 <StyledButton
                   title={
@@ -1086,7 +1362,9 @@ const BookingScreen = () => {
                   }
                   variant="medium"
                   onPress={handleBulkPaymentConfirm}
-                  disabled={isBulkInvoiceSubmitting}
+                  disabled={
+                    isBulkInvoiceSubmitting || !bulkCoolingOffConsent
+                  }
                   style={styles.nextButton}
                 />
               </View>
@@ -1547,23 +1825,15 @@ const styles = StyleSheet.create({
   },
   bulkSuvOption: {
     borderRadius: 12,
-    padding: 12,
+    padding: 16,
     marginTop: 10,
     marginBottom: 5,
-    borderWidth: 1,
-  },
-  radioContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  radioButton: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
     borderWidth: 2,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
+  },
+  bulkSuvOptionRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
   },
   suvTextContainer: {
     flex: 1,
@@ -1572,12 +1842,27 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   suvDescription: {
-    opacity: 0.7,
     marginTop: 2,
   },
   infoText: {
     textAlign: "center",
     opacity: 0.7,
+  },
+  bulkConsentSection: {
+    borderRadius: 10,
+    padding: 15,
+    marginTop: 16,
+  },
+  bulkConsentRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+  },
+  bulkConsentCheckboxOffset: {
+    marginTop: 2,
+  },
+  bulkConsentTextWrap: {
+    flex: 1,
   },
   paymentProcessingContainer: {
     flex: 1,

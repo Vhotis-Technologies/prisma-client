@@ -95,7 +95,7 @@ const GarageVehicleComponent: React.FC<GarageVehicleComponentProps> = ({
 
         {/* Action Buttons */}
         <View style={styles.actions}>
-          {isLoadingVehicleStats ? (
+          {isLoadingVehicleStats && (
             <View
               style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
             >
@@ -104,16 +104,17 @@ const GarageVehicleComponent: React.FC<GarageVehicleComponentProps> = ({
                 Wait..
               </StyledText>
             </View>
-          ) : (
-            <StyledButton
+          )}
+
+          {/* This will be hidden for now until we have launched, and the system is tested */}
+{/*             <StyledButton
               title={"Upload Data"}
               variant="tonal"
               onPress={() => onUploadDataPress?.(vehicle.id)}
               style={styles.actionButton}
               isLoading={isLoadingVehicleStats}
               disabled={isLoadingVehicleStats}
-            />
-          )}
+            /> */}
         </View>
       </View>
     </TouchableOpacity>

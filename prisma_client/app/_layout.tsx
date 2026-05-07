@@ -39,7 +39,6 @@ export default function RootLayout() {
                       <Stack screenOptions={{ headerShown: false }}>
                         <Stack.Screen name="onboarding" />
                         <Stack.Screen name="main" />
-                        <Stack.Screen name="vehiclehistory" />
                       </Stack>
                     </GestureHandlerRootView>
                   </NotificationInitializer>

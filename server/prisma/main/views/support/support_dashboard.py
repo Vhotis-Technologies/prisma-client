@@ -134,7 +134,14 @@ class SupportDashboardView(APIView):
             start_date__lt=current_start,
         ).count()
 
-        revenue_types = ['payment', 'subscription', 'tip', 'reschedule_fee', 'vin_lookup']
+        revenue_types = [
+            'payment',
+            'fleet_subscription',
+            'b2c_subscription',
+            'tip',
+            'reschedule_fee',
+            'vin_lookup',
+        ]
         rev_curr = PaymentTransaction.objects.filter(
             status='succeeded',
             transaction_type__in=revenue_types,

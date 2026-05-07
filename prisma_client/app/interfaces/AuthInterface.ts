@@ -21,12 +21,16 @@ export interface BusinessAddress {
   longitude: number;
 }
 
+/** Chosen during onboarding landing; maps to API flags `isFleetOwner` / `isDealership`. */
+export type SignUpAccountType = "b2c" | "fleet_operator" | "dealership";
+
 export interface SignUpScreenProps {
   name: string;
   email: string;
   phone: string;
   password: string;
   referred_code?: string;
+  signUpAccountType?: SignUpAccountType;
   isFleetOwner?: boolean;
   isDealership?: boolean;
   business_name?: string;

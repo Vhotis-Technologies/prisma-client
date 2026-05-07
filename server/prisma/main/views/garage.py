@@ -1,19 +1,83 @@
 """
 Garage API: vehicles CRUD, stats, S3 test, transfer approve/reject, pending transfers, vehicle events.
 
-Actions: add_vehicle, get_vehicles, update_vehicle, delete_vehicle, get_vehicle_stats,
-test_s3_connection, approve_transfer, reject_transfer, get_pending_transfers, create_vehicle_event.
+Actions: add_vehicle, lookup_vehicle_registration, get_vehicles, update_vehicle,
+delete_vehicle, get_vehicle_stats, test_s3_connection, approve_transfer, reject_transfer,
+get_pending_transfers, create_vehicle_event.
 """
-from rest_framework.views import APIView
+from __future__ import annotations
+
+import secrets
+from datetime import datetime, timedelta
+
+from django.conf import settings as django_settings
+from django.core.cache import cache
+from django.core.files.base import ContentFile
+from django.db import transaction
+from django.utils import timezone
+from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework import status
-from django.db import models
-from main.models import Vehicle, VehicleOwnership, VehicleEvent, BookedAppointment, VehicleTransfer, Fleet, FleetVehicle, FleetMember, Branch, EventDataManagement
-from datetime import datetime, timedelta
-from django.utils import timezone
-from django.db import transaction
+from rest_framework.views import APIView
+
+from main.models import Vehicle, VehicleOwnership, VehicleEvent, BookedAppointment, VehicleTransfer, Fleet, FleetVehicle, Branch
+from main.services.regcheck_ireland import (
+    RegcheckIrelandError,
+    download_provider_image,
+    ireland_payload_for_cache,
+    lookup_ireland,
+)
 from main.util.media_helper import get_full_media_url
+
+
+LOOKUP_TTL_SECONDS = 900
+
+
+def lookup_cache_key(token: str) -> str:
+    return f'vehicle_reg_lookup:{token}'
+
+
+def canonical_garage_country(value) -> str:
+    v = (value or '').strip()
+    if not v:
+        return 'Ireland'
+    low = v.lower()
+    if low in ('ie', 'ireland', 'irl'):
+        return 'Ireland'
+    return v
+
+
+def find_existing_vehicle_for_add(registration_number: str, country: str):
+    try:
+        return Vehicle.objects.get(
+            registration_number=registration_number,
+            country=country,
+        )
+    except Vehicle.DoesNotExist:
+        return None
+
+
+def vehicle_customer_payload(vehicle: Vehicle):
+    img = None
+    if vehicle.image:
+        try:
+            raw = vehicle.image.url
+            if raw:
+                img = get_full_media_url(raw)
+        except Exception:
+            img = None
+    return {
+        'id': str(vehicle.id),
+        'make': vehicle.make,
+        'model': vehicle.model,
+        'year': vehicle.year,
+        'color': vehicle.color,
+        'registration_number': vehicle.registration_number,
+        'country': vehicle.country,
+        'body_style': vehicle.body_style,
+        'owner_count': vehicle.owner_count,
+        'image': img,
+    }
 
 
 class GarageView(APIView):
@@ -22,6 +86,7 @@ class GarageView(APIView):
 
     """ Define a set of action handlers that would be used to route the url to the appropriate function """
     action_handlers = {
+        'lookup_vehicle_registration': 'lookup_vehicle_registration',
         'add_vehicle': 'add_vehicle',
         'get_vehicles': 'get_vehicles',
         'update_vehicle': 'update_vehicle',
@@ -82,208 +147,379 @@ class GarageView(APIView):
     
     """ Here we will define the methods that would handle the jobs that are to be done on the server """
 
+    def lookup_vehicle_registration(self, request):
+        """
+        Ireland RegCheck lookup. POST JSON { licence|registration_number, country? } → preview + lookup_token.
+        """
+        if request.method != 'POST':
+            return Response(
+                {'error': 'Use POST', 'code': 'method_not_allowed'},
+                status=status.HTTP_405_METHOD_NOT_ALLOWED,
+            )
+        reg = (
+            (request.data.get('registration_number') or request.data.get('licence') or '')
+            .strip()
+            .upper()
+            .replace(' ', '')
+        )
+        canon = canonical_garage_country(request.data.get('country'))
+        if canon != 'Ireland':
+            return Response(
+                {
+                    'error': 'Lookup is only available for Ireland',
+                    'code': 'unsupported_country',
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        username = getattr(django_settings, 'CAR_REG_USERNAME', None)
+        if not username:
+            return Response(
+                {
+                    'error': 'Registration lookup is not configured',
+                    'code': 'config_error',
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        if not reg:
+            return Response(
+                {'error': 'Registration number required', 'code': 'validation'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            payload = lookup_ireland(reg, username=str(username))
+        except RegcheckIrelandError as exc:
+            st = (
+                status.HTTP_503_SERVICE_UNAVAILABLE
+                if exc.code == 'upstream_error'
+                else status.HTTP_400_BAD_REQUEST
+            )
+            return Response({'error': str(exc), 'code': exc.code}, status=st)
+
+        token = secrets.token_urlsafe(32)
+        cache.set(
+            lookup_cache_key(token),
+            ireland_payload_for_cache(payload),
+            LOOKUP_TTL_SECONDS,
+        )
+
+        preview = {
+            'registration_number': payload['registration_number'],
+            'country': 'Ireland',
+            'make': payload['make'],
+            'model': payload['model'],
+            'year': payload['year'],
+            'body_style': payload.get('body_style'),
+            'image_url': payload.get('provider_image_url'),
+            'county': payload.get('county'),
+            'description': payload.get('description'),
+        }
+
+        return Response(
+            {
+                'preview': preview,
+                'lookup_token': token,
+                'expires_in_seconds': LOOKUP_TTL_SECONDS,
+            },
+            status=status.HTTP_200_OK,
+        )
+
     def add_vehicle(self, request):
         """
-        Add a new vehicle for the user. Expects make, model, year, color, registration_number (or licence), country, vin;
-        optional image (file). Creates or gets Vehicle, creates VehicleOwnership. For fleet branch: links via FleetVehicle.
-        Returns vehicle payload with id, make, model, year, color, licence, image URL, etc.
+        Add vehicle: POST multipart/JSON.
+
+        Paths:
+          A) Confirm Ireland lookup — send ``lookup_token`` from lookup_vehicle_registration; optional ``image``
+             file replaces provider image.
+          B) Manual entry — ``entry_mode=manual`` plus make, model, year, colour, image, licence, country.
+
+        Fleet owners must send branch_id as before.
         """
-        
         try:
-            make = request.data.get('make')
-            model = request.data.get('model')
-            year = request.data.get('year')
-            color = request.data.get('color')
-            registration_number = request.data.get('registration_number') or request.data.get('licence')  # Support both field names for backward compatibility
-            country = request.data.get('country', 'Unknown')  # Default to 'Unknown' if not provided
-            vin = request.data.get('vin')  # VIN is REQUIRED
-            image = request.FILES.get('image')  # Get the uploaded image file
-            
-            
-            # Validate required fields including VIN
-            if not all([make, model, year, color, registration_number, vin]):
-                return Response({
-                    'error': 'Missing required fields. VIN is required for vehicle registration.'
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            # Check if vehicle with this VIN already exists
-            try:
-                existing_vehicle = Vehicle.objects.get(vin=vin)
-                
-                # Check if vehicle has an active owner
+            created_standalone_vehicle = False
+            uploaded_image = request.FILES.get('image')
+            lookup_token = (request.data.get('lookup_token') or '').strip()
+            entry_manual = (
+                request.data.get('entry_mode') == 'manual'
+                or str(request.data.get('manual', '')).lower() == 'true'
+                or request.data.get('manual') is True
+            )
+
+            blob = None
+
+            if lookup_token and entry_manual:
+                return Response(
+                    {'error': 'Send either lookup_token or manual mode, not both', 'code': 'validation'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if lookup_token:
+                blob = cache.get(lookup_cache_key(lookup_token))
+                if not blob:
+                    return Response(
+                        {'error': 'Lookup session expired — add the vehicle manually or run lookup again', 'code': 'lookup_expired'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                registration_number = blob['registration_number']
+                canon_country = blob['country']
+            elif entry_manual:
+                registration_number = (
+                    (request.data.get('registration_number') or request.data.get('licence') or '').strip().upper().replace(' ', '')
+                )
+                canon_country = canonical_garage_country(request.data.get('country'))
+                make = (request.data.get('make') or '').strip()
+                model = (request.data.get('model') or '').strip()
+                color = (request.data.get('color') or '').strip()
+                year = request.data.get('year')
+
+                if not registration_number:
+                    return Response(
+                        {'error': 'Licence plate is required (from lookup step)', 'code': 'validation'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                missing = []
+                if not make:
+                    missing.append('make')
+                if not model:
+                    missing.append('model')
+                if not year:
+                    missing.append('year')
+                if not color:
+                    missing.append('color')
+                if not uploaded_image:
+                    missing.append('image')
+                if missing:
+                    return Response(
+                        {
+                            'error': f'Manual add missing required fields: {", ".join(missing)}',
+                            'code': 'validation',
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                try:
+                    year_int = int(year)
+                except (TypeError, ValueError):
+                    return Response(
+                        {'error': 'Year must be a number', 'code': 'validation'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                if year_int < 1900 or year_int > timezone.now().year + 1:
+                    return Response(
+                        {'error': 'Invalid model year', 'code': 'validation'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+            else:
+                return Response(
+                    {
+                        'error': 'Send lookup_token (after lookup) or entry_mode=manual',
+                        'code': 'validation',
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            existing_vehicle = find_existing_vehicle_for_add(
+                registration_number,
+                canon_country,
+            )
+
+            if existing_vehicle:
                 active_ownership = existing_vehicle.get_active_ownership()
-                
+
                 if active_ownership:
-                    # Vehicle is already owned - check if it's the same user or associated with the same fleet
                     managed_branch = request.user.get_managed_branch()
                     already_owns_or_same_fleet = (
                         active_ownership.owner == request.user
-                        or (managed_branch is not None and active_ownership.vehicle.fleet_associations.filter(fleet=managed_branch.fleet).exists())
+                        or (
+                            managed_branch is not None
+                            and active_ownership.vehicle.fleet_associations.filter(fleet=managed_branch.fleet).exists()
+                        )
                     )
                     if already_owns_or_same_fleet:
-                        return Response({
-                            'error': 'You already own this vehicle',
+                        return Response(
+                            {
+                                'error': 'You already own this vehicle',
+                                'vehicle': vehicle_customer_payload(existing_vehicle),
+                            },
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+
+                    from main.tasks import send_transfer_request_email
+
+                    existing_transfer = VehicleTransfer.objects.filter(
+                        vehicle=existing_vehicle,
+                        to_owner=request.user,
+                        status='pending',
+                    ).first()
+
+                    if existing_transfer:
+                        return Response(
+                            {
+                                'error': 'A transfer request for this vehicle is already pending',
+                                'transfer_id': str(existing_transfer.id),
+                                'message': 'Please wait for the current owner to respond to your transfer request.',
+                            },
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+
+                    transfer = VehicleTransfer.objects.create(
+                        vehicle=existing_vehicle,
+                        from_owner=active_ownership.owner,
+                        to_owner=request.user,
+                        expires_at=timezone.now() + timedelta(days=7),
+                    )
+
+                    send_transfer_request_email.delay(
+                        transfer.id,
+                        active_ownership.owner.email,
+                        request.user.name,
+                        existing_vehicle.registration_number,
+                    )
+
+                    return Response(
+                        {
+                            'message': 'This vehicle is already owned by another user. A transfer request has been sent to the current owner.',
+                            'transfer_id': str(transfer.id),
+                            'status': 'pending',
                             'vehicle': {
                                 'id': str(existing_vehicle.id),
                                 'make': existing_vehicle.make,
                                 'model': existing_vehicle.model,
                                 'year': existing_vehicle.year,
-                                'color': existing_vehicle.color,
                                 'registration_number': existing_vehicle.registration_number,
-                                'country': existing_vehicle.country,
-                                'vin': existing_vehicle.vin,
-                            }
-                        }, status=status.HTTP_400_BAD_REQUEST)
-                    
-                    # Vehicle is owned by someone else - create transfer request
-                    from main.tasks import send_transfer_request_email
-                    
-                    # Check if there's already a pending transfer for this vehicle
-                    existing_transfer = VehicleTransfer.objects.filter(
-                        vehicle=existing_vehicle,
-                        to_owner=request.user,
-                        status='pending'
-                    ).first()
-                    
-                    if existing_transfer:
-                        return Response({
-                            'error': 'A transfer request for this vehicle is already pending',
-                            'transfer_id': str(existing_transfer.id),
-                            'message': 'Please wait for the current owner to respond to your transfer request.'
-                        }, status=status.HTTP_400_BAD_REQUEST)
-                    
-                    # Create transfer request
-                    transfer = VehicleTransfer.objects.create(
-                        vehicle=existing_vehicle,
-                        from_owner=active_ownership.owner,
-                        to_owner=request.user,
-                        expires_at=timezone.now() + timedelta(days=7)
+                            },
+                        },
+                        status=status.HTTP_202_ACCEPTED,
                     )
-                    
-                    # Send email to current owner
-                    send_transfer_request_email.delay(
-                        transfer.id,
-                        active_ownership.owner.email,
-                        request.user.name,
-                        existing_vehicle.registration_number
+
+                vehicle = existing_vehicle
+                if uploaded_image:
+                    vehicle.image = uploaded_image
+                    vehicle.save(update_fields=['image', 'updated_at'])
+            else:
+                if lookup_token:
+                    vehicle = Vehicle(
+                        registration_number=blob['registration_number'],
+                        country=blob['country'],
+                        make=blob['make'][:100],
+                        model=blob['model'][:100],
+                        year=int(blob['year']),
+                        color=(blob.get('color') or 'Unknown').strip()[:100] or 'Unknown',
+                        abi_code=(blob.get('abi_code') or '')[:100] if blob.get('abi_code') else None,
+                        body_style=(blob.get('body_style') or '')[:100] if blob.get('body_style') else None,
+                        transmission_type=(blob.get('transmission_type') or '')[:100] if blob.get('transmission_type') else None,
+                        fuel_type=(blob.get('fuel_type') or '')[:100] if blob.get('fuel_type') else None,
+                        number_of_doors=blob.get('number_of_doors'),
+                        number_of_seats=blob.get('number_of_seats'),
+                        engine_size=blob.get('engine_size'),
+                        county=(blob.get('county') or '')[:100] if blob.get('county') else None,
+                        registration_provider_payload=blob.get('registration_provider_payload'),
+                        owner_count=0,
                     )
-                    
-                    return Response({
-                        'message': 'This vehicle is already owned by another user. A transfer request has been sent to the current owner.',
-                        'transfer_id': str(transfer.id),
-                        'status': 'pending',
-                        'vehicle': {
-                            'id': str(existing_vehicle.id),
-                            'make': existing_vehicle.make,
-                            'model': existing_vehicle.model,
-                            'year': existing_vehicle.year,
-                            'registration_number': existing_vehicle.registration_number,
-                        }
-                    }, status=status.HTTP_202_ACCEPTED)
-                
+                    vehicle.save()
+
+                    if uploaded_image:
+                        vehicle.image = uploaded_image
+                        vehicle.save(update_fields=['image', 'updated_at'])
+                    elif blob.get('provider_image_url'):
+                        try:
+                            raw, ctype = download_provider_image(blob['provider_image_url'])
+                            ext = 'jpg'
+                            if 'png' in (ctype or '').lower():
+                                ext = 'png'
+                            fname = f"{blob['registration_number'].replace('/', '_')}.{ext}"
+                            vehicle.image.save(fname, ContentFile(raw), save=True)
+                        except RegcheckIrelandError:
+                            pass
+                    created_standalone_vehicle = True
                 else:
-                    # Vehicle exists but has no active owner - create ownership for new user
-                    vehicle = existing_vehicle
-                    if image:
-                        vehicle.image = image
-                        vehicle.save()
-                    
-            except Vehicle.DoesNotExist:
-                # Vehicle doesn't exist - create new vehicle
-                vehicle = Vehicle.objects.create(
-                    make=make,
-                    model=model,
-                    year=year,
-                    color=color,
-                    registration_number=registration_number,
-                    country=country,
-                    vin=vin,
-                    image=image if image else None,
-                    owner_count=0
-                )
-            
-            # Determine ownership type and branch based on user type
+                    vehicle = Vehicle.objects.create(
+                        make=make[:100],
+                        model=model[:100],
+                        year=year_int,
+                        color=color[:100],
+                        registration_number=registration_number,
+                        country=canon_country,
+                        owner_count=0,
+                        county=None,
+                        registration_provider_payload=None,
+                    )
+
+                    vehicle.image = uploaded_image
+                    vehicle.save()
+                    created_standalone_vehicle = True
+
             ownership_type = 'private'
             branch = None
-            fleet = None  # Initialize fleet variable
-            
+            fleet = None
+
             if request.user.is_fleet_owner:
-                # Fleet owner: require branch_id and validate it belongs to their fleet
                 branch_id = request.data.get('branch_id')
                 if not branch_id:
-                    return Response({
-                        'error': 'Branch ID is required for fleet owners'
-                    }, status=status.HTTP_400_BAD_REQUEST)
-                
-                # Get the fleet for this user
+                    if created_standalone_vehicle:
+                        vehicle.delete()
+                    return Response({'error': 'Branch ID is required for fleet owners'}, status=status.HTTP_400_BAD_REQUEST)
+
                 fleet = Fleet.objects.filter(owner=request.user).first()
                 if not fleet:
-                    return Response({
-                        'error': 'No fleet found for this user'
-                    }, status=status.HTTP_404_NOT_FOUND)
-                
-                # Check subscription limit
+                    if created_standalone_vehicle:
+                        vehicle.delete()
+                    return Response({'error': 'No fleet found for this user'}, status=status.HTTP_404_NOT_FOUND)
+
                 can_add, error_msg = fleet.can_add_vehicle()
                 if not can_add:
+                    if created_standalone_vehicle:
+                        vehicle.delete()
                     return Response({'error': error_msg}, status=status.HTTP_403_FORBIDDEN)
-                
-                # Validate branch belongs to this fleet
+
                 try:
                     branch = Branch.objects.get(id=branch_id, fleet=fleet)
                 except Branch.DoesNotExist:
-                    return Response({
-                        'error': 'Branch not found or does not belong to your fleet'
-                    }, status=status.HTTP_403_FORBIDDEN)
-                
+                    if created_standalone_vehicle:
+                        vehicle.delete()
+                    return Response(
+                        {'error': 'Branch not found or does not belong to your fleet'},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+
                 ownership_type = 'fleet'
-                
+
             elif request.user.is_branch_admin:
-                # Branch admin: automatically use their managed branch
                 managed_branch = request.user.get_managed_branch()
                 if not managed_branch:
-                    return Response({
-                        'error': 'No branch assigned to this branch admin account'
-                    }, status=status.HTTP_400_BAD_REQUEST)
-                
+                    return Response({'error': 'No branch assigned to this branch admin account'}, status=status.HTTP_400_BAD_REQUEST)
+
                 branch = managed_branch
-                fleet = branch.fleet  # Get fleet from branch
-                
-                # Check subscription limit (fleet-level check)
+                fleet = branch.fleet
+
                 can_add, error_msg = fleet.can_add_vehicle()
                 if not can_add:
+                    if created_standalone_vehicle:
+                        vehicle.delete()
                     return Response({'error': error_msg}, status=status.HTTP_403_FORBIDDEN)
-                
+
                 ownership_type = 'fleet'
-            
-            # Determine the actual owner for VehicleOwnership
-            # For fleet vehicles: owner is the fleet owner
-            # For private vehicles: owner is the user themselves
+
             actual_owner = request.user
-            
-            # Ensure ownership_type is 'fleet' if user adding the vehicle is a fleet owner or admin
-            # This is a safeguard to ensure fleet users always get 'fleet' ownership type
-            # even if the earlier logic didn't catch it for some reason
+
             if request.user.is_fleet_owner or request.user.is_branch_admin:
                 if ownership_type != 'fleet':
                     ownership_type = 'fleet'
-                    # Ensure we have branch and fleet set for branch admins
                     if request.user.is_branch_admin and not branch:
                         managed_branch = request.user.get_managed_branch()
                         if managed_branch:
                             branch = managed_branch
                             fleet = branch.fleet
-                    # Ensure we have fleet set for fleet owners
                     elif request.user.is_fleet_owner and not fleet:
                         fleet = Fleet.objects.filter(owner=request.user).first()
-            
+
             if ownership_type == 'fleet':
                 if request.user.is_fleet_owner:
                     actual_owner = request.user
                 elif request.user.is_branch_admin and branch:
-                    # Get the fleet owner from the branch's fleet
                     actual_owner = branch.fleet.owner
-            
-            # Create ownership record for this user (vehicle has no active owner)
+
             with transaction.atomic():
                 VehicleOwnership.objects.create(
                     vehicle=vehicle,
@@ -291,12 +527,10 @@ class GarageView(APIView):
                     ownership_type=ownership_type,
                     start_date=timezone.now().date(),
                 )
-                
-                # Increment owner count
+
                 vehicle.owner_count += 1
                 vehicle.save()
 
-                # Only create FleetVehicle if branch and fleet are set
                 if branch and fleet:
                     FleetVehicle.objects.create(
                         fleet=fleet,
@@ -304,29 +538,20 @@ class GarageView(APIView):
                         branch=branch,
                         added_by=request.user,
                     )
-            
-            # Prepare vehicle data for response
-            vehicle_data = {
-                'id': str(vehicle.id),
-                'make': vehicle.make,
-                'model': vehicle.model,
-                'year': vehicle.year,
-                'color': vehicle.color,
-                'registration_number': vehicle.registration_number,
-                'country': vehicle.country,
-                'vin': vehicle.vin,
-                'owner_count': vehicle.owner_count,
-                'image': get_full_media_url(vehicle.image.url) if vehicle.image else None,
-            }
-            return Response({
-                'message': f'You just added {vehicle.make} {vehicle.model} {vehicle.year} to your garage',
-                'vehicle': vehicle_data,
-            }, status=status.HTTP_201_CREATED)
-            
-        except Exception as e:
-            import traceback
-            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+            if lookup_token:
+                cache.delete(lookup_cache_key(lookup_token))
+
+            return Response(
+                {
+                    'message': f'You just added {vehicle.make} {vehicle.model} {vehicle.year} to your garage',
+                    'vehicle': vehicle_customer_payload(vehicle),
+                },
+                status=status.HTTP_201_CREATED,
+            )
+
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     def get_vehicles(self, request):
         """
@@ -376,7 +601,7 @@ class GarageView(APIView):
                         'color': vehicle.color,
                         'registration_number': vehicle.registration_number,
                         'country': vehicle.country,
-                        'vin': vehicle.vin,
+                        'body_style': vehicle.body_style,
                         'image': image_url,
                         'branch_id': branch_id,
                         'branch_name': branch_name,
@@ -428,7 +653,7 @@ class GarageView(APIView):
                     'color': vehicle.color,
                     'registration_number': vehicle.registration_number,
                     'country': vehicle.country,
-                    'vin': vehicle.vin,
+                    'body_style': vehicle.body_style,
                     'image': image_url,  # This will be None if no image or if error occurs
                 }
                 vehicles_list.append(vehicle_data)
@@ -441,7 +666,7 @@ class GarageView(APIView):
     def update_vehicle(self, request, vehicle_id=None):
         """
         Update an existing vehicle. vehicle_id from URL or request.data. Expects make, model, year, color,
-        registration_number (or licence), country; optional vin, image. User must own vehicle (or be branch admin for
+        registration_number (or licence), country; optional image. User must own vehicle (or be branch admin for
         branch vehicle). Returns updated vehicle payload.
         """
         try:
@@ -451,7 +676,6 @@ class GarageView(APIView):
             color = request.data.get('color')
             registration_number = request.data.get('registration_number') or request.data.get('licence')
             country = request.data.get('country')
-            vin = request.data.get('vin')
 
             # Get the vehicle_id from URL path first, then fallback to query params
             if vehicle_id is None:
@@ -486,8 +710,6 @@ class GarageView(APIView):
                 vehicle.registration_number = registration_number
             if country:
                 vehicle.country = country
-            if vin is not None:  # Allow clearing VIN by passing empty string
-                vehicle.vin = vin if vin else None
             # Save the vehicle to the db
             vehicle.save()
             # Return the vehicle object
@@ -499,7 +721,7 @@ class GarageView(APIView):
                 'color': vehicle.color,
                 'registration_number': vehicle.registration_number,
                 'country': vehicle.country,
-                'vin': vehicle.vin,
+                'body_style': vehicle.body_style,
             }, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
@@ -671,7 +893,7 @@ class GarageView(APIView):
                     'registration_number': vehicle.registration_number,
                     'licence': vehicle.registration_number,  # Add licence field for compatibility
                     'country': vehicle.country,
-                    'vin': vehicle.vin,
+                    'body_style': vehicle.body_style,
                     'image': image_url,  # Include image field
                 },
                 'total_bookings': total_washes,
@@ -931,7 +1153,6 @@ class GarageView(APIView):
                         'model': transfer.vehicle.model,
                         'year': transfer.vehicle.year,
                         'registration_number': transfer.vehicle.registration_number,
-                        'vin': transfer.vehicle.vin,
                     },
                     'from_owner': {
                         'id': transfer.from_owner.id,
@@ -964,8 +1185,8 @@ class GarageView(APIView):
 
     def create_vehicle_event(self, request):
         """
-        Create a new vehicle event (inspection, repair, service, etc.)
-        Can be accessed publicly via VIN if visibility is 'public'
+        Create a new vehicle event (inspection, repair, service, etc.).
+        Authenticated owners may set visibility public or private.
         """
         try:
             vehicle_id = request.data.get('vehicle_id')

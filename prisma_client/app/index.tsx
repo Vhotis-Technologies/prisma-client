@@ -127,7 +127,7 @@ export default function WelcomeScreen() {
               <View style={styles.heroButtons}>
                 <StyledButton
                   variant="small"
-                  onPress={() => router.push("/onboarding/OnboardingScreen")}
+                  onPress={() => router.push("/onboarding/" as any)}
                   style={styles.secondaryButton}
                   title="Join Us"
                 />
@@ -334,29 +334,6 @@ export default function WelcomeScreen() {
               </View>
             </View>
           </View>
-        </View>
-
-        {/* CTA Section - Vehicle History (VIN Lookup) */}
-        <View
-          style={[
-            styles.ctaSection,
-            { backgroundColor: cardColor, borderColor: borderColor },
-          ]}
-        >
-          <StyledText variant="titleMedium">
-            Look Up Vehicle History by VIN
-          </StyledText>
-
-          <StyledText variant="bodySmall">
-            Enter a 17-character VIN to see ownership history, service records,
-            incidents, recalls, and more. Available for any car.
-          </StyledText>
-
-          <StyledButton
-            variant="medium"
-            onPress={() => router.push("/vehiclehistory/VehicleDataInputScreen")}
-            title="Look Up Vehicle History"
-          />
         </View>
 
         {/* Footer */}

@@ -8,10 +8,31 @@ export interface MyVehiclesProps {
   year: number;
   color: string;
   licence: string;
-  vin?: string;
+  body_style?: string | null;
+  country?: string;
   image?: string | null | any;
   branch_id?: string;
   branch_name?: string;
+  /** Manual add-vehicle path (server entry_mode=manual). */
+  entry_mode?: "manual";
+}
+
+export interface LookupVehiclePreview {
+  registration_number: string;
+  country: string;
+  make: string;
+  model: string;
+  year: number;
+  body_style?: string | null;
+  image_url?: string | null;
+  county?: string | null;
+  description?: string | null;
+}
+
+export interface LookupVehicleRegistrationResponse {
+  preview: LookupVehiclePreview;
+  lookup_token: string;
+  expires_in_seconds: number;
 }
 
 export interface VehicleInspectionProps {
@@ -117,7 +138,6 @@ export interface PendingTransferItem {
     model: string;
     year: number;
     registration_number: string;
-    vin: string;
   };
   from_owner: { id: string; name: string; email: string };
   to_owner: { id: string; name: string; email: string };

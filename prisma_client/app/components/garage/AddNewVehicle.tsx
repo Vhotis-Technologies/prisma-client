@@ -1,10 +1,10 @@
 import {
   StyleSheet,
   View,
-  Keyboard,
   ActivityIndicator,
   Image,
   TouchableOpacity,
+  ScrollView,
 } from "react-native";
 import React, { useState, useEffect } from "react";
 import StyledTextInput from "@/app/components/helpers/StyledTextInput";
@@ -16,50 +16,50 @@ import { Ionicons } from "@expo/vector-icons";
 import ModalServices from "@/app/utils/ModalServices";
 import { useAppSelector, RootState } from "@/app/store/main_store";
 import { useGetBranchesQuery } from "@/app/store/api/fleetApi";
+import { LookupVehiclePreview } from "@/app/interfaces/GarageInterface";
 
 /**
- * AddNewVehicleScreen Component
- *
- * A clean, presentation-only component for collecting vehicle information.
- * All business logic and state management is handled by the useGarage hook.
- * This component focuses purely on rendering the UI and delegating user interactions to the hook.
+ * Wizard: licence lookup (Ireland) → preview confirm OR manual fallback (minimal fields).
  */
 const MIN_VEHICLE_YEAR = 1900;
 const MAX_VEHICLE_YEAR = new Date().getFullYear();
+
+type WizardStep = "lookup" | "preview" | "manual";
 
 const AddNewVehicleScreen = ({
   setIsAddVehicleModalVisible,
 }: {
   setIsAddVehicleModalVisible: (visible: boolean) => void;
 }) => {
-  const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [showBranchModal, setShowBranchModal] = useState(false);
   const [yearError, setYearError] = useState<string | null>(null);
+  const [wizardStep, setWizardStep] = useState<WizardStep>("lookup");
+  const [lookupToken, setLookupToken] = useState<string | null>(null);
+  const [preview, setPreview] = useState<LookupVehiclePreview | null>(null);
+  const [lookupError, setLookupError] = useState<string | null>(null);
 
-  // Theme colors
   const backgroundColor = useThemeColor({}, "background");
   const textColor = useThemeColor({}, "text");
   const primaryColor = useThemeColor({}, "primary");
   const borderColor = useThemeColor({}, "borders");
   const cardColor = useThemeColor({}, "cards");
 
-  // Get user from Redux store
-  const user = useAppSelector((state: RootState) => state.auth.user); 
+  const user = useAppSelector((state: RootState) => state.auth.user);
 
-  // Fetch branches if fleet owner
   const { data: branchesData } = useGetBranchesQuery(undefined, {
     skip: !user?.is_fleet_owner,
   });
-
   const branches = branchesData?.branches || [];
 
-  // Extract all needed methods and state from the useGarage hook
   const {
     newVehicle,
     collectNewVehicleData,
     handleSubmit,
     isLoadingVehicles,
     isAddingNewVehicle,
+    isLookupRegistrationLoading,
+    lookupVehicleRegistration,
+    confirmLookupVehicle,
     isImageModalVisible,
     showImageSelectionModal,
     hideImageSelectionModal,
@@ -67,17 +67,21 @@ const AddNewVehicleScreen = ({
     handleFileSelection,
   } = useGarage();
 
-  // Auto-set branch for branch admin
   useEffect(() => {
-    if (user?.is_branch_admin && user?.managed_branch?.id && !newVehicle?.branch_id) {
+    if (
+      user?.is_branch_admin &&
+      user?.managed_branch?.id &&
+      !newVehicle?.branch_id
+    ) {
       collectNewVehicleData("branch_id", user.managed_branch.id);
     }
   }, [user?.is_branch_admin, user?.managed_branch?.id]);
 
-  // Get selected branch info
-  const selectedBranch = branches.find(
-    (b) => b.id === newVehicle?.branch_id
-  );
+  useEffect(() => {
+    collectNewVehicleData("country", "Ireland");
+  }, []);
+
+  const selectedBranch = branches.find((b) => b.id === newVehicle?.branch_id);
   const branchAdminBranch = user?.managed_branch;
 
   const handleBranchSelect = (branchId: string) => {
@@ -87,11 +91,13 @@ const AddNewVehicleScreen = ({
 
   const handleYearChange = (text: string) => {
     const digitsOnly = text.replace(/\D/g, "").slice(0, 4);
-    collectNewVehicleData("year", digitsOnly);
+    collectNewVehicleData("year", digitsOnly === "" ? ("" as any) : digitsOnly);
     if (digitsOnly.length === 4) {
       const yearNum = parseInt(digitsOnly, 10);
       if (yearNum < MIN_VEHICLE_YEAR || yearNum > MAX_VEHICLE_YEAR) {
-        setYearError(`Enter a year between ${MIN_VEHICLE_YEAR} and ${MAX_VEHICLE_YEAR}`);
+        setYearError(
+          `Enter a year between ${MIN_VEHICLE_YEAR} and ${MAX_VEHICLE_YEAR}`,
+        );
       } else {
         setYearError(null);
       }
@@ -100,207 +106,369 @@ const AddNewVehicleScreen = ({
     }
   };
 
-  useEffect(() => {
-    const keyboardDidShowListener = Keyboard.addListener(
-      "keyboardDidShow",
-      () => {
-        setKeyboardVisible(true);
-      }
+  /* Method is designed to call the lookupVehicleRegistration mutation to get the vehicle details using the registration number, from the server. */
+  const runLookup = async () => {
+    setLookupError(null);
+    const reg = (newVehicle?.licence || "").trim();
+    if (!reg) {
+      setLookupError("Enter your registration number.");
+      return;
+    }
+    try {
+      const res = await lookupVehicleRegistration({
+        licence: reg,
+        registration_number: reg,
+        country: newVehicle?.country || "Ireland",
+      }).unwrap();
+      setPreview(res.preview);
+      setLookupToken(res.lookup_token);
+      setWizardStep("preview");
+    } catch (e: any) {
+      const msg =
+        e?.data?.error ||
+        e?.error ||
+        "We could not look up this registration. Try again or enter your vehicle manually.";
+      setLookupError(String(msg));
+    }
+  };
+
+  /* Allows the user to enter their vehicle details manually, if the lookup fails. */
+  const goManual = () => {
+    collectNewVehicleData("entry_mode", "manual");
+    collectNewVehicleData("country", newVehicle?.country || "Ireland");
+    collectNewVehicleData(
+      "licence",
+      (newVehicle?.licence || "").trim().toUpperCase(),
     );
-    const keyboardDidHideListener = Keyboard.addListener(
-      "keyboardDidHide",
-      () => {
-        setKeyboardVisible(false);
-      }
-    );
+    setWizardStep("manual");
+    setLookupError(null);
+  };
 
-    return () => {
-      keyboardDidShowListener?.remove();
-      keyboardDidHideListener?.remove();
-    };
-  }, []);
+  /* Confirms the lookup vehicle details and saves the vehicle to the database. */
+  const onConfirmLookup = async () => {
+    if (!lookupToken) return;
+    if (user?.is_fleet_owner && !newVehicle?.branch_id) {
+      setLookupError("Select a branch for this vehicle.");
+      return;
+    }
+    try {
+      await confirmLookupVehicle(lookupToken, {
+        branchId: newVehicle?.branch_id,
+      });
+      setIsAddVehicleModalVisible(false);
+    } catch (e: any) {
+      const msg = e?.data?.error || e?.error || "Could not save this vehicle.";
+      setLookupError(String(msg));
+    }
+  };
 
-  return (
-    <View style={{ flex: 1 }}>
-      <View style={[styles.mainContainer, styles.scrollContent]}>
-        <View style={[styles.card]}>
-          {/* Vehicle Information Form */}
-          <View style={styles.formSection}>
-            <StyledText variant="labelMedium">Vehicle Information</StyledText>
+  /* Allows the user to select a branch for the vehicle, if they are a fleet owner. */
+  const branchPickerFleet = user?.is_fleet_owner ? (
+    <View style={styles.branchSection}>
+      <StyledText variant="labelMedium">Branch *</StyledText>
+      <TouchableOpacity
+        style={[
+          styles.branchSelector,
+          { borderColor, backgroundColor: cardColor },
+        ]}
+        onPress={() => setShowBranchModal(true)}
+      >
+        <StyledText
+          variant="bodyMedium"
+          style={[
+            styles.branchSelectorText,
+            { color: selectedBranch ? textColor : textColor + "80" },
+          ]}
+        >
+          {selectedBranch
+            ? `${selectedBranch.name}${selectedBranch.city ? ` - ${selectedBranch.city}` : ""}`
+            : "Select a branch"}
+        </StyledText>
+        <Ionicons name="chevron-down" size={20} color={textColor} />
+      </TouchableOpacity>
+    </View>
+  ) : null;
 
-            <StyledTextInput
-              label="Make"
-              placeholder="e.g., Toyota, Honda, Ford"
-              value={newVehicle?.make || ""}
-              onChangeText={(text) => collectNewVehicleData("make", text)}
-            />
-
-            <StyledTextInput
-              label="Model"
-              value={newVehicle?.model || ""}
-              onChangeText={(text) => collectNewVehicleData("model", text)}
-            />
-
-            <StyledTextInput
-              label="Year"
-              placeholder={`e.g., ${MAX_VEHICLE_YEAR}`}
-              value={newVehicle?.year?.toString() || ""}
-              onChangeText={handleYearChange}
-              keyboardType="numeric"
-              maxLength={4}
-            />
-            {yearError && (
-              <StyledText variant="bodySmall" style={[styles.fieldError, { color: "#c62828" }]}>
-                {yearError}
-              </StyledText>
-            )}
-
-            <StyledTextInput
-              label="Color"
-              placeholder="e.g., Red, Blue, Silver"
-              value={newVehicle?.color || ""}
-              onChangeText={(text) => collectNewVehicleData("color", text)}
-            />
-
-            <StyledTextInput
-              label="VIN (Vehicle Identification Number)"
-              placeholder="e.g., 1HGBH41JXMN109186"
-              value={newVehicle?.vin || ""}
-              onChangeText={(text) => collectNewVehicleData("vin", text.toUpperCase())}
-              maxLength={17}
-              autoCapitalize="characters"
-            />
-
-            <StyledTextInput
-              label="License Plate"
-              placeholder="e.g., ABC123"
-              value={newVehicle?.licence || ""}
-              maxLength={12}
-              onChangeText={(text) => collectNewVehicleData("licence", text.toUpperCase())}
-              autoCapitalize="characters"
-            />
-
-            {/* Branch Selection (for fleet owners) */}
-            {user?.is_fleet_owner && (
-              <View style={styles.branchSection}>
-                <StyledText variant="labelMedium">Branch *</StyledText>
-                <TouchableOpacity
-                  style={[styles.branchSelector, { borderColor, backgroundColor: cardColor }]}
-                  onPress={() => setShowBranchModal(true)}
-                >
-                  <StyledText
-                    variant="bodyMedium"
-                    style={[
-                      styles.branchSelectorText,
-                      {
-                        color: selectedBranch ? textColor : textColor + "80",
-                      },
-                    ]}
-                  >
-                    {selectedBranch
-                      ? `${selectedBranch.name}${selectedBranch.city ? ` - ${selectedBranch.city}` : ""}`
-                      : "Select a branch"}
-                  </StyledText>
-                  <Ionicons name="chevron-down" size={20} color={textColor} />
-                </TouchableOpacity>
-                {selectedBranch && (
-                  <StyledText variant="bodySmall" style={[styles.branchInfo, { color: textColor + "80" }]}>
-                    {selectedBranch.address && `${selectedBranch.address}, `}
-                    {selectedBranch.postcode && `${selectedBranch.postcode}, `}
-                    {selectedBranch.city}
-                  </StyledText>
-                )}
-              </View>
-            )}
-
-            {/* Branch Display (for branch admins - read-only) */}
-            {user?.is_branch_admin && branchAdminBranch && (
-              <View style={styles.branchSection}>
-                <StyledText variant="labelMedium">Branch</StyledText>
-                <View style={[styles.branchDisplay, { borderColor, backgroundColor: cardColor }]}>
-                  <StyledText variant="bodyMedium" style={{ color: textColor }}>
-                    {branchAdminBranch.name}
-                    {branchAdminBranch.city ? ` - ${branchAdminBranch.city}` : ""}
-                  </StyledText>
-                </View>
-                {branchAdminBranch.address && (
-                  <StyledText variant="bodySmall" style={[styles.branchInfo, { color: textColor + "80" }]}>
-                    {branchAdminBranch.address}
-                    {branchAdminBranch.postcode && `, ${branchAdminBranch.postcode}`}
-                    {branchAdminBranch.city && `, ${branchAdminBranch.city}`}
-                  </StyledText>
-                )}
-              </View>
-            )}
-
-            {/* Vehicle Image Section */}
-            <View style={styles.imageSection}>
-              <StyledText variant="labelMedium">Vehicle Image</StyledText>
-              <TouchableOpacity
-                style={[styles.imagePickerButton, { borderColor }]}
-                onPress={showImageSelectionModal}
-              >
-                {newVehicle?.image?.uri ? (
-                  <Image
-                    source={{ uri: newVehicle.image.uri }}
-                    style={styles.imagePreview}
-                  />
-                ) : (
-                  <View style={styles.imagePlaceholder}>
-                    <Ionicons
-                      name="camera-outline"
-                      size={32}
-                      color={textColor}
-                    />
-                    <StyledText
-                      variant="bodySmall"
-                      style={[
-                        styles.imagePlaceholderText,
-                        { color: textColor },
-                      ]}
-                    >
-                      Tap to add image
-                    </StyledText>
-                  </View>
-                )}
-              </TouchableOpacity>
-              {newVehicle?.image?.uri && (
-                <TouchableOpacity
-                  style={styles.removeImageButton}
-                  onPress={() => collectNewVehicleData("image", null)}
-                >
-                  <Ionicons name="trash-outline" size={18} color={textColor} />
-                  <StyledText
-                    variant="bodySmall"
-                    style={[styles.removeImageText, { color: textColor }]}
-                  >
-                    Remove Image
-                  </StyledText>
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
-        </View>
-
-        {/* Submit Button */}
-        <View style={styles.submitContainer}>
-          {isLoadingVehicles || isAddingNewVehicle ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <StyledButton
-              title={"Add New Vehicle"}
-              onPress={async () => {
-                await handleSubmit();
-                setIsAddVehicleModalVisible(false);
-              }}
-              variant="medium"
-              disabled={isLoadingVehicles || isAddingNewVehicle || !!yearError}
-            />
-          )}
+  /* Displays the branch that the user is a branch admin for, if they are a branch admin. */
+  const branchReadOnlyAdmin =
+    user?.is_branch_admin && branchAdminBranch ? (
+      <View style={styles.branchSection}>
+        <StyledText variant="labelMedium">Branch</StyledText>
+        <View
+          style={[
+            styles.branchDisplay,
+            { borderColor, backgroundColor: cardColor },
+          ]}
+        >
+          <StyledText variant="bodyMedium" style={{ color: textColor }}>
+            {branchAdminBranch.name}
+            {branchAdminBranch.city ? ` - ${branchAdminBranch.city}` : ""}
+          </StyledText>
         </View>
       </View>
+    ) : null;
 
-      {/* Image Selection Modal */}
+  /* Displays the main component of the Add New Vehicle screen. */
+  return (
+    <View style={{ flex: 1 }}>
+      <ScrollView
+        style={[styles.mainContainer]}
+        contentContainerStyle={styles.scrollContent}
+      >
+        <View style={[styles.card]}>
+          {wizardStep === "lookup" && (
+            <View style={styles.formSection}>
+              <StyledText variant="labelLarge">
+                Look up vehicle (Ireland)
+              </StyledText>
+              <StyledText
+                variant="bodySmall"
+                style={{ marginBottom: 8 }}
+              >
+                Enter your registration—we will fetch details from the motor
+                registry. If lookup fails, you can add the vehicle manually.
+              </StyledText>
+              <StyledTextInput
+                label="Licence plate"
+                placeholder="e.g. 141W1184"
+                value={newVehicle?.licence || ""}
+                onChangeText={(text) =>
+                  collectNewVehicleData(
+                    "licence",
+                    text.toUpperCase().replace(/\s+/g, ""),
+                  )
+                }
+                autoCapitalize="characters"
+              />
+              <StyledTextInput
+                label="Country"
+                value={newVehicle?.country || "Ireland"}
+                onChangeText={(text) => collectNewVehicleData("country", text)}
+              />
+              {lookupError ? (
+                <StyledText
+                  variant="bodySmall"
+                  style={{ color: "#c62828", marginVertical: 6 }}
+                >
+                  {lookupError}
+                </StyledText>
+              ) : null}
+              <StyledButton
+                title={
+                  isLookupRegistrationLoading
+                    ? "Looking up…"
+                    : "Look up registration"
+                }
+                onPress={runLookup}
+                variant="medium"
+                disabled={
+                  isLookupRegistrationLoading ||
+                  isAddingNewVehicle ||
+                  !(newVehicle?.licence || "").trim()
+                }
+              />
+              <View style={{ height: 12 }} />
+              <StyledButton
+                title="Skip — enter manually"
+                onPress={goManual}
+                variant="medium"
+                disabled={isAddingNewVehicle}
+              />
+            </View>
+          )}
+
+          {/* Displays the preview of the vehicle details, if the lookup is successful. */}
+          {wizardStep === "preview" && preview && (
+            <View style={styles.formSection}>
+              <StyledText variant="labelMedium">
+                Is this your vehicle?
+              </StyledText>
+              <View
+                style={[
+                  styles.previewCard,
+                  { borderColor, backgroundColor: cardColor },
+                ]}
+              >
+                {preview.image_url ? (
+                  <Image
+                    source={{ uri: preview.image_url }}
+                    style={styles.previewImage}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View
+                    style={[styles.previewImagePlaceholder, { borderColor }]}
+                  >
+                    <Ionicons name="car-outline" size={40} color={textColor} />
+                  </View>
+                )}
+                <StyledText
+                  variant="bodyMedium"
+                  style={{ color: textColor, marginTop: 8 }}
+                >
+                  {preview.make} {preview.model} ({preview.year})
+                </StyledText>
+                <StyledText variant="bodySmall" style={{ color: textColor }}>
+                  Registration: {preview.registration_number}
+                </StyledText>
+                {preview.body_style ? (
+                  <StyledText variant="bodySmall" style={{ color: textColor }}>
+                    Body: {preview.body_style}
+                  </StyledText>
+                ) : null}
+                {preview.county ? (
+                  <StyledText variant="bodySmall" style={{ color: textColor }}>
+                    County: {preview.county}
+                  </StyledText>
+                ) : null}
+              </View>
+              {lookupError ? (
+                <StyledText
+                  variant="bodySmall"
+                  style={{ color: "#c62828", marginVertical: 6 }}
+                >
+                  {lookupError}
+                </StyledText>
+              ) : null}
+              {branchPickerFleet}
+              {branchReadOnlyAdmin}
+              <StyledButton
+                title={isAddingNewVehicle ? "Saving…" : "Yes, add this vehicle"}
+                onPress={onConfirmLookup}
+                variant="medium"
+                disabled={
+                  isAddingNewVehicle ||
+                  !!(user?.is_fleet_owner && !newVehicle?.branch_id)
+                }
+              />
+              <View style={{ height: 10 }} />
+              <StyledButton
+                title="Not my vehicle — enter manually"
+                onPress={goManual}
+                variant="medium"
+                disabled={isAddingNewVehicle}
+              />
+              <View style={{ height: 10 }} />
+              <StyledButton
+                title="Back"
+                onPress={() => {
+                  setWizardStep("lookup");
+                  setLookupToken(null);
+                  setPreview(null);
+                  setLookupError(null);
+                }}
+                variant="medium"
+                disabled={isAddingNewVehicle}
+              />
+            </View>
+          )}
+
+          {/* Displays the manual entry of the vehicle details, if the lookup is unsuccessful. */}
+          {wizardStep === "manual" && (
+            <View style={styles.formSection}>
+              <StyledText variant="labelLarge">
+                Vehicle information (manual)
+              </StyledText>
+
+              <StyledTextInput
+                label="Make"
+                placeholder="e.g., Toyota"
+                value={newVehicle?.make || ""}
+                onChangeText={(text) => collectNewVehicleData("make", text)}
+              />
+              <StyledTextInput
+                label="Model"
+                value={newVehicle?.model || ""}
+                onChangeText={(text) => collectNewVehicleData("model", text)}
+              />
+              <StyledTextInput
+                label="Year"
+                placeholder={`e.g., ${MAX_VEHICLE_YEAR}`}
+                value={newVehicle?.year?.toString() || ""}
+                onChangeText={handleYearChange}
+                keyboardType="numeric"
+                maxLength={4}
+              />
+              {yearError ? (
+                <StyledText
+                  variant="bodySmall"
+                  style={[styles.fieldError, { color: "#c62828" }]}
+                >
+                  {yearError}
+                </StyledText>
+              ) : null}
+              <StyledTextInput
+                label="Color"
+                placeholder="e.g., Red"
+                value={newVehicle?.color || ""}
+                onChangeText={(text) => collectNewVehicleData("color", text)}
+              />
+
+              {branchPickerFleet}
+              {branchReadOnlyAdmin}
+
+              <View style={styles.imageSection}>
+                <StyledText variant="labelMedium">Vehicle photo *</StyledText>
+                <TouchableOpacity
+                  style={[styles.imagePickerButton, { borderColor }]}
+                  onPress={showImageSelectionModal}
+                >
+                  {newVehicle?.image?.uri ? (
+                    <Image
+                      source={{ uri: newVehicle.image.uri }}
+                      style={styles.imagePreview}
+                    />
+                  ) : (
+                    <View style={styles.imagePlaceholder}>
+                      <Ionicons
+                        name="camera-outline"
+                        size={32}
+                        color={textColor}
+                      />
+                      <StyledText
+                        variant="bodySmall"
+                        style={[
+                          styles.imagePlaceholderText,
+                          { color: textColor },
+                        ]}
+                      >
+                        Tap to add image
+                      </StyledText>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              </View>
+              <StyledButton
+                title="Back to lookup"
+                onPress={() => setWizardStep("lookup")}
+                variant="tonal"
+                disabled={isAddingNewVehicle}
+              />
+            </View>
+          )}
+        </View>
+
+        {wizardStep === "manual" ? (
+          <View style={styles.submitContainer}>
+            {isLoadingVehicles || isAddingNewVehicle ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <StyledButton
+                title={"Save vehicle"}
+                onPress={async () => {
+                  await handleSubmit();
+                  setIsAddVehicleModalVisible(false);
+                }}
+                variant="medium"
+                disabled={
+                  isLoadingVehicles || isAddingNewVehicle || !!yearError
+                }
+              />
+            )}
+          </View>
+        ) : null}
+      </ScrollView>
+
       <ModalServices
         visible={isImageModalVisible}
         onClose={hideImageSelectionModal}
@@ -338,7 +506,6 @@ const AddNewVehicleScreen = ({
         }
       />
 
-      {/* Branch Selection Modal (for fleet owners) */}
       {user?.is_fleet_owner && (
         <ModalServices
           visible={showBranchModal}
@@ -388,17 +555,17 @@ const AddNewVehicleScreen = ({
                       >
                         {item.name}
                       </StyledText>
-                      {item.city && (
-                        <StyledText
-                          variant="bodySmall"
-                        >
-                          {item.city}
-                        </StyledText>
-                      )}
+                      {item.city ? (
+                        <StyledText variant="bodySmall">{item.city}</StyledText>
+                      ) : null}
                     </View>
-                    {newVehicle?.branch_id === item.id && (
-                      <Ionicons name="checkmark" size={20} color={primaryColor} />
-                    )}
+                    {newVehicle?.branch_id === item.id ? (
+                      <Ionicons
+                        name="checkmark"
+                        size={20}
+                        color={primaryColor}
+                      />
+                    ) : null}
                   </TouchableOpacity>
                 ))}
               </View>
@@ -413,49 +580,35 @@ const AddNewVehicleScreen = ({
 export default AddNewVehicleScreen;
 
 const styles = StyleSheet.create({
-  mainContainer: {
-    flex: 1,
-  },
+  mainContainer: { flex: 1 },
   scrollContent: {
     flexGrow: 1,
-    padding:10,
+    padding: 10,
+    paddingBottom: 32,
   },
-  header: {
-    padding: 5,
-    paddingBottom: 10,
-  },
-
-  card: {
-    margin: 5,
-  },
-  formSection: {
-    gap: 5,
-    marginVertical: 5,
-  },
-  fieldError: {
-    marginTop: -4,
-    marginBottom: 4,
-  },
-
-  submitContainer: {
-    padding: 20,
-    paddingTop: 10,
-  },
-  submitButton: {
+  card: { margin: 5 },
+  formSection: { gap: 6},
+  fieldError: { marginTop: -4, marginBottom: 4 },
+  submitContainer: { padding: 20, paddingTop: 10 },
+  previewCard: {
     borderRadius: 12,
-    backgroundColor: "#007AFF",
+    borderWidth: 1,
+    padding: 12,
+    marginTop: 8,
+    marginBottom: 8,
+    alignItems: "center",
   },
-  submitButtonContent: {
-    paddingVertical: 8,
+  previewImage: { width: "100%", height: 140, borderRadius: 10 },
+  previewImagePlaceholder: {
+    width: "100%",
+    height: 140,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    justifyContent: "center",
+    alignItems: "center",
   },
-  submitButtonText: {
-    color: "white",
-    fontWeight: "600",
-  },
-  imageSection: {
-    marginTop: 10,
-    gap: 8,
-  },
+  imageSection: { marginTop: 10, gap: 8 },
   imagePickerButton: {
     width: "100%",
     height: 150,
@@ -466,33 +619,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     overflow: "hidden",
   },
-  imagePreview: {
-    width: "100%",
-    height: "100%",
-    resizeMode: "cover",
-  },
-  imagePlaceholder: {
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 8,
-  },
-  imagePlaceholderText: {
-    opacity: 0.7,
-  },
-  removeImageButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingVertical: 8,
-  },
-  removeImageText: {
-    fontSize: 12,
-  },
-  imageModalContent: {
-    padding: 20,
-    gap: 16,
-  },
+  imagePreview: { width: "100%", height: "100%", resizeMode: "cover" },
+  imagePlaceholder: { justifyContent: "center", alignItems: "center", gap: 8 },
+  imagePlaceholderText: { opacity: 0.7 },
+  imageModalContent: { padding: 20, gap: 16 },
   imageOptionButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -501,13 +631,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
   },
-  imageOptionText: {
-    fontWeight: "500",
-  },
-  branchSection: {
-    marginTop: 10,
-    gap: 8,
-  },
+  imageOptionText: { fontWeight: "500" },
+  branchSection: { marginTop: 10, gap: 8 },
   branchSelector: {
     flexDirection: "row",
     alignItems: "center",
@@ -517,9 +642,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     minHeight: 48,
   },
-  branchSelectorText: {
-    flex: 1,
-  },
+  branchSelectorText: { flex: 1 },
   branchDisplay: {
     padding: 12,
     borderRadius: 8,
@@ -527,13 +650,7 @@ const styles = StyleSheet.create({
     minHeight: 48,
     justifyContent: "center",
   },
-  branchInfo: {
-    marginTop: 4,
-    paddingLeft: 4,
-  },
-  branchList: {
-    maxHeight: 200,
-  },
+  branchList: { maxHeight: 220 },
   branchItem: {
     flexDirection: "row",
     alignItems: "center",
@@ -541,18 +658,8 @@ const styles = StyleSheet.create({
     padding: 10,
     borderRadius: 10,
   },
-  branchItemContent: {
-    flex: 1,
-    gap: 2,
-  },
-  branchItemText: {
-    fontSize: 16,
-  },
-  emptyState: {
-    padding: 40,
-    alignItems: "center",
-  },
-  emptyStateText: {
-    textAlign: "center",
-  },
+  branchItemContent: { flex: 1, gap: 2 },
+  branchItemText: { fontSize: 16 },
+  emptyState: { padding: 40, alignItems: "center" },
+  emptyStateText: { textAlign: "center" },
 });

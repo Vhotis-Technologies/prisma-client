@@ -237,6 +237,8 @@ def check_loyalty_decay():
         reset_count = 0
         for loyalty in inactive_loyalties:
             user = loyalty.user
+            if not user.is_b2c_user():
+                continue
             old_tier = loyalty.current_tier
 
             loyalty.completed_bookings = 0

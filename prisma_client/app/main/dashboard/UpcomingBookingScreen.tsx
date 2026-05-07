@@ -229,23 +229,39 @@ const UpcomingBookingScreen = () => {
     });
   }, [setAlertConfig, setIsVisible, showCancellationModal, appointment]);
 
-  // Helper function to show reschedule restriction alert
-  const showRescheduleRestrictionAlert = useCallback(() => {
+  // Helper: appointment has passed (start in the past) — still allow cancel / reschedule when not blocked by status
+  const isAppointmentStartInPast = useCallback(
+    (appointment: UpcomingAppointmentProps) => {
+      if (!appointment.booking_date || !appointment.start_time) return false;
+      const appointmentDateTime = new Date(
+        `${appointment.booking_date}T${appointment.start_time}`,
+      );
+      return appointmentDateTime.getTime() <= Date.now();
+    },
+    [],
+  );
+
+  // Helper function to show late reschedule notice (within 12 hours, future start)
+  const showLateRescheduleNotice = useCallback(() => {
     setAlertConfig({
       isVisible: true,
-      title: "Cannot Reschedule",
+      title: "Late reschedule",
       message:
-        "We are sorry but this appointment can no longer be rescheduled at this time. Sorry for the inconveniences.",
-      type: "error",
+        "You are changing this booking within 12 hours of its start time. A late reschedule fee applies. You can continue to choose a new time.",
+      type: "warning",
+      onConfirm: () => {
+        setIsVisible(false);
+        setIsRescheduleModalVisible(true);
+      },
       onClose: () =>
         setAlertConfig({
           isVisible: false,
           title: "",
           message: "",
-          type: "error",
+          type: "warning",
         }),
     });
-  }, [setAlertConfig]);
+  }, [setAlertConfig, setIsVisible]);
 
   // Handle reschedule button press
   const handleReschedulePress = useCallback(() => {
@@ -270,19 +286,18 @@ const UpcomingBookingScreen = () => {
       return;
     }
 
-    // Check if appointment is within 12 hours
+    // Within 12 hours of start (but not yet past): fee applies — confirm then open picker
     if (isWithin12Hours(appointment)) {
-      showRescheduleRestrictionAlert();
+      showLateRescheduleNotice();
       return;
     }
 
-    // If not within 12 hours, show the reschedule modal
     setIsRescheduleModalVisible(true);
   }, [
     appointment,
     isAppointmentInProgress,
     isWithin12Hours,
-    showRescheduleRestrictionAlert,
+    showLateRescheduleNotice,
     setAlertConfig,
   ]);
 
@@ -1456,21 +1471,18 @@ const UpcomingBookingScreen = () => {
               ? "Please wait..."
               : isAppointmentInProgress(appointment)
                 ? "Cannot Reschedule (In Progress)"
-                : isWithin12Hours(appointment)
-                  ? "Cannot Reschedule (Within 12 Hours)"
+                : isWithin12Hours(appointment) && !isAppointmentStartInPast(appointment)
+                  ? "Reschedule (fee applies)"
                   : "Reschedule Appointment"
           }
           onPress={handleReschedulePress}
           disabled={
-            isAppointmentInProgress(appointment) ||
-            isWithin12Hours(appointment) ||
-            isLoadingRescheduleBooking
+            isAppointmentInProgress(appointment) || isLoadingRescheduleBooking
           }
           variant="tonal"
           style={[
             styles.actionButton,
             (isAppointmentInProgress(appointment) ||
-              isWithin12Hours(appointment) ||
               isLoadingRescheduleBooking) &&
               styles.disabledButton,
           ]}

@@ -105,13 +105,6 @@ const DashboardScreen = () => {
   }
 
   // Regular user dashboard (existing code below)
-  /* Get the currency symbol by getting the user's country */
-  let currencySymbol = "$";
-  if (user?.address?.country === "United Kingdom") {
-    currencySymbol = "£";
-  } else if (user?.address?.country === "Ireland") {
-    currencySymbol = "€";
-  }
 
   // Show loading state
   if (isLoading) {
@@ -124,9 +117,8 @@ const DashboardScreen = () => {
   }
 
   return (
-    <>
+    <View style={[styles.container, { backgroundColor }]}>
       <ScrollView
-        style={[styles.container, { backgroundColor: backgroundColor }]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
@@ -188,7 +180,6 @@ const DashboardScreen = () => {
         onClose={() => setShowReviewModal(false)}
         component={
           <ReviewComponent
-            currencySymbol={currencySymbol}
             bookingData={recentService || undefined}
             onReviewSubmitted={handleReviewSubmitted}
           />
@@ -198,7 +189,7 @@ const DashboardScreen = () => {
         title="Review"
         modalType="fullscreen"
       />
-    </>
+    </View>
   );
 };
 
@@ -208,6 +199,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 5,
+    
   },
   loadingContainer: {
     flex: 1,

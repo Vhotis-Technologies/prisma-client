@@ -15,6 +15,34 @@ from django.utils import timezone
 from main.tasks import publish_review_to_detailer
 from main.utils.redis_geo import get_detailer_location as get_detailer_location_from_redis
 
+
+def _dashboard_safe_float(value, default=0.0):
+    """Coerce Decimal or JSON detailer payloads to float; invalid values → default."""
+    try:
+        if value is None or value == "":
+            return default
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _vehicle_media_image_url(vehicle):
+    """Full URL for vehicle image, or None if missing/unreadable storage."""
+    if not vehicle:
+        return None
+    try:
+        field = getattr(vehicle, "image", None)
+        name = getattr(field, "name", None) if field is not None else None
+        if not name:
+            return None
+        relative = field.url if field is not None else None
+        if not relative:
+            return None
+        return get_full_media_url(relative)
+    except Exception:
+        return None
+
+
 class DashboardView(APIView):
     permission_classes = [IsAuthenticated]
     """ Action handlers designed to route the url to the appropriate function """
@@ -80,7 +108,7 @@ class DashboardView(APIView):
                             bulk_order__isnull=True,
                         ).select_related(
                             'detailer', 'vehicle', 'address', 'service_type', 'valet_type'
-                        ).order_by('appointment_date', 'start_time')
+                        ).prefetch_related('add_ons').order_by('appointment_date', 'start_time')
                     else:
                         # No vehicles in branch, return empty
                         upcoming_appointments = BookedAppointment.objects.none()
@@ -97,7 +125,7 @@ class DashboardView(APIView):
                     bulk_order__isnull=True,
                 ).select_related(
                     'detailer', 'vehicle', 'address', 'service_type', 'valet_type'
-                ).order_by('appointment_date', 'start_time')
+                ).prefetch_related('add_ons').order_by('appointment_date', 'start_time')
 
             upcoming_appointments_data = []
             for appointment in upcoming_appointments:
@@ -114,7 +142,7 @@ class DashboardView(APIView):
                     add_ons_data.append({
                         "id": str(add_on.id),
                         "name": add_on.name,
-                        "price": float(add_on.price),
+                        "price": _dashboard_safe_float(add_on.price),
                         "description": add_on.description,
                         "extra_duration": add_on.extra_duration,
                     })
@@ -126,7 +154,7 @@ class DashboardView(APIView):
                         {
                             "id": d.get("id"),
                             "name": d.get("name"),
-                            "rating": float(d.get("rating", 0) or 0),
+                            "rating": _dashboard_safe_float(d.get("rating", 0) or 0),
                             "image": d.get("image"),
                             "phone": d.get("phone"),
                         }
@@ -139,7 +167,11 @@ class DashboardView(APIView):
                         {
                             "id": str(appointment.detailer.id) if appointment.detailer else None,
                             "name": appointment.detailer.name if appointment.detailer else None,
-                            "rating": float(appointment.detailer.rating) if appointment.detailer and appointment.detailer.rating else 0.0,
+                            "rating": _dashboard_safe_float(
+                                appointment.detailer.rating
+                            )
+                            if appointment.detailer
+                            else 0.0,
                             "image": None,
                             "phone": appointment.detailer.phone if appointment.detailer else None,
                         }
@@ -156,21 +188,25 @@ class DashboardView(APIView):
                         "year": appointment.vehicle.year if appointment.vehicle else None,
                         "color": appointment.vehicle.color if appointment.vehicle else None,
                         "licence": appointment.vehicle.registration_number if appointment.vehicle else None,
-                        "image": get_full_media_url(appointment.vehicle.image.url) if (appointment.vehicle and appointment.vehicle.image) else None,
+                        "image": _vehicle_media_image_url(appointment.vehicle),
                     },
                     "address": {
                         "address": appointment.address.address if appointment.address else None,
                         "post_code": appointment.address.post_code if appointment.address else None,
                         "city": appointment.address.city if appointment.address else None,
                         "country": appointment.address.country if appointment.address else None,
-                        "latitude": float(appointment.address.latitude) if appointment.address and appointment.address.latitude is not None else None,
-                        "longitude": float(appointment.address.longitude) if appointment.address and appointment.address.longitude is not None else None,
+                        "latitude": _dashboard_safe_float(appointment.address.latitude, default=None)
+                        if appointment.address and appointment.address.latitude is not None
+                        else None,
+                        "longitude": _dashboard_safe_float(appointment.address.longitude, default=None)
+                        if appointment.address and appointment.address.longitude is not None
+                        else None,
                     },
                     "service_type": {
                         "id": str(appointment.service_type.id) if appointment.service_type else None,
                         "name": appointment.service_type.name if appointment.service_type else None,
                         "description": appointment.service_type.description if appointment.service_type else None,
-                        "price": float(appointment.service_type.price) if appointment.service_type and appointment.service_type.price else 0.0,
+                        "price": _dashboard_safe_float(appointment.service_type.price),
                         "duration": appointment.service_type.duration if appointment.service_type else None,
                     },
                     "valet_type": {
@@ -179,7 +215,7 @@ class DashboardView(APIView):
                         "description": appointment.valet_type.description if appointment.valet_type else None,
                     },
                     "booking_date": appointment.appointment_date.strftime('%Y-%m-%d'),
-                    "total_amount": float(appointment.total_amount),
+                    "total_amount": _dashboard_safe_float(appointment.total_amount),
                     "estimated_duration": f"{appointment.duration} minutes" if appointment.duration else "Not specified",
                     "special_instructions": appointment.special_instructions,
                     "status": appointment.status,
@@ -267,7 +303,7 @@ class DashboardView(APIView):
                         {
                             "id": str(d.get("id")) if d.get("id") is not None else None,
                             "name": d.get("name") or None,
-                            "rating": float(d.get("rating", 0) or 0),
+                            "rating": _dashboard_safe_float(d.get("rating", 0) or 0),
                             "image": d.get("image"),
                             "phone": d.get("phone"),
                         }
@@ -300,12 +336,12 @@ class DashboardView(APIView):
                         "id": None,
                         "name": service_name,
                         "description": None,
-                        "price": float(bulk.total_amount) if bulk.total_amount else 0.0,
+                        "price": _dashboard_safe_float(bulk.total_amount),
                         "duration": duration_min,
                     },
                     "valet_type": {"id": valet_type_id, "name": valet_type_name, "description": valet_type_desc},
                     "booking_date": bulk_date.strftime('%Y-%m-%d'),
-                    "total_amount": float(bulk.total_amount) if bulk.total_amount else 0.0,
+                    "total_amount": _dashboard_safe_float(bulk.total_amount),
                     "estimated_duration": f"{num_vehicles} vehicles · {duration_min} min each" if num_vehicles else "Not specified",
                     "special_instructions": None,
                     "status": "scheduled",
@@ -564,17 +600,19 @@ class DashboardView(APIView):
                 "date": recent_service.appointment_date.strftime('%Y-%m-%d'),
                 "vehicle_name": vehicle_name,
                 "status": recent_service.status,
-                "cost": float(recent_service.total_amount),
+                "cost": _dashboard_safe_float(recent_service.total_amount),
                 "detailer": {
                     "id": str(recent_service.detailer.id) if recent_service.detailer else None,
                     "name": recent_service.detailer.name if recent_service.detailer else None,
-                    "rating": float(recent_service.detailer.rating) if recent_service.detailer and recent_service.detailer.rating else 0.0,
+                    "rating": _dashboard_safe_float(recent_service.detailer.rating)
+                    if recent_service.detailer
+                    else 0.0,
                     "phone": recent_service.detailer.phone if recent_service.detailer else None,
                 },
                 "valet_type": recent_service.valet_type.name if recent_service.valet_type else None,
                 "service_type": recent_service.service_type.name if recent_service.service_type else None,
                 "is_reviewed": recent_service.is_reviewed,
-                "rating": float(recent_service.review_rating) if recent_service.review_rating else 0.0,
+                "rating": _dashboard_safe_float(recent_service.review_rating),
                 "booking_reference": str(recent_service.booking_reference),
             }
             

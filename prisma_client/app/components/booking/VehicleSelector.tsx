@@ -9,7 +9,9 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useThemeColor } from "@/hooks/useThemeColor";
 import { MyVehiclesProps } from "@/app/interfaces/GarageInterface";
+import { vehicleBodyStyleRequiresSuvMpvSurcharge } from "@/app/utils/vehicleBodyStyle";
 import StyledText from "@/app/components/helpers/StyledText";
+import CircleCheckbox from "@/app/components/helpers/CircleCheckbox";
 import LinearGradientComponent from "../helpers/LinearGradientComponent";
 
 interface VehicleSelectorProps {
@@ -39,6 +41,9 @@ const VehicleSelector: React.FC<VehicleSelectorProps> = ({
 
   // Ensure vehicles is always an array
   const vehiclesList = Array.isArray(vehicles) ? vehicles : [];
+  const suvRequiredByBodyStyle = selectedVehicle
+    ? vehicleBodyStyleRequiresSuvMpvSurcharge(selectedVehicle.body_style)
+    : false;
 
   return (
     <View style={styles.container}>
@@ -153,82 +158,111 @@ const VehicleSelector: React.FC<VehicleSelectorProps> = ({
       )}
 
       {selectedVehicle && (
-        <View style={[styles.suvSection,]}>
+        <View style={[styles.suvSection]}>
           <StyledText variant="titleMedium" style={[styles.suvTitle]}>
             Vehicle Type
           </StyledText>
           <TouchableOpacity
-            style={styles.suvOption}
+            style={[
+              styles.optionCard,
+              {
+                backgroundColor: isSUV ? primaryPurpleColor : cardColor,
+                borderColor: isSUV ? primaryPurpleColor : "#E5E5E5",
+              },
+            ]}
             onPress={() => onSUVChange(!isSUV)}
             activeOpacity={0.7}
           >
-            <View style={styles.radioContainer}>
-              <View
-                style={[
-                  styles.radioButton,
-                  {
-                    borderColor: isSUV ? primaryPurpleColor : "#E5E5E5",
-                    backgroundColor: isSUV ? primaryPurpleColor : "transparent",
-                  },
-                ]}
-              >
-                {isSUV && <Ionicons name="checkmark" size={12} color="white" />}
-              </View>
+            <View style={styles.optionRow}>
               <View style={styles.suvTextContainer}>
                 <StyledText
                   variant="bodyMedium"
-                  style={[styles.suvText, { color: textColor }]}
+                  style={[
+                    styles.suvText,
+                    { color: isSUV ? "#FFFFFF" : textColor },
+                  ]}
                 >
                   SUV Vehicle / MPV Vehicle
                 </StyledText>
                 <StyledText
                   variant="bodySmall"
-                  style={[styles.suvDescription, { color: textColor }]}
+                  style={[
+                    styles.suvDescription,
+                    {
+                      color: isSUV ? "rgba(255,255,255,0.9)" : textColor,
+                      opacity: isSUV ? 1 : 0.7,
+                    },
+                  ]}
                 >
-                  Additional 10% surcharge for SUV / MPV cleaning
+                  Additional 15% surcharge for SUV / MPV cleaning
                 </StyledText>
               </View>
+              <CircleCheckbox checked={isSUV} accentColor={primaryPurpleColor} />
             </View>
           </TouchableOpacity>
+          {suvRequiredByBodyStyle && !isSUV && (
+            <StyledText
+              variant="bodySmall"
+              style={[styles.bodyStyleHint, { color: textColor }]}
+            >
+              {
+                "This vehicle's registered body style requires the SUV / MPV option (15% surcharge)."
+              }
+            </StyledText>
+          )}
         </View>
       )}
 
       {selectedVehicle && (
-        <View style={[styles.suvSection,]}>
+        <View style={[styles.suvSection]}>
           <StyledText variant="titleMedium" style={[styles.suvTitle]}>
             Service Options
           </StyledText>
           <TouchableOpacity
-            style={styles.suvOption}
+            style={[
+              styles.optionCard,
+              {
+                backgroundColor: isExpressService
+                  ? primaryPurpleColor
+                  : cardColor,
+                borderColor: isExpressService
+                  ? primaryPurpleColor
+                  : "#E5E5E5",
+              },
+            ]}
             onPress={() => onExpressServiceChange?.(!isExpressService)}
             activeOpacity={0.7}
           >
-            <View style={styles.radioContainer}>
-              <View
-                style={[
-                  styles.radioButton,
-                  {
-                    borderColor: isExpressService ? primaryPurpleColor : "#E5E5E5",
-                    backgroundColor: isExpressService ? primaryPurpleColor : "transparent",
-                  },
-                ]}
-              >
-                {isExpressService && <Ionicons name="checkmark" size={12} color="white" />}
-              </View>
+            <View style={styles.optionRow}>
               <View style={styles.suvTextContainer}>
                 <StyledText
                   variant="bodyMedium"
-                  style={[styles.suvText, { color: textColor }]}
+                  style={[
+                    styles.suvText,
+                    { color: isExpressService ? "#FFFFFF" : textColor },
+                  ]}
                 >
                   Express Service
                 </StyledText>
                 <StyledText
                   variant="bodySmall"
-                  style={[styles.suvDescription, { color: textColor }]}
+                  style={[
+                    styles.suvDescription,
+                    {
+                      color: isExpressService
+                        ? "rgba(255,255,255,0.9)"
+                        : textColor,
+                      opacity: isExpressService ? 1 : 0.7,
+                    },
+                  ]}
                 >
                   Faster service with 2 detailers - Additional €30
                 </StyledText>
               </View>
+              <CircleCheckbox
+                checked={isExpressService}
+                accentColor={primaryPurpleColor}
+              />
             </View>
           </TouchableOpacity>
         </View>
@@ -344,21 +378,22 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginBottom: 12,
   },
-  suvOption: {
+  optionCard: {
     width: "100%",
-  },
-  radioContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  radioButton: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
     borderWidth: 2,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  optionRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
   },
   suvTextContainer: {
     flex: 1,
@@ -367,7 +402,11 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   suvDescription: {
-    opacity: 0.7,
     marginTop: 2,
+  },
+  bodyStyleHint: {
+    marginTop: 8,
+    opacity: 0.9,
+    lineHeight: 18,
   },
 });

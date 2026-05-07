@@ -9,12 +9,27 @@ import {
   BranchVehiclesGroup,
   CreateVehicleEventRequest,
   PendingTransfersResponse,
+  LookupVehicleRegistrationResponse,
 } from "@/app/interfaces/GarageInterface";
 
 const garageApi = createApi({
   reducerPath: "garageApi",
   baseQuery: axiosBaseQuery(),
   endpoints: (builder) => ({
+    /**
+     * Ireland registration lookup (RegCheck). POST JSON body.
+     */
+    lookupVehicleRegistration: builder.mutation<
+      LookupVehicleRegistrationResponse,
+      { licence?: string; registration_number?: string; country?: string }
+    >({
+      query: (body) => ({
+        url: "/api/v1/garage/lookup_vehicle_registration/",
+        method: "POST",
+        data: body,
+      }),
+    }),
+
     /**
      * Add a new vehicle to the server passing the vehicle object to the server
      * @param vehicle - The vehicle object to add to the server
@@ -173,6 +188,7 @@ const garageApi = createApi({
 });
 export const {
   useAddNewVehicleMutation,
+  useLookupVehicleRegistrationMutation,
   useUpdateVehicleMutation,
   useDeleteVehicleMutation,
   useGetMyVehiclesQuery,

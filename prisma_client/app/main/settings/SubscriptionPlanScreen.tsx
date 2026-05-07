@@ -5,16 +5,18 @@ import {
   ScrollView,
   ActivityIndicator,
   Pressable,
-  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useThemeColor } from "@/hooks/useThemeColor";
 import StyledText from "@/app/components/helpers/StyledText";
 import StyledButton from "@/app/components/helpers/StyledButton";
+import SubscriptionBillingHistorySection from "@/app/components/profile/SubscriptionBillingHistorySection";
 import SubscriptionTierCard from "@/app/components/profile/SubscriptionTierCard";
 import CancelSubscriptionModal from "@/app/components/profile/CancelSubscriptionModal";
 import ModalServices from "@/app/utils/ModalServices";
 import { useFleetSubscription } from "@/app/hooks/useFleetSubscription";
+import { useB2cSubscriptions } from "@/app/hooks/useB2cSubscriptions";
+import { useAppSelector, RootState } from "@/app/store/main_store";
 import { SubscriptionTierProps } from "@/app/interfaces/SubscriptionInterfaces";
 
 const SubscriptionPlanScreen = () => {
@@ -23,6 +25,14 @@ const SubscriptionPlanScreen = () => {
   const borderColor = useThemeColor({}, "borders");
   const tintColor = useThemeColor({}, "tint");
   const errorColor = useThemeColor({}, "error");
+  const mutedColor = useThemeColor({}, "icons");
+
+  const isFleetOwner = useAppSelector(
+    (state: RootState) => state.auth.user?.is_fleet_owner === true,
+  );
+
+  const fleetHook = useFleetSubscription();
+  const b2cHook = useB2cSubscriptions();
 
   const {
     plans,
@@ -43,7 +53,7 @@ const SubscriptionPlanScreen = () => {
     handleSubscribe,
     handleCancelSubscription,
     handleUpdatePaymentMethod,
-  } = useFleetSubscription();
+  } = isFleetOwner ? fleetHook : b2cHook;
 
   const selectedTier = plans?.find(
     (tier: SubscriptionTierProps) => tier.id === selectedTierId,
@@ -267,6 +277,15 @@ const SubscriptionPlanScreen = () => {
               </View>
             </View>
           )}
+
+        <SubscriptionBillingHistorySection
+          isFleetOwner={isFleetOwner}
+          borderColor={borderColor}
+          textColor={textColor}
+          tintColor={tintColor}
+          errorColor={errorColor}
+          mutedColor={mutedColor}
+        />
 
         {isLoadingPlans ? (
           <View style={styles.loadingContainer}>

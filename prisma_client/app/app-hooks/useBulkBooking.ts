@@ -2,6 +2,7 @@
  * Bulk booking hook: service type, valet, address, date, vehicle count, capacity check, build payload for payment.
  */
 import { useState, useCallback, useEffect } from "react";
+import dayjs from "dayjs";
 import { API_CONFIG } from "@/constants/Config";
 import type { ServiceTypeProps, ValetTypeProps, AddOnsProps } from "@/app/interfaces/BookingInterfaces";
 import type { MyAddressProps } from "@/app/interfaces/ProfileInterfaces";
@@ -39,6 +40,9 @@ export function useBulkBooking() {
   const [numberOfVehicles, setNumberOfVehicles] = useState<number>(0);
   const [isSUV, setIsSUV] = useState<boolean>(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [currentCalendarMonth, setCurrentCalendarMonth] = useState<dayjs.Dayjs>(
+    () => dayjs()
+  );
   const [selectedAddress, setSelectedAddress] = useState<MyAddressProps | null>(
     null
   );
@@ -51,6 +55,12 @@ export function useBulkBooking() {
   const [isLoadingCapacity, setIsLoadingCapacity] = useState(false);
   const [capacityError, setCapacityError] = useState<string | null>(null);
   const [selectedAddons, setSelectedAddons] = useState<AddOnsProps[]>([]);
+
+  useEffect(() => {
+    if (selectedDate) {
+      setCurrentCalendarMonth(dayjs(selectedDate));
+    }
+  }, [selectedDate]);
 
   // When user changes service, date, address or vehicle count, clear capacity so they must re-check
   const dateKey = selectedDate ? selectedDate.toISOString().slice(0, 10) : null;
@@ -90,6 +100,17 @@ export function useBulkBooking() {
   const amountAfterDiscount = Math.max(0, subtotalWithAddons - discountAmount);
   const suvSurcharge = isSUV ? amountAfterDiscount * 0.15 : 0;
   const total = amountAfterDiscount + suvSurcharge;
+
+  const handleCalendarMonthNavigation = useCallback(
+    (direction: "prev" | "next") => {
+      setCurrentCalendarMonth((prev) =>
+        direction === "prev"
+          ? prev.subtract(1, "month")
+          : prev.add(1, "month")
+      );
+    },
+    []
+  );
 
   const checkBulkCapacity = useCallback(async () => {
     if (
@@ -253,6 +274,7 @@ export function useBulkBooking() {
     setSelectedOption(null);
     setCapacityError(null);
     setSpecialInstructions("");
+    setCurrentCalendarMonth(dayjs());
   }, []);
 
   return {
@@ -289,5 +311,7 @@ export function useBulkBooking() {
     checkBulkCapacity,
     buildBulkBookingData,
     resetBulkBooking,
+    calendarMonth: currentCalendarMonth,
+    handleCalendarMonthNavigation,
   };
 }

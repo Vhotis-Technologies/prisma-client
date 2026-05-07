@@ -4,10 +4,9 @@ import { loadStripe } from "@stripe/stripe-js";
 import { Elements } from "@stripe/react-stripe-js";
 import React from "react";
 import * as Linking from "expo-linking";
-import { STRIPE_CONFIG } from "@/constants/Config";
+import { STRIPE_PUBLISHABLE_KEY } from "@/constants/Config";
 
-// Get the publishable key from the config
-const publishableKey = STRIPE_CONFIG.publishableKey;
+const publishableKey = STRIPE_PUBLISHABLE_KEY ?? "";
 
 // Initialize Stripe for web
 const stripePromise = loadStripe(publishableKey);

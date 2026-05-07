@@ -8,7 +8,6 @@ from main.views.authentication import CustomTokenObtainPairView, AuthenticationV
 from rest_framework_simplejwt.views import TokenRefreshView
 from main.views.profile import ProfileView
 from main.views.garage import GarageView
-from main.views.vinlookup import VinLookupView
 from main.views.events import EventsView
 from main.views.dashboard import DashboardView
 from main.views.payment import PaymentView, StripeWebhookView
@@ -20,6 +19,7 @@ from main.views.password_reset import RequestPasswordResetView, ResetPasswordVie
 from main.views.vehicle_transfer import WebTransferActionView
 from main.views.fleet import FleetView
 from main.views.subcription import SubscriptionView
+from main.views.b2csubscription import B2CSubscriptionView
 from main.views.service_history import ServiceHistoryView
 from main.views.partner import PartnerView
 from main.views.tickets import TicketView
@@ -29,6 +29,7 @@ from main.views.support.support_customers import SupportCustomersView
 from main.views.support.support_activities import SupportActivitiesView
 from main.views.support.support_tickets import SupportTicketsView
 from main.views.support.support_vouchers import SupportVouchersView
+from main.views.support.support_accounting import SupportAccountingView
 
 
 app_name = 'main'
@@ -40,8 +41,6 @@ urlpatterns = [
     path('profile/<action>/', ProfileView.as_view(), name='profile'),
     path('garage/<action>/', GarageView.as_view(), name='garage'),
     path('garage/<action>/<vehicle_id>/', GarageView.as_view(), name='garage'),
-    path('vin-lookup/<action>/', VinLookupView.as_view(), name='vin_lookup'),
-    path('vin-lookup/<action>/<purchase_reference>/', VinLookupView.as_view(), name='vin_lookup'),
     path('events/<action>/', EventsView.as_view(), name='events'),
     path('dashboard/<action>/', DashboardView.as_view(), name='dashboard'),
     path('notifications/<action>/', NotificationsView.as_view(), name='notifications'),
@@ -66,6 +65,7 @@ urlpatterns = [
     
     # Subscription endpoints
     path('subscription/<action>/', SubscriptionView.as_view(), name='subscription'),
+    path('b2c-subscription/<action>/', B2CSubscriptionView.as_view(), name='b2c-subscription'),
     
     # Service history endpoints
     path('service-history/<action>/', ServiceHistoryView.as_view(), name='service_history'),
@@ -85,6 +85,7 @@ urlpatterns = [
     path('support/activities/<action>/', SupportActivitiesView.as_view(), name='support_activities'),
     path('support/tickets/<action>/', SupportTicketsView.as_view(), name='support_tickets'),
     path('support/vouchers/<action>/', SupportVouchersView.as_view(), name='support_vouchers'),
+    path('support/accounting/<action>/', SupportAccountingView.as_view(), name='support_accounting'),
 ]
 
 

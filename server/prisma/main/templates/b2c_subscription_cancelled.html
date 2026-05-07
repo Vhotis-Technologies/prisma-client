@@ -1,0 +1,27 @@
+{% extends "base_email.html" %}
+{% block title %}Subscription cancelled — Prisma{% endblock %}
+{% block content %}
+<div class="greeting">Hi {{ user_name }},</div>
+
+<div class="intro-text">
+  Your <strong>{{ plan_name }}</strong> Prisma subscription has been <strong>cancelled</strong>{% if cancellation_date %} as of <strong>{{ cancellation_date }}</strong>{% endif %}.
+</div>
+
+<div class="details-card">
+  <div class="details-title">Access</div>
+  <div class="details-grid">
+    <div class="detail-row">
+      <div class="detail-item detail-label">Benefits through</div>
+      <div class="detail-item detail-value">{{ access_until_date }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="intro-text">
+  You can subscribe again anytime from <strong>Settings → Subscription</strong> in the Prisma app.
+</div>
+
+<div class="closing">
+  <div class="closing-text">Thank you for being a Prisma customer.</div>
+</div>
+{% endblock %}

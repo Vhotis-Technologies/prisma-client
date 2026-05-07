@@ -1,0 +1,16 @@
+{% extends "base_email.html" %}
+{% block title %}Cancellation scheduled — Prisma subscription{% endblock %}
+{% block content %}
+<div class="greeting">Hi {{ user_name }},</div>
+
+<div class="intro-text">
+  You have chosen to <strong>stop auto-renewal</strong> for <strong>{{ plan_name }}</strong>. Your membership <strong>remains active until {{ access_until }}</strong>. No further charges will occur for this subscription after that date unless you subscribe again.
+</div>
+
+<div class="info-box">
+  <div class="contact-title">Changed your mind?</div>
+  <div class="contact-text">
+    You can often resume auto-renew before the period ends from <strong>Settings → Subscription</strong> in the Prisma app.
+  </div>
+</div>
+{% endblock %}

@@ -194,7 +194,11 @@ class AuthenticationView(CreateAPIView):
             
             # Get user address data (if any)
             address = Address.objects.filter(user=user).first()
-            loyalty = LoyaltyProgram.objects.filter(user=user).first()
+            loyalty = (
+                LoyaltyProgram.objects.filter(user=user).first()
+                if user.is_b2c_user()
+                else None
+            )
             loyalty_benefits = loyalty.get_tier_benefits() if loyalty else None
        
             # Get managed branch if user is branch admin

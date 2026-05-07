@@ -7705,3 +7705,1143 @@ ERROR 2026-04-10 13:20:36,549 log 7 140639468512960 Internal Server Error: /api/
 ERROR 2026-04-10 13:20:36,550 runserver 7 140639496828608 HTTP POST /api/v1/payment/stripe-webhook/ 500 [0.03, 172.18.0.15:55122]
 ERROR 2026-04-10 13:20:39,051 log 7 140639468512960 Internal Server Error: /api/v1/payment/stripe-webhook/
 ERROR 2026-04-10 13:20:39,053 runserver 7 140639496828608 HTTP POST /api/v1/payment/stripe-webhook/ 500 [0.03, 172.18.0.15:56774]
+ERROR 2026-04-30 20:35:00,159 log 7 137679782004416 Invalid HTTP_HOST header: '4c69-2a02-8084-c80-ea80-446e-e1c4-d0b9-f5d7.ngrok-free.app'. You may need to add '4c69-2a02-8084-c80-ea80-446e-e1c4-d0b9-f5d7.ngrok-free.app' to ALLOWED_HOSTS.
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 557, in thread_handler
+    raise exc_info[1]
+  File "/usr/local/lib/python3.11/site-packages/django/core/handlers/exception.py", line 42, in inner
+    response = await get_response(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/utils/deprecation.py", line 132, in __acall__
+    response = await sync_to_async(
+               ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 506, in __call__
+    ret = await asyncio.shield(exec_coro)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 561, in thread_handler
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/middleware/common.py", line 48, in process_request
+    host = request.get_host()
+           ^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/http/request.py", line 203, in get_host
+    raise DisallowedHost(msg)
+django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: '4c69-2a02-8084-c80-ea80-446e-e1c4-d0b9-f5d7.ngrok-free.app'. You may need to add '4c69-2a02-8084-c80-ea80-446e-e1c4-d0b9-f5d7.ngrok-free.app' to ALLOWED_HOSTS.
+ERROR 2026-04-30 20:35:00,169 log 7 137680289507008 Invalid HTTP_HOST header: '4c69-2a02-8084-c80-ea80-446e-e1c4-d0b9-f5d7.ngrok-free.app'. You may need to add '4c69-2a02-8084-c80-ea80-446e-e1c4-d0b9-f5d7.ngrok-free.app' to ALLOWED_HOSTS.
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 557, in thread_handler
+    raise exc_info[1]
+  File "/usr/local/lib/python3.11/site-packages/django/core/handlers/exception.py", line 42, in inner
+    response = await get_response(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/utils/deprecation.py", line 132, in __acall__
+    response = await sync_to_async(
+               ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 506, in __call__
+    ret = await asyncio.shield(exec_coro)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 561, in thread_handler
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/middleware/common.py", line 48, in process_request
+    host = request.get_host()
+           ^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/http/request.py", line 203, in get_host
+    raise DisallowedHost(msg)
+django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: '4c69-2a02-8084-c80-ea80-446e-e1c4-d0b9-f5d7.ngrok-free.app'. You may need to add '4c69-2a02-8084-c80-ea80-446e-e1c4-d0b9-f5d7.ngrok-free.app' to ALLOWED_HOSTS.
+ERROR 2026-04-30 20:35:00,172 log 7 137679790397120 Invalid HTTP_HOST header: '4c69-2a02-8084-c80-ea80-446e-e1c4-d0b9-f5d7.ngrok-free.app'. You may need to add '4c69-2a02-8084-c80-ea80-446e-e1c4-d0b9-f5d7.ngrok-free.app' to ALLOWED_HOSTS.
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 557, in thread_handler
+    raise exc_info[1]
+  File "/usr/local/lib/python3.11/site-packages/django/core/handlers/exception.py", line 42, in inner
+    response = await get_response(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/utils/deprecation.py", line 132, in __acall__
+    response = await sync_to_async(
+               ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 506, in __call__
+    ret = await asyncio.shield(exec_coro)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 561, in thread_handler
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/middleware/common.py", line 48, in process_request
+    host = request.get_host()
+           ^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/http/request.py", line 203, in get_host
+    raise DisallowedHost(msg)
+django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: '4c69-2a02-8084-c80-ea80-446e-e1c4-d0b9-f5d7.ngrok-free.app'. You may need to add '4c69-2a02-8084-c80-ea80-446e-e1c4-d0b9-f5d7.ngrok-free.app' to ALLOWED_HOSTS.
+ERROR 2026-04-30 20:35:00,172 log 7 137679807182528 Invalid HTTP_HOST header: '4c69-2a02-8084-c80-ea80-446e-e1c4-d0b9-f5d7.ngrok-free.app'. You may need to add '4c69-2a02-8084-c80-ea80-446e-e1c4-d0b9-f5d7.ngrok-free.app' to ALLOWED_HOSTS.
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 557, in thread_handler
+    raise exc_info[1]
+  File "/usr/local/lib/python3.11/site-packages/django/core/handlers/exception.py", line 42, in inner
+    response = await get_response(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/utils/deprecation.py", line 132, in __acall__
+    response = await sync_to_async(
+               ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 506, in __call__
+    ret = await asyncio.shield(exec_coro)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 561, in thread_handler
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/middleware/common.py", line 48, in process_request
+    host = request.get_host()
+           ^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/http/request.py", line 203, in get_host
+    raise DisallowedHost(msg)
+django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: '4c69-2a02-8084-c80-ea80-446e-e1c4-d0b9-f5d7.ngrok-free.app'. You may need to add '4c69-2a02-8084-c80-ea80-446e-e1c4-d0b9-f5d7.ngrok-free.app' to ALLOWED_HOSTS.
+ERROR 2026-04-30 20:35:00,178 log 7 137679798789824 Invalid HTTP_HOST header: '4c69-2a02-8084-c80-ea80-446e-e1c4-d0b9-f5d7.ngrok-free.app'. You may need to add '4c69-2a02-8084-c80-ea80-446e-e1c4-d0b9-f5d7.ngrok-free.app' to ALLOWED_HOSTS.
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 557, in thread_handler
+    raise exc_info[1]
+  File "/usr/local/lib/python3.11/site-packages/django/core/handlers/exception.py", line 42, in inner
+    response = await get_response(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/utils/deprecation.py", line 132, in __acall__
+    response = await sync_to_async(
+               ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 506, in __call__
+    ret = await asyncio.shield(exec_coro)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 561, in thread_handler
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/middleware/common.py", line 48, in process_request
+    host = request.get_host()
+           ^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/http/request.py", line 203, in get_host
+    raise DisallowedHost(msg)
+django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: '4c69-2a02-8084-c80-ea80-446e-e1c4-d0b9-f5d7.ngrok-free.app'. You may need to add '4c69-2a02-8084-c80-ea80-446e-e1c4-d0b9-f5d7.ngrok-free.app' to ALLOWED_HOSTS.
+ERROR 2026-04-30 20:35:00,542 log 7 137679807182528 Invalid HTTP_HOST header: '4c69-2a02-8084-c80-ea80-446e-e1c4-d0b9-f5d7.ngrok-free.app'. You may need to add '4c69-2a02-8084-c80-ea80-446e-e1c4-d0b9-f5d7.ngrok-free.app' to ALLOWED_HOSTS.
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 557, in thread_handler
+    raise exc_info[1]
+  File "/usr/local/lib/python3.11/site-packages/django/core/handlers/exception.py", line 42, in inner
+    response = await get_response(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/utils/deprecation.py", line 132, in __acall__
+    response = await sync_to_async(
+               ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 506, in __call__
+    ret = await asyncio.shield(exec_coro)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 561, in thread_handler
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/middleware/common.py", line 48, in process_request
+    host = request.get_host()
+           ^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/http/request.py", line 203, in get_host
+    raise DisallowedHost(msg)
+django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: '4c69-2a02-8084-c80-ea80-446e-e1c4-d0b9-f5d7.ngrok-free.app'. You may need to add '4c69-2a02-8084-c80-ea80-446e-e1c4-d0b9-f5d7.ngrok-free.app' to ALLOWED_HOSTS.
+ERROR 2026-04-30 20:35:00,610 log 7 137679790397120 Invalid HTTP_HOST header: '4c69-2a02-8084-c80-ea80-446e-e1c4-d0b9-f5d7.ngrok-free.app'. You may need to add '4c69-2a02-8084-c80-ea80-446e-e1c4-d0b9-f5d7.ngrok-free.app' to ALLOWED_HOSTS.
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 557, in thread_handler
+    raise exc_info[1]
+  File "/usr/local/lib/python3.11/site-packages/django/core/handlers/exception.py", line 42, in inner
+    response = await get_response(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/utils/deprecation.py", line 132, in __acall__
+    response = await sync_to_async(
+               ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 506, in __call__
+    ret = await asyncio.shield(exec_coro)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 561, in thread_handler
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/middleware/common.py", line 48, in process_request
+    host = request.get_host()
+           ^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/http/request.py", line 203, in get_host
+    raise DisallowedHost(msg)
+django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: '4c69-2a02-8084-c80-ea80-446e-e1c4-d0b9-f5d7.ngrok-free.app'. You may need to add '4c69-2a02-8084-c80-ea80-446e-e1c4-d0b9-f5d7.ngrok-free.app' to ALLOWED_HOSTS.
+ERROR 2026-04-30 20:35:09,886 log 7 137680289507008 Invalid HTTP_HOST header: '4c69-2a02-8084-c80-ea80-446e-e1c4-d0b9-f5d7.ngrok-free.app'. You may need to add '4c69-2a02-8084-c80-ea80-446e-e1c4-d0b9-f5d7.ngrok-free.app' to ALLOWED_HOSTS.
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 557, in thread_handler
+    raise exc_info[1]
+  File "/usr/local/lib/python3.11/site-packages/django/core/handlers/exception.py", line 42, in inner
+    response = await get_response(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/utils/deprecation.py", line 132, in __acall__
+    response = await sync_to_async(
+               ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 506, in __call__
+    ret = await asyncio.shield(exec_coro)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 561, in thread_handler
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/middleware/common.py", line 48, in process_request
+    host = request.get_host()
+           ^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/http/request.py", line 203, in get_host
+    raise DisallowedHost(msg)
+django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: '4c69-2a02-8084-c80-ea80-446e-e1c4-d0b9-f5d7.ngrok-free.app'. You may need to add '4c69-2a02-8084-c80-ea80-446e-e1c4-d0b9-f5d7.ngrok-free.app' to ALLOWED_HOSTS.
+ERROR 2026-04-30 20:35:11,202 log 7 137679807182528 Invalid HTTP_HOST header: '4c69-2a02-8084-c80-ea80-446e-e1c4-d0b9-f5d7.ngrok-free.app'. You may need to add '4c69-2a02-8084-c80-ea80-446e-e1c4-d0b9-f5d7.ngrok-free.app' to ALLOWED_HOSTS.
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 557, in thread_handler
+    raise exc_info[1]
+  File "/usr/local/lib/python3.11/site-packages/django/core/handlers/exception.py", line 42, in inner
+    response = await get_response(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/utils/deprecation.py", line 132, in __acall__
+    response = await sync_to_async(
+               ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 506, in __call__
+    ret = await asyncio.shield(exec_coro)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 561, in thread_handler
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/middleware/common.py", line 48, in process_request
+    host = request.get_host()
+           ^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/http/request.py", line 203, in get_host
+    raise DisallowedHost(msg)
+django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: '4c69-2a02-8084-c80-ea80-446e-e1c4-d0b9-f5d7.ngrok-free.app'. You may need to add '4c69-2a02-8084-c80-ea80-446e-e1c4-d0b9-f5d7.ngrok-free.app' to ALLOWED_HOSTS.
+ERROR 2026-04-30 20:35:11,702 log 7 137679790397120 Invalid HTTP_HOST header: '4c69-2a02-8084-c80-ea80-446e-e1c4-d0b9-f5d7.ngrok-free.app'. You may need to add '4c69-2a02-8084-c80-ea80-446e-e1c4-d0b9-f5d7.ngrok-free.app' to ALLOWED_HOSTS.
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 557, in thread_handler
+    raise exc_info[1]
+  File "/usr/local/lib/python3.11/site-packages/django/core/handlers/exception.py", line 42, in inner
+    response = await get_response(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/utils/deprecation.py", line 132, in __acall__
+    response = await sync_to_async(
+               ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 506, in __call__
+    ret = await asyncio.shield(exec_coro)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 561, in thread_handler
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/middleware/common.py", line 48, in process_request
+    host = request.get_host()
+           ^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/http/request.py", line 203, in get_host
+    raise DisallowedHost(msg)
+django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: '4c69-2a02-8084-c80-ea80-446e-e1c4-d0b9-f5d7.ngrok-free.app'. You may need to add '4c69-2a02-8084-c80-ea80-446e-e1c4-d0b9-f5d7.ngrok-free.app' to ALLOWED_HOSTS.
+ERROR 2026-04-30 20:45:46,002 log 7 139927269402304 Invalid HTTP_HOST header: '4c69-2a02-8084-c80-ea80-446e-e1c4-d0b9-f5d7.ngrok-free.app'. You may need to add '4c69-2a02-8084-c80-ea80-446e-e1c4-d0b9-f5d7.ngrok-free.app' to ALLOWED_HOSTS.
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 557, in thread_handler
+    raise exc_info[1]
+  File "/usr/local/lib/python3.11/site-packages/django/core/handlers/exception.py", line 42, in inner
+    response = await get_response(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/utils/deprecation.py", line 132, in __acall__
+    response = await sync_to_async(
+               ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 506, in __call__
+    ret = await asyncio.shield(exec_coro)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 561, in thread_handler
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/middleware/common.py", line 48, in process_request
+    host = request.get_host()
+           ^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/http/request.py", line 203, in get_host
+    raise DisallowedHost(msg)
+django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: '4c69-2a02-8084-c80-ea80-446e-e1c4-d0b9-f5d7.ngrok-free.app'. You may need to add '4c69-2a02-8084-c80-ea80-446e-e1c4-d0b9-f5d7.ngrok-free.app' to ALLOWED_HOSTS.
+ERROR 2026-04-30 20:49:07,001 log 7 136795197007552 Internal Server Error: /api/v1/dashboard/get_upcoming_appointments/
+ERROR 2026-04-30 20:49:07,005 runserver 7 136795225323200 HTTP GET /api/v1/dashboard/get_upcoming_appointments/ 500 [0.09, 172.18.0.15:56298]
+ERROR 2026-04-30 20:52:42,152 log 7 136795197007552 Internal Server Error: /api/v1/dashboard/get_upcoming_appointments/
+ERROR 2026-04-30 20:52:42,157 runserver 7 136795225323200 HTTP GET /api/v1/dashboard/get_upcoming_appointments/ 500 [0.21, 172.18.0.15:56368]
+ERROR 2026-04-30 20:52:46,857 log 7 136795197007552 Internal Server Error: /api/v1/dashboard/get_upcoming_appointments/
+ERROR 2026-04-30 20:52:46,860 runserver 7 136795225323200 HTTP GET /api/v1/dashboard/get_upcoming_appointments/ 500 [0.11, 172.18.0.15:36202]
+ERROR 2026-04-30 20:53:53,658 log 7 136795197007552 Internal Server Error: /api/v1/dashboard/get_upcoming_appointments/
+ERROR 2026-04-30 20:53:53,660 runserver 7 136795225323200 HTTP GET /api/v1/dashboard/get_upcoming_appointments/ 500 [0.05, 172.18.0.15:33342]
+ERROR 2026-04-30 20:55:03,352 log 7 136795197007552 Internal Server Error: /api/v1/dashboard/get_upcoming_appointments/
+ERROR 2026-04-30 20:55:03,354 runserver 7 136795225323200 HTTP GET /api/v1/dashboard/get_upcoming_appointments/ 500 [0.04, 172.18.0.15:52840]
+ERROR 2026-04-30 20:58:49,968 log 7 136795197007552 Internal Server Error: /api/v1/dashboard/get_upcoming_appointments/
+ERROR 2026-04-30 20:58:49,973 runserver 7 136795225323200 HTTP GET /api/v1/dashboard/get_upcoming_appointments/ 500 [0.08, 172.18.0.15:38456]
+ERROR 2026-04-30 20:58:55,704 log 7 136795197007552 Internal Server Error: /api/v1/dashboard/get_upcoming_appointments/
+ERROR 2026-04-30 20:58:55,707 runserver 7 136795225323200 HTTP GET /api/v1/dashboard/get_upcoming_appointments/ 500 [0.07, 172.18.0.15:38452]
+ERROR 2026-04-30 20:58:56,089 log 7 136795197007552 Internal Server Error: /api/v1/dashboard/get_upcoming_appointments/
+ERROR 2026-04-30 20:58:56,092 runserver 7 136795225323200 HTTP GET /api/v1/dashboard/get_upcoming_appointments/ 500 [0.07, 172.18.0.15:38478]
+ERROR 2026-04-30 20:58:56,682 log 7 136795197007552 Internal Server Error: /api/v1/dashboard/get_upcoming_appointments/
+ERROR 2026-04-30 20:58:56,684 runserver 7 136795225323200 HTTP GET /api/v1/dashboard/get_upcoming_appointments/ 500 [0.07, 172.18.0.15:38494]
+ERROR 2026-04-30 20:58:59,097 log 7 136795197007552 Internal Server Error: /api/v1/dashboard/get_upcoming_appointments/
+ERROR 2026-04-30 20:58:59,102 runserver 7 136795225323200 HTTP GET /api/v1/dashboard/get_upcoming_appointments/ 500 [0.05, 172.18.0.15:38520]
+ERROR 2026-04-30 20:58:59,749 log 7 136795197007552 Internal Server Error: /api/v1/dashboard/get_upcoming_appointments/
+ERROR 2026-04-30 20:58:59,751 runserver 7 136795225323200 HTTP GET /api/v1/dashboard/get_upcoming_appointments/ 500 [0.06, 172.18.0.15:38534]
+ERROR 2026-04-30 21:02:38,449 log 7 136795197007552 Internal Server Error: /api/v1/dashboard/get_upcoming_appointments/
+ERROR 2026-04-30 21:02:38,451 runserver 7 136795225323200 HTTP GET /api/v1/dashboard/get_upcoming_appointments/ 500 [0.06, 172.18.0.15:55928]
+ERROR 2026-04-30 21:02:39,114 log 7 136795197007552 Internal Server Error: /api/v1/dashboard/get_upcoming_appointments/
+ERROR 2026-04-30 21:02:39,117 runserver 7 136795225323200 HTTP GET /api/v1/dashboard/get_upcoming_appointments/ 500 [0.08, 172.18.0.15:55944]
+ERROR 2026-04-30 21:02:39,911 log 7 136795197007552 Internal Server Error: /api/v1/dashboard/get_upcoming_appointments/
+ERROR 2026-04-30 21:02:39,914 runserver 7 136795225323200 HTTP GET /api/v1/dashboard/get_upcoming_appointments/ 500 [0.07, 172.18.0.15:55958]
+ERROR 2026-04-30 21:02:42,820 log 7 136795197007552 Internal Server Error: /api/v1/dashboard/get_upcoming_appointments/
+ERROR 2026-04-30 21:02:42,822 runserver 7 136795225323200 HTTP GET /api/v1/dashboard/get_upcoming_appointments/ 500 [0.07, 172.18.0.15:52716]
+ERROR 2026-04-30 21:02:44,040 log 7 136795197007552 Internal Server Error: /api/v1/dashboard/get_upcoming_appointments/
+ERROR 2026-04-30 21:02:44,042 runserver 7 136795225323200 HTTP GET /api/v1/dashboard/get_upcoming_appointments/ 500 [0.07, 172.18.0.15:52726]
+ERROR 2026-04-30 21:02:49,765 log 7 136795197007552 Internal Server Error: /api/v1/dashboard/get_upcoming_appointments/
+ERROR 2026-04-30 21:02:49,767 runserver 7 136795225323200 HTTP GET /api/v1/dashboard/get_upcoming_appointments/ 500 [0.05, 172.18.0.15:52740]
+ERROR 2026-04-30 21:02:54,199 log 7 136795197007552 Internal Server Error: /api/v1/dashboard/get_upcoming_appointments/
+ERROR 2026-04-30 21:02:54,201 runserver 7 136795225323200 HTTP GET /api/v1/dashboard/get_upcoming_appointments/ 500 [0.03, 172.18.0.15:44186]
+ERROR 2026-04-30 21:04:27,401 log 7 136795197007552 Internal Server Error: /api/v1/dashboard/get_upcoming_appointments/
+ERROR 2026-04-30 21:04:27,403 runserver 7 136795225323200 HTTP GET /api/v1/dashboard/get_upcoming_appointments/ 500 [0.06, 172.18.0.15:41094]
+ERROR 2026-04-30 21:04:28,190 log 7 136795197007552 Internal Server Error: /api/v1/dashboard/get_upcoming_appointments/
+ERROR 2026-04-30 21:04:28,192 runserver 7 136795225323200 HTTP GET /api/v1/dashboard/get_upcoming_appointments/ 500 [0.05, 172.18.0.15:41108]
+ERROR 2026-04-30 21:04:52,049 log 7 136795197007552 Internal Server Error: /api/v1/dashboard/get_upcoming_appointments/
+ERROR 2026-04-30 21:04:52,052 runserver 7 136795225323200 HTTP GET /api/v1/dashboard/get_upcoming_appointments/ 500 [0.05, 172.18.0.15:50000]
+ERROR 2026-04-30 21:05:21,970 log 7 136795197007552 Internal Server Error: /api/v1/dashboard/get_upcoming_appointments/
+ERROR 2026-04-30 21:05:21,971 runserver 7 136795225323200 HTTP GET /api/v1/dashboard/get_upcoming_appointments/ 500 [0.04, 172.18.0.15:37794]
+ERROR 2026-04-30 21:07:27,206 log 7 136795197007552 Internal Server Error: /api/v1/dashboard/get_upcoming_appointments/
+ERROR 2026-04-30 21:07:27,208 runserver 7 136795225323200 HTTP GET /api/v1/dashboard/get_upcoming_appointments/ 500 [0.04, 172.18.0.15:41224]
+ERROR 2026-04-30 21:07:36,240 log 7 136795197007552 Internal Server Error: /api/v1/dashboard/get_upcoming_appointments/
+ERROR 2026-04-30 21:07:36,243 runserver 7 136795225323200 HTTP GET /api/v1/dashboard/get_upcoming_appointments/ 500 [0.05, 172.18.0.15:50546]
+ERROR 2026-04-30 21:09:13,494 log 7 136795197007552 Internal Server Error: /api/v1/dashboard/get_upcoming_appointments/
+ERROR 2026-04-30 21:09:13,503 runserver 7 136795225323200 HTTP GET /api/v1/dashboard/get_upcoming_appointments/ 500 [0.06, 172.18.0.15:53880]
+ERROR 2026-04-30 21:12:07,591 log 7 136795197007552 Internal Server Error: /api/v1/dashboard/get_upcoming_appointments/
+ERROR 2026-04-30 21:12:07,595 runserver 7 136795225323200 HTTP GET /api/v1/dashboard/get_upcoming_appointments/ 500 [0.11, 172.18.0.15:35070]
+ERROR 2026-04-30 21:47:16,978 log 356 140392077981376 Internal Server Error: /admin/main/b2csubcriptiontier/
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.11/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.UndefinedTable: relation "main_b2csubcriptiontier" does not exist
+LINE 1: SELECT COUNT(*) AS "__count" FROM "main_b2csubcriptiontier"
+                                          ^
+
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 557, in thread_handler
+    raise exc_info[1]
+  File "/usr/local/lib/python3.11/site-packages/django/core/handlers/exception.py", line 42, in inner
+    response = await get_response(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 557, in thread_handler
+    raise exc_info[1]
+  File "/usr/local/lib/python3.11/site-packages/django/core/handlers/base.py", line 253, in _get_response_async
+    response = await wrapped_callback(
+               ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 506, in __call__
+    ret = await asyncio.shield(exec_coro)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 561, in thread_handler
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/contrib/admin/options.py", line 720, in wrapper
+    return self.admin_site.admin_view(view)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/utils/decorators.py", line 192, in _view_wrapper
+    result = _process_exception(request, e)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/utils/decorators.py", line 190, in _view_wrapper
+    response = view_func(request, *args, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/views/decorators/cache.py", line 80, in _view_wrapper
+    response = view_func(request, *args, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/contrib/admin/sites.py", line 246, in inner
+    return view(request, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/utils/decorators.py", line 48, in _wrapper
+    return bound_method(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/utils/decorators.py", line 192, in _view_wrapper
+    result = _process_exception(request, e)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/utils/decorators.py", line 190, in _view_wrapper
+    response = view_func(request, *args, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/contrib/admin/options.py", line 2025, in changelist_view
+    cl = self.get_changelist_instance(request)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/contrib/admin/options.py", line 868, in get_changelist_instance
+    return ChangeList(
+           ^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/contrib/admin/views/main.py", line 146, in __init__
+    self.get_results(request)
+  File "/usr/local/lib/python3.11/site-packages/django/contrib/admin/views/main.py", line 313, in get_results
+    result_count = paginator.count
+                   ^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/utils/functional.py", line 47, in __get__
+    res = instance.__dict__[self.name] = self.func(instance)
+                                         ^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/core/paginator.py", line 110, in count
+    return c()
+           ^^^
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/query.py", line 606, in count
+    return self.query.get_count(using=self.db)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/sql/query.py", line 646, in get_count
+    return obj.get_aggregation(using, {"__count": Count("*")})["__count"]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/sql/query.py", line 628, in get_aggregation
+    result = compiler.execute_sql(SINGLE)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/sql/compiler.py", line 1623, in execute_sql
+    cursor.execute(sql, params)
+  File "/usr/local/lib/python3.11/site-packages/django/db/backends/utils.py", line 122, in execute
+    return super().execute(sql, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/db/backends/utils.py", line 79, in execute
+    return self._execute_with_wrappers(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/db/backends/utils.py", line 92, in _execute_with_wrappers
+    return executor(sql, params, many, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/db/backends/utils.py", line 100, in _execute
+    with self.db.wrap_database_errors:
+  File "/usr/local/lib/python3.11/site-packages/django/db/utils.py", line 91, in __exit__
+    raise dj_exc_value.with_traceback(traceback) from exc_value
+  File "/usr/local/lib/python3.11/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+django.db.utils.ProgrammingError: relation "main_b2csubcriptiontier" does not exist
+LINE 1: SELECT COUNT(*) AS "__count" FROM "main_b2csubcriptiontier"
+                                          ^
+
+ERROR 2026-04-30 21:47:16,988 runserver 356 140392178644672 HTTP GET /admin/main/b2csubcriptiontier/ 500 [0.09, 172.18.0.15:60738]
+ERROR 2026-05-01 02:15:16,381 log 3188 123163541235392 Internal Server Error: /api/v1/dashboard/get_upcoming_appointments/
+ERROR 2026-05-01 02:15:16,388 runserver 3188 123163637708480 HTTP GET /api/v1/dashboard/get_upcoming_appointments/ 500 [3.15, 172.18.0.15:43294]
+ERROR 2026-05-01 02:17:01,924 log 3188 123163523401408 Internal Server Error: /api/v1/dashboard/get_upcoming_appointments/
+ERROR 2026-05-01 02:17:01,926 runserver 3188 123163637708480 HTTP GET /api/v1/dashboard/get_upcoming_appointments/ 500 [3.26, 172.18.0.15:48846]
+ERROR 2026-05-01 02:17:35,714 log 3188 123163541235392 Internal Server Error: /api/v1/dashboard/get_upcoming_appointments/
+ERROR 2026-05-01 02:17:35,716 runserver 3188 123163637708480 HTTP GET /api/v1/dashboard/get_upcoming_appointments/ 500 [3.08, 172.18.0.15:58524]
+ERROR 2026-05-01 02:17:40,832 log 3188 123163523401408 Internal Server Error: /api/v1/dashboard/get_upcoming_appointments/
+ERROR 2026-05-01 02:17:40,834 runserver 3188 123163637708480 HTTP GET /api/v1/dashboard/get_upcoming_appointments/ 500 [3.22, 172.18.0.15:58544]
+ERROR 2026-05-01 02:17:55,485 log 3188 123163541235392 Internal Server Error: /api/v1/dashboard/get_upcoming_appointments/
+ERROR 2026-05-01 02:17:55,487 runserver 3188 123163637708480 HTTP GET /api/v1/dashboard/get_upcoming_appointments/ 500 [2.85, 172.18.0.15:33362]
+ERROR 2026-05-01 03:41:00,972 log 7 132613346944704 Internal Server Error: /api/v1/support/customers/get_customers_list/
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 557, in thread_handler
+    raise exc_info[1]
+  File "/usr/local/lib/python3.11/site-packages/django/core/handlers/exception.py", line 42, in inner
+    response = await get_response(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 557, in thread_handler
+    raise exc_info[1]
+  File "/usr/local/lib/python3.11/site-packages/django/core/handlers/base.py", line 253, in _get_response_async
+    response = await wrapped_callback(
+               ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 506, in __call__
+    ret = await asyncio.shield(exec_coro)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 561, in thread_handler
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/views/decorators/csrf.py", line 65, in _view_wrapper
+    return view_func(request, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/views/generic/base.py", line 105, in view
+    return self.dispatch(request, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 515, in dispatch
+    response = self.handle_exception(exc)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 475, in handle_exception
+    self.raise_uncaught_exception(exc)
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 486, in raise_uncaught_exception
+    raise exc
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 512, in dispatch
+    response = handler(request, *args, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/main/views/support/support_customers.py", line 783, in get
+    return handler(request, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/main/views/support/support_customers.py", line 796, in _get_customers_list
+    customers = [_serialize_b2c_list_item(u) for u in qs_list]
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/main/views/support/support_customers.py", line 796, in <listcomp>
+    customers = [_serialize_b2c_list_item(u) for u in qs_list]
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/main/views/support/support_customers.py", line 400, in _serialize_b2c_list_item
+    b2c_sub = _latest_b2c_subscription(user)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/main/views/support/support_customers.py", line 298, in _latest_b2c_subscription
+    .order_by("-created_at")
+     ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/query.py", line 1727, in order_by
+    obj.query.add_ordering(*field_names)
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/sql/query.py", line 2312, in add_ordering
+    self.names_to_path(item.split(LOOKUP_SEP), self.model._meta)
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/sql/query.py", line 1813, in names_to_path
+    raise FieldError(
+django.core.exceptions.FieldError: Cannot resolve keyword 'created_at' into field. Choices are: auto_renew, billing_records, cancellation_date, cancellation_reason, end_date, id, plan, plan_id, start_date, status, stripe_subscription_id, user, user_id
+ERROR 2026-05-01 03:41:01,006 runserver 7 132613442369216 HTTP GET /api/v1/support/customers/get_customers_list/?segment=b2c 500 [0.32, 172.18.0.15:47528]
+ERROR 2026-05-01 03:41:03,582 log 7 132613346944704 Internal Server Error: /api/v1/support/customers/get_customers_list/
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 557, in thread_handler
+    raise exc_info[1]
+  File "/usr/local/lib/python3.11/site-packages/django/core/handlers/exception.py", line 42, in inner
+    response = await get_response(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 557, in thread_handler
+    raise exc_info[1]
+  File "/usr/local/lib/python3.11/site-packages/django/core/handlers/base.py", line 253, in _get_response_async
+    response = await wrapped_callback(
+               ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 506, in __call__
+    ret = await asyncio.shield(exec_coro)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 561, in thread_handler
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/views/decorators/csrf.py", line 65, in _view_wrapper
+    return view_func(request, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/views/generic/base.py", line 105, in view
+    return self.dispatch(request, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 515, in dispatch
+    response = self.handle_exception(exc)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 475, in handle_exception
+    self.raise_uncaught_exception(exc)
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 486, in raise_uncaught_exception
+    raise exc
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 512, in dispatch
+    response = handler(request, *args, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/main/views/support/support_customers.py", line 783, in get
+    return handler(request, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/main/views/support/support_customers.py", line 796, in _get_customers_list
+    customers = [_serialize_b2c_list_item(u) for u in qs_list]
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/main/views/support/support_customers.py", line 796, in <listcomp>
+    customers = [_serialize_b2c_list_item(u) for u in qs_list]
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/main/views/support/support_customers.py", line 400, in _serialize_b2c_list_item
+    b2c_sub = _latest_b2c_subscription(user)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/main/views/support/support_customers.py", line 298, in _latest_b2c_subscription
+    .order_by("-created_at")
+     ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/query.py", line 1727, in order_by
+    obj.query.add_ordering(*field_names)
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/sql/query.py", line 2312, in add_ordering
+    self.names_to_path(item.split(LOOKUP_SEP), self.model._meta)
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/sql/query.py", line 1813, in names_to_path
+    raise FieldError(
+django.core.exceptions.FieldError: Cannot resolve keyword 'created_at' into field. Choices are: auto_renew, billing_records, cancellation_date, cancellation_reason, end_date, id, plan, plan_id, start_date, status, stripe_subscription_id, user, user_id
+ERROR 2026-05-01 03:41:03,595 runserver 7 132613442369216 HTTP GET /api/v1/support/customers/get_customers_list/?segment=b2c 500 [0.13, 172.18.0.15:47534]
+ERROR 2026-05-01 03:41:08,399 log 7 132613346944704 Internal Server Error: /api/v1/support/customers/get_customers_list/
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 557, in thread_handler
+    raise exc_info[1]
+  File "/usr/local/lib/python3.11/site-packages/django/core/handlers/exception.py", line 42, in inner
+    response = await get_response(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 557, in thread_handler
+    raise exc_info[1]
+  File "/usr/local/lib/python3.11/site-packages/django/core/handlers/base.py", line 253, in _get_response_async
+    response = await wrapped_callback(
+               ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 506, in __call__
+    ret = await asyncio.shield(exec_coro)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 561, in thread_handler
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/views/decorators/csrf.py", line 65, in _view_wrapper
+    return view_func(request, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/views/generic/base.py", line 105, in view
+    return self.dispatch(request, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 515, in dispatch
+    response = self.handle_exception(exc)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 475, in handle_exception
+    self.raise_uncaught_exception(exc)
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 486, in raise_uncaught_exception
+    raise exc
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 512, in dispatch
+    response = handler(request, *args, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/main/views/support/support_customers.py", line 783, in get
+    return handler(request, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/main/views/support/support_customers.py", line 796, in _get_customers_list
+    customers = [_serialize_b2c_list_item(u) for u in qs_list]
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/main/views/support/support_customers.py", line 796, in <listcomp>
+    customers = [_serialize_b2c_list_item(u) for u in qs_list]
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/main/views/support/support_customers.py", line 400, in _serialize_b2c_list_item
+    b2c_sub = _latest_b2c_subscription(user)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/main/views/support/support_customers.py", line 298, in _latest_b2c_subscription
+    .order_by("-created_at")
+     ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/query.py", line 1727, in order_by
+    obj.query.add_ordering(*field_names)
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/sql/query.py", line 2312, in add_ordering
+    self.names_to_path(item.split(LOOKUP_SEP), self.model._meta)
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/sql/query.py", line 1813, in names_to_path
+    raise FieldError(
+django.core.exceptions.FieldError: Cannot resolve keyword 'created_at' into field. Choices are: auto_renew, billing_records, cancellation_date, cancellation_reason, end_date, id, plan, plan_id, start_date, status, stripe_subscription_id, user, user_id
+ERROR 2026-05-01 03:41:08,415 runserver 7 132613442369216 HTTP GET /api/v1/support/customers/get_customers_list/?segment=b2c 500 [0.12, 172.18.0.15:42164]
+ERROR 2026-05-01 03:41:23,468 log 7 132613346944704 Internal Server Error: /api/v1/support/customers/get_customers_list/
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 557, in thread_handler
+    raise exc_info[1]
+  File "/usr/local/lib/python3.11/site-packages/django/core/handlers/exception.py", line 42, in inner
+    response = await get_response(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 557, in thread_handler
+    raise exc_info[1]
+  File "/usr/local/lib/python3.11/site-packages/django/core/handlers/base.py", line 253, in _get_response_async
+    response = await wrapped_callback(
+               ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 506, in __call__
+    ret = await asyncio.shield(exec_coro)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 561, in thread_handler
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/views/decorators/csrf.py", line 65, in _view_wrapper
+    return view_func(request, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/views/generic/base.py", line 105, in view
+    return self.dispatch(request, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 515, in dispatch
+    response = self.handle_exception(exc)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 475, in handle_exception
+    self.raise_uncaught_exception(exc)
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 486, in raise_uncaught_exception
+    raise exc
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 512, in dispatch
+    response = handler(request, *args, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/main/views/support/support_customers.py", line 783, in get
+    return handler(request, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/main/views/support/support_customers.py", line 796, in _get_customers_list
+    customers = [_serialize_b2c_list_item(u) for u in qs_list]
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/main/views/support/support_customers.py", line 796, in <listcomp>
+    customers = [_serialize_b2c_list_item(u) for u in qs_list]
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/main/views/support/support_customers.py", line 400, in _serialize_b2c_list_item
+    b2c_sub = _latest_b2c_subscription(user)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/main/views/support/support_customers.py", line 298, in _latest_b2c_subscription
+    .order_by("-created_at")
+     ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/query.py", line 1727, in order_by
+    obj.query.add_ordering(*field_names)
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/sql/query.py", line 2312, in add_ordering
+    self.names_to_path(item.split(LOOKUP_SEP), self.model._meta)
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/sql/query.py", line 1813, in names_to_path
+    raise FieldError(
+django.core.exceptions.FieldError: Cannot resolve keyword 'created_at' into field. Choices are: auto_renew, billing_records, cancellation_date, cancellation_reason, end_date, id, plan, plan_id, start_date, status, stripe_subscription_id, user, user_id
+ERROR 2026-05-01 03:41:23,483 runserver 7 132613442369216 HTTP GET /api/v1/support/customers/get_customers_list/?segment=b2c 500 [0.15, 172.18.0.15:54502]
+ERROR 2026-05-01 03:41:41,803 log 7 132613346944704 Internal Server Error: /api/v1/support/customers/get_customers_list/
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 557, in thread_handler
+    raise exc_info[1]
+  File "/usr/local/lib/python3.11/site-packages/django/core/handlers/exception.py", line 42, in inner
+    response = await get_response(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 557, in thread_handler
+    raise exc_info[1]
+  File "/usr/local/lib/python3.11/site-packages/django/core/handlers/base.py", line 253, in _get_response_async
+    response = await wrapped_callback(
+               ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 506, in __call__
+    ret = await asyncio.shield(exec_coro)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 561, in thread_handler
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/views/decorators/csrf.py", line 65, in _view_wrapper
+    return view_func(request, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/views/generic/base.py", line 105, in view
+    return self.dispatch(request, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 515, in dispatch
+    response = self.handle_exception(exc)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 475, in handle_exception
+    self.raise_uncaught_exception(exc)
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 486, in raise_uncaught_exception
+    raise exc
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 512, in dispatch
+    response = handler(request, *args, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/main/views/support/support_customers.py", line 783, in get
+    return handler(request, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/main/views/support/support_customers.py", line 796, in _get_customers_list
+    customers = [_serialize_b2c_list_item(u) for u in qs_list]
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/main/views/support/support_customers.py", line 796, in <listcomp>
+    customers = [_serialize_b2c_list_item(u) for u in qs_list]
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/main/views/support/support_customers.py", line 400, in _serialize_b2c_list_item
+    b2c_sub = _latest_b2c_subscription(user)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/main/views/support/support_customers.py", line 298, in _latest_b2c_subscription
+    .order_by("-created_at")
+     ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/query.py", line 1727, in order_by
+    obj.query.add_ordering(*field_names)
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/sql/query.py", line 2312, in add_ordering
+    self.names_to_path(item.split(LOOKUP_SEP), self.model._meta)
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/sql/query.py", line 1813, in names_to_path
+    raise FieldError(
+django.core.exceptions.FieldError: Cannot resolve keyword 'created_at' into field. Choices are: auto_renew, billing_records, cancellation_date, cancellation_reason, end_date, id, plan, plan_id, start_date, status, stripe_subscription_id, user, user_id
+ERROR 2026-05-01 03:41:41,812 runserver 7 132613442369216 HTTP GET /api/v1/support/customers/get_customers_list/?segment=b2c 500 [0.10, 172.18.0.15:33348]
+ERROR 2026-05-02 02:39:31,071 log 98 125039628248768 Internal Server Error: /api/v1/support/accounting/export_month_pdf/
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 557, in thread_handler
+    raise exc_info[1]
+  File "/usr/local/lib/python3.11/site-packages/django/core/handlers/exception.py", line 42, in inner
+    response = await get_response(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 557, in thread_handler
+    raise exc_info[1]
+  File "/usr/local/lib/python3.11/site-packages/django/core/handlers/base.py", line 253, in _get_response_async
+    response = await wrapped_callback(
+               ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 506, in __call__
+    ret = await asyncio.shield(exec_coro)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 561, in thread_handler
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/views/decorators/csrf.py", line 65, in _view_wrapper
+    return view_func(request, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/views/generic/base.py", line 105, in view
+    return self.dispatch(request, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 515, in dispatch
+    response = self.handle_exception(exc)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 475, in handle_exception
+    self.raise_uncaught_exception(exc)
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 486, in raise_uncaught_exception
+    raise exc
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 512, in dispatch
+    response = handler(request, *args, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/main/views/support/support_accounting.py", line 107, in get
+    return handler(request)
+           ^^^^^^^^^^^^^^^^
+  File "/app/main/views/support/support_accounting.py", line 319, in _export_month_pdf
+    _vat_rate_for_type(tt) * 100,
+    ~~~~~~~~~~~~~~~~~~~~~~~^~~~~
+TypeError: unsupported operand type(s) for *: 'NoneType' and 'int'
+ERROR 2026-05-02 02:39:31,082 runserver 98 125039727867584 HTTP GET /api/v1/support/accounting/export_month_pdf/?year=2026&month=4&status=succeeded 500 [0.08, 172.18.0.15:34592]
+ERROR 2026-05-02 02:39:40,435 log 98 125039628248768 Internal Server Error: /api/v1/support/accounting/export_month_pdf/
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 557, in thread_handler
+    raise exc_info[1]
+  File "/usr/local/lib/python3.11/site-packages/django/core/handlers/exception.py", line 42, in inner
+    response = await get_response(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 557, in thread_handler
+    raise exc_info[1]
+  File "/usr/local/lib/python3.11/site-packages/django/core/handlers/base.py", line 253, in _get_response_async
+    response = await wrapped_callback(
+               ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 506, in __call__
+    ret = await asyncio.shield(exec_coro)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 561, in thread_handler
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/views/decorators/csrf.py", line 65, in _view_wrapper
+    return view_func(request, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/views/generic/base.py", line 105, in view
+    return self.dispatch(request, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 515, in dispatch
+    response = self.handle_exception(exc)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 475, in handle_exception
+    self.raise_uncaught_exception(exc)
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 486, in raise_uncaught_exception
+    raise exc
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 512, in dispatch
+    response = handler(request, *args, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/main/views/support/support_accounting.py", line 107, in get
+    return handler(request)
+           ^^^^^^^^^^^^^^^^
+  File "/app/main/views/support/support_accounting.py", line 319, in _export_month_pdf
+    _vat_rate_for_type(tt) * 100,
+    ~~~~~~~~~~~~~~~~~~~~~~~^~~~~
+TypeError: unsupported operand type(s) for *: 'NoneType' and 'int'
+ERROR 2026-05-02 02:39:40,442 runserver 98 125039727867584 HTTP GET /api/v1/support/accounting/export_month_pdf/?year=2026&month=4&status=succeeded 500 [0.05, 172.18.0.15:36148]
+ERROR 2026-05-06 02:07:51,464 log 7 129569524786880 Invalid HTTP_HOST header: '450e-2a02-8084-c81-a480-c018-9c4e-4107-9d95.ngrok-free.app'. You may need to add '450e-2a02-8084-c81-a480-c018-9c4e-4107-9d95.ngrok-free.app' to ALLOWED_HOSTS.
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 557, in thread_handler
+    raise exc_info[1]
+  File "/usr/local/lib/python3.11/site-packages/django/core/handlers/exception.py", line 42, in inner
+    response = await get_response(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/utils/deprecation.py", line 132, in __acall__
+    response = await sync_to_async(
+               ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 506, in __call__
+    ret = await asyncio.shield(exec_coro)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 561, in thread_handler
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/middleware/common.py", line 48, in process_request
+    host = request.get_host()
+           ^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/http/request.py", line 203, in get_host
+    raise DisallowedHost(msg)
+django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: '450e-2a02-8084-c81-a480-c018-9c4e-4107-9d95.ngrok-free.app'. You may need to add '450e-2a02-8084-c81-a480-c018-9c4e-4107-9d95.ngrok-free.app' to ALLOWED_HOSTS.
+ERROR 2026-05-06 02:07:51,468 log 7 129569533179584 Invalid HTTP_HOST header: '450e-2a02-8084-c81-a480-c018-9c4e-4107-9d95.ngrok-free.app'. You may need to add '450e-2a02-8084-c81-a480-c018-9c4e-4107-9d95.ngrok-free.app' to ALLOWED_HOSTS.
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 557, in thread_handler
+    raise exc_info[1]
+  File "/usr/local/lib/python3.11/site-packages/django/core/handlers/exception.py", line 42, in inner
+    response = await get_response(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/utils/deprecation.py", line 132, in __acall__
+    response = await sync_to_async(
+               ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 506, in __call__
+    ret = await asyncio.shield(exec_coro)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 561, in thread_handler
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/middleware/common.py", line 48, in process_request
+    host = request.get_host()
+           ^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/http/request.py", line 203, in get_host
+    raise DisallowedHost(msg)
+django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: '450e-2a02-8084-c81-a480-c018-9c4e-4107-9d95.ngrok-free.app'. You may need to add '450e-2a02-8084-c81-a480-c018-9c4e-4107-9d95.ngrok-free.app' to ALLOWED_HOSTS.
+ERROR 2026-05-06 02:07:51,475 log 7 129569516394176 Invalid HTTP_HOST header: '450e-2a02-8084-c81-a480-c018-9c4e-4107-9d95.ngrok-free.app'. You may need to add '450e-2a02-8084-c81-a480-c018-9c4e-4107-9d95.ngrok-free.app' to ALLOWED_HOSTS.
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 557, in thread_handler
+    raise exc_info[1]
+  File "/usr/local/lib/python3.11/site-packages/django/core/handlers/exception.py", line 42, in inner
+    response = await get_response(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/utils/deprecation.py", line 132, in __acall__
+    response = await sync_to_async(
+               ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 506, in __call__
+    ret = await asyncio.shield(exec_coro)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 561, in thread_handler
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/middleware/common.py", line 48, in process_request
+    host = request.get_host()
+           ^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/http/request.py", line 203, in get_host
+    raise DisallowedHost(msg)
+django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: '450e-2a02-8084-c81-a480-c018-9c4e-4107-9d95.ngrok-free.app'. You may need to add '450e-2a02-8084-c81-a480-c018-9c4e-4107-9d95.ngrok-free.app' to ALLOWED_HOSTS.
+ERROR 2026-05-06 02:07:51,486 log 7 129568962770624 Invalid HTTP_HOST header: '450e-2a02-8084-c81-a480-c018-9c4e-4107-9d95.ngrok-free.app'. You may need to add '450e-2a02-8084-c81-a480-c018-9c4e-4107-9d95.ngrok-free.app' to ALLOWED_HOSTS.
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 557, in thread_handler
+    raise exc_info[1]
+  File "/usr/local/lib/python3.11/site-packages/django/core/handlers/exception.py", line 42, in inner
+    response = await get_response(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/utils/deprecation.py", line 132, in __acall__
+    response = await sync_to_async(
+               ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 506, in __call__
+    ret = await asyncio.shield(exec_coro)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 561, in thread_handler
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/middleware/common.py", line 48, in process_request
+    host = request.get_host()
+           ^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/http/request.py", line 203, in get_host
+    raise DisallowedHost(msg)
+django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: '450e-2a02-8084-c81-a480-c018-9c4e-4107-9d95.ngrok-free.app'. You may need to add '450e-2a02-8084-c81-a480-c018-9c4e-4107-9d95.ngrok-free.app' to ALLOWED_HOSTS.
+ERROR 2026-05-06 02:07:51,488 log 7 129568954377920 Invalid HTTP_HOST header: '450e-2a02-8084-c81-a480-c018-9c4e-4107-9d95.ngrok-free.app'. You may need to add '450e-2a02-8084-c81-a480-c018-9c4e-4107-9d95.ngrok-free.app' to ALLOWED_HOSTS.
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 557, in thread_handler
+    raise exc_info[1]
+  File "/usr/local/lib/python3.11/site-packages/django/core/handlers/exception.py", line 42, in inner
+    response = await get_response(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/utils/deprecation.py", line 132, in __acall__
+    response = await sync_to_async(
+               ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 506, in __call__
+    ret = await asyncio.shield(exec_coro)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 561, in thread_handler
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/middleware/common.py", line 48, in process_request
+    host = request.get_host()
+           ^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/http/request.py", line 203, in get_host
+    raise DisallowedHost(msg)
+django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: '450e-2a02-8084-c81-a480-c018-9c4e-4107-9d95.ngrok-free.app'. You may need to add '450e-2a02-8084-c81-a480-c018-9c4e-4107-9d95.ngrok-free.app' to ALLOWED_HOSTS.
+ERROR 2026-05-06 02:08:09,662 log 7 129569524786880 Invalid HTTP_HOST header: '450e-2a02-8084-c81-a480-c018-9c4e-4107-9d95.ngrok-free.app'. You may need to add '450e-2a02-8084-c81-a480-c018-9c4e-4107-9d95.ngrok-free.app' to ALLOWED_HOSTS.
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 557, in thread_handler
+    raise exc_info[1]
+  File "/usr/local/lib/python3.11/site-packages/django/core/handlers/exception.py", line 42, in inner
+    response = await get_response(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/utils/deprecation.py", line 132, in __acall__
+    response = await sync_to_async(
+               ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 506, in __call__
+    ret = await asyncio.shield(exec_coro)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 561, in thread_handler
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/middleware/common.py", line 48, in process_request
+    host = request.get_host()
+           ^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/http/request.py", line 203, in get_host
+    raise DisallowedHost(msg)
+django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: '450e-2a02-8084-c81-a480-c018-9c4e-4107-9d95.ngrok-free.app'. You may need to add '450e-2a02-8084-c81-a480-c018-9c4e-4107-9d95.ngrok-free.app' to ALLOWED_HOSTS.
+ERROR 2026-05-06 02:08:11,356 log 7 129568954377920 Invalid HTTP_HOST header: '450e-2a02-8084-c81-a480-c018-9c4e-4107-9d95.ngrok-free.app'. You may need to add '450e-2a02-8084-c81-a480-c018-9c4e-4107-9d95.ngrok-free.app' to ALLOWED_HOSTS.
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 557, in thread_handler
+    raise exc_info[1]
+  File "/usr/local/lib/python3.11/site-packages/django/core/handlers/exception.py", line 42, in inner
+    response = await get_response(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/utils/deprecation.py", line 132, in __acall__
+    response = await sync_to_async(
+               ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 506, in __call__
+    ret = await asyncio.shield(exec_coro)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 561, in thread_handler
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/middleware/common.py", line 48, in process_request
+    host = request.get_host()
+           ^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/http/request.py", line 203, in get_host
+    raise DisallowedHost(msg)
+django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: '450e-2a02-8084-c81-a480-c018-9c4e-4107-9d95.ngrok-free.app'. You may need to add '450e-2a02-8084-c81-a480-c018-9c4e-4107-9d95.ngrok-free.app' to ALLOWED_HOSTS.
+ERROR 2026-05-06 02:19:50,683 log 7 138309802124992 Invalid HTTP_HOST header: '450e-2a02-8084-c81-a480-c018-9c4e-4107-9d95.ngrok-free.app'. You may need to add '450e-2a02-8084-c81-a480-c018-9c4e-4107-9d95.ngrok-free.app' to ALLOWED_HOSTS.
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 557, in thread_handler
+    raise exc_info[1]
+  File "/usr/local/lib/python3.11/site-packages/django/core/handlers/exception.py", line 42, in inner
+    response = await get_response(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/utils/deprecation.py", line 132, in __acall__
+    response = await sync_to_async(
+               ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 506, in __call__
+    ret = await asyncio.shield(exec_coro)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 561, in thread_handler
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/middleware/common.py", line 48, in process_request
+    host = request.get_host()
+           ^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/http/request.py", line 203, in get_host
+    raise DisallowedHost(msg)
+django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: '450e-2a02-8084-c81-a480-c018-9c4e-4107-9d95.ngrok-free.app'. You may need to add '450e-2a02-8084-c81-a480-c018-9c4e-4107-9d95.ngrok-free.app' to ALLOWED_HOSTS.
+ERROR 2026-05-06 02:21:42,601 log 29 138891676870336 Invalid HTTP_HOST header: '450e-2a02-8084-c81-a480-c018-9c4e-4107-9d95.ngrok-free.app'. You may need to add '450e-2a02-8084-c81-a480-c018-9c4e-4107-9d95.ngrok-free.app' to ALLOWED_HOSTS.
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 557, in thread_handler
+    raise exc_info[1]
+  File "/usr/local/lib/python3.11/site-packages/django/core/handlers/exception.py", line 42, in inner
+    response = await get_response(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/utils/deprecation.py", line 132, in __acall__
+    response = await sync_to_async(
+               ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 506, in __call__
+    ret = await asyncio.shield(exec_coro)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 561, in thread_handler
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/middleware/common.py", line 48, in process_request
+    host = request.get_host()
+           ^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/http/request.py", line 203, in get_host
+    raise DisallowedHost(msg)
+django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: '450e-2a02-8084-c81-a480-c018-9c4e-4107-9d95.ngrok-free.app'. You may need to add '450e-2a02-8084-c81-a480-c018-9c4e-4107-9d95.ngrok-free.app' to ALLOWED_HOSTS.
+ERROR 2026-05-06 02:23:26,537 log 52 133776073025216 Internal Server Error: /api/v1/dashboard/get_upcoming_appointments/
+ERROR 2026-05-06 02:23:26,539 runserver 52 133776172644032 HTTP GET /api/v1/dashboard/get_upcoming_appointments/ 500 [0.03, 172.18.0.13:53428]
+ERROR 2026-05-06 02:23:29,379 log 52 133776073025216 Internal Server Error: /api/v1/dashboard/get_upcoming_appointments/
+ERROR 2026-05-06 02:23:29,381 runserver 52 133776172644032 HTTP GET /api/v1/dashboard/get_upcoming_appointments/ 500 [0.02, 172.18.0.13:53440]
+ERROR 2026-05-06 02:23:32,882 log 52 133776073025216 Internal Server Error: /api/v1/dashboard/get_upcoming_appointments/
+ERROR 2026-05-06 02:23:32,884 runserver 52 133776172644032 HTTP GET /api/v1/dashboard/get_upcoming_appointments/ 500 [0.02, 172.18.0.13:53454]
+ERROR 2026-05-06 02:23:38,679 log 52 133776073025216 Internal Server Error: /api/v1/dashboard/get_upcoming_appointments/
+ERROR 2026-05-06 02:23:38,680 runserver 52 133776172644032 HTTP GET /api/v1/dashboard/get_upcoming_appointments/ 500 [0.02, 172.18.0.13:49908]
+ERROR 2026-05-06 02:23:38,740 log 52 133776073025216 Internal Server Error: /api/v1/dashboard/get_recent_services/
+ERROR 2026-05-06 02:23:38,743 runserver 52 133776172644032 HTTP GET /api/v1/dashboard/get_recent_services/ 500 [0.05, 172.18.0.13:49916]
+ERROR 2026-05-06 02:23:41,179 log 52 133776073025216 Internal Server Error: /api/v1/dashboard/get_upcoming_appointments/
+ERROR 2026-05-06 02:23:41,180 runserver 52 133776172644032 HTTP GET /api/v1/dashboard/get_upcoming_appointments/ 500 [0.02, 172.18.0.13:49964]
+ERROR 2026-05-06 02:23:52,175 log 52 133776073025216 Internal Server Error: /api/v1/dashboard/get_recent_services/
+ERROR 2026-05-06 02:23:52,176 runserver 52 133776172644032 HTTP GET /api/v1/dashboard/get_recent_services/ 500 [0.04, 172.18.0.13:34584]
+ERROR 2026-05-06 02:23:52,255 log 52 133776073025216 Internal Server Error: /api/v1/dashboard/get_upcoming_appointments/
+ERROR 2026-05-06 02:23:52,256 runserver 52 133776172644032 HTTP GET /api/v1/dashboard/get_upcoming_appointments/ 500 [0.02, 172.18.0.13:34594]
+ERROR 2026-05-06 02:24:13,652 log 52 133776073025216 Internal Server Error: /api/v1/dashboard/get_upcoming_appointments/
+ERROR 2026-05-06 02:24:13,653 runserver 52 133776172644032 HTTP GET /api/v1/dashboard/get_upcoming_appointments/ 500 [0.02, 172.18.0.13:42050]
+ERROR 2026-05-06 02:24:13,746 log 52 133776073025216 Internal Server Error: /api/v1/dashboard/get_recent_services/
+ERROR 2026-05-06 02:24:13,748 runserver 52 133776172644032 HTTP GET /api/v1/dashboard/get_recent_services/ 500 [0.03, 172.18.0.13:42054]
+ERROR 2026-05-06 02:24:14,475 log 52 133776073025216 Internal Server Error: /api/v1/dashboard/get_upcoming_appointments/
+ERROR 2026-05-06 02:24:14,477 runserver 52 133776172644032 HTTP GET /api/v1/dashboard/get_upcoming_appointments/ 500 [0.02, 172.18.0.13:42070]
+ERROR 2026-05-06 02:24:16,329 log 52 133776073025216 Internal Server Error: /api/v1/dashboard/get_upcoming_appointments/
+ERROR 2026-05-06 02:24:16,330 runserver 52 133776172644032 HTTP GET /api/v1/dashboard/get_upcoming_appointments/ 500 [0.02, 172.18.0.13:60710]
+ERROR 2026-05-06 02:24:16,982 log 52 133776073025216 Internal Server Error: /api/v1/dashboard/get_upcoming_appointments/
+ERROR 2026-05-06 02:24:16,983 runserver 52 133776172644032 HTTP GET /api/v1/dashboard/get_upcoming_appointments/ 500 [0.02, 172.18.0.13:60722]
+ERROR 2026-05-06 02:24:17,189 log 52 133776073025216 Internal Server Error: /api/v1/dashboard/get_upcoming_appointments/
+ERROR 2026-05-06 02:24:17,190 runserver 52 133776172644032 HTTP GET /api/v1/dashboard/get_upcoming_appointments/ 500 [0.02, 172.18.0.13:60724]
+ERROR 2026-05-06 02:27:03,537 log 52 133776073025216 Service Unavailable: /api/v1/garage/lookup_vehicle_registration/
+ERROR 2026-05-06 02:27:03,538 runserver 52 133776172644032 HTTP POST /api/v1/garage/lookup_vehicle_registration/ 503 [0.02, 172.18.0.13:53818]
+ERROR 2026-05-06 02:29:56,404 log 189 132207339366080 Internal Server Error: /api/v1/garage/lookup_vehicle_registration/
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 557, in thread_handler
+    raise exc_info[1]
+  File "/usr/local/lib/python3.11/site-packages/django/core/handlers/exception.py", line 42, in inner
+    response = await get_response(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 557, in thread_handler
+    raise exc_info[1]
+  File "/usr/local/lib/python3.11/site-packages/django/core/handlers/base.py", line 253, in _get_response_async
+    response = await wrapped_callback(
+               ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 506, in __call__
+    ret = await asyncio.shield(exec_coro)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/concurrent/futures/thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 561, in thread_handler
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/views/decorators/csrf.py", line 65, in _view_wrapper
+    return view_func(request, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/views/generic/base.py", line 105, in view
+    return self.dispatch(request, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 515, in dispatch
+    response = self.handle_exception(exc)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 475, in handle_exception
+    self.raise_uncaught_exception(exc)
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 486, in raise_uncaught_exception
+    raise exc
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 512, in dispatch
+    response = handler(request, *args, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/main/views/garage.py", line 118, in post
+    return handler(request)
+           ^^^^^^^^^^^^^^^^
+  File "/app/main/views/garage.py", line 164, in lookup_vehicle_registration
+    country = request.user.country
+              ^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'User' object has no attribute 'country'
+ERROR 2026-05-06 02:29:56,413 runserver 189 132207440033472 HTTP POST /api/v1/garage/lookup_vehicle_registration/ 500 [0.04, 172.18.0.13:51638]
+ERROR 2026-05-06 02:30:34,326 log 203 130554162833088 Service Unavailable: /api/v1/garage/lookup_vehicle_registration/
+ERROR 2026-05-06 02:30:34,328 runserver 203 130554195343040 HTTP POST /api/v1/garage/lookup_vehicle_registration/ 503 [0.02, 172.18.0.13:36654]
+ERROR 2026-05-06 02:34:30,880 log 257 126046716290752 Service Unavailable: /api/v1/garage/lookup_vehicle_registration/
+ERROR 2026-05-06 02:34:30,881 runserver 257 126046748800704 HTTP POST /api/v1/garage/lookup_vehicle_registration/ 503 [0.03, 172.18.0.13:52654]
+ERROR 2026-05-06 02:35:15,672 log 271 139422062339776 Service Unavailable: /api/v1/garage/lookup_vehicle_registration/
+ERROR 2026-05-06 02:35:15,674 runserver 271 139422093801152 HTTP POST /api/v1/garage/lookup_vehicle_registration/ 503 [0.02, 172.18.0.13:49838]
+ERROR 2026-05-06 02:35:34,466 log 283 125860359169728 Service Unavailable: /api/v1/garage/lookup_vehicle_registration/
+ERROR 2026-05-06 02:35:34,467 runserver 283 125860391679680 HTTP POST /api/v1/garage/lookup_vehicle_registration/ 503 [0.02, 172.18.0.13:52176]

@@ -1,21 +1,33 @@
 import { useMemo } from "react";
 import { useGetCurrentSubscriptionQuery } from "@/app/store/api/subscriptionApi";
 import { useGetFleetDashboardQuery } from "@/app/store/api/fleetApi";
+import { useAppSelector, RootState } from "@/app/store/main_store";
 
 /**
  * Custom hook to calculate subscription limits and current usage
  * Returns boolean flags indicating if limits are reached
  */
 export const useSubscriptionLimits = () => {
-  const { data: subscription } = useGetCurrentSubscriptionQuery();
-  const { data: dashboardStats } = useGetFleetDashboardQuery();
+  const isFleetOwner = useAppSelector(
+    (state: RootState) => state.auth.user?.is_fleet_owner === true,
+  );
+
+  const { data: subscriptionResponse } = useGetCurrentSubscriptionQuery(
+    undefined,
+    { skip: !isFleetOwner },
+  );
+
+  const subscription = subscriptionResponse?.subscription ?? undefined;
+
+  const { data: dashboardStats } = useGetFleetDashboardQuery(undefined, {
+    skip: !isFleetOwner,
+  });
 
   const limitsReached = useMemo(() => {
     if (!subscription || !dashboardStats) {
       return { admins: false, branches: false, vehicles: false };
     }
 
-    // Get tier name from currentPlan (it should be the tier name like "Basic", "Pro", "Enterprise")
     const tierName = subscription.currentPlan?.toLowerCase() || "";
 
     let limits: { admins?: number | null; branches?: number | null; vehicles?: number | null } = {};

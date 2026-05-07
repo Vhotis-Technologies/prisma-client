@@ -184,19 +184,6 @@ const VehicleDetailsScreen = () => {
                 </View>
               </View>
 
-              {vehicle.vin && (
-                <View style={styles.infoItem}>
-                  <Ionicons name="barcode-outline" size={20} color={iconColor} />
-                  <View style={styles.infoItemText}>
-                    <StyledText variant="bodySmall" style={{ color: iconColor }}>
-                      VIN
-                    </StyledText>
-                    <StyledText variant="bodyMedium" style={{ color: textColor, fontWeight: "500", fontFamily: "monospace" }}>
-                      {vehicle.vin}
-                    </StyledText>
-                  </View>
-                </View>
-              )}
             </View>
           </View>
         </View>
@@ -265,7 +252,8 @@ const VehicleDetailsScreen = () => {
 
         {/* Action Buttons */}
         <View style={styles.actionSection}>
-          <StyledButton
+          {/* his will be hidden for now until we have launched, and the system is tested */}
+{/*           <StyledButton
             title="Document Service/Inspection"
             variant="large"
             onPress={() => {
@@ -276,10 +264,10 @@ const VehicleDetailsScreen = () => {
             }}
             style={styles.actionButton}
             icon={<MaterialIcons name="upload-file" size={20} color="white" />}
-          />
+          /> */}
 
           <StyledButton
-            title="Book Wash"
+            title="Book A Wash"
             variant="tonal"
             onPress={() => {
               router.push("/main/bookings/BookingScreen");

@@ -89,6 +89,17 @@ class User(AbstractUser):
     def is_fleet_user(self):
         return self.is_fleet_owner or self.is_branch_admin
 
+    def is_b2c_user(self):
+        """Consumer accounts eligible for loyalty; fleet staff/partners are excluded."""
+        from main.models import FleetMember, Partner
+        if self.is_fleet_owner or self.is_branch_admin:
+            return False
+        if FleetMember.objects.filter(user=self).exists():
+            return False
+        if Partner.objects.filter(user=self).exists():
+            return False
+        return True
+
     def can_view_vehicle_details(self, vehicle=None):
         from main.models import Fleet, FleetMember
         if not (self.is_fleet_owner or self.is_branch_admin):
@@ -159,7 +170,7 @@ class User(AbstractUser):
                 is_active=True,
                 terms_conditions=f"Valid for 30 days from {datetime.now().strftime('%Y-%m-%d')}. New customers only. Cannot be combined with other offers.",
             )
-        if is_new_user:
+        if is_new_user and self.is_b2c_user():
             LoyaltyProgram.objects.create(user=self)
         if (is_new_user and self.is_fleet_owner) or became_fleet_owner:
             self.create_fleet()
@@ -211,32 +222,34 @@ class LoyaltyProgram(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def get_tier_benefits(self):
-        is_fleet_user = self.user.is_fleet_admin_or_manager()
-        if is_fleet_user:
-            benefits = {
+        # Only regular (B2C) consumers receive loyalty perks; fleets/partners use subscriptions etc.
+        if not self.user.is_b2c_user():
+            return {
                 'bronze': {'discount': 0, 'free_service': []},
-                'silver': {'discount': 5, 'free_service': ['Air freshner', 'One easy bill per month']},
-                'gold': {'discount': 8, 'free_service': ['Air freshner', 'One easy bill per month', 'Digital health check']},
-                'platinum': {'discount': 10, 'free_service': ['Air freshner', 'One easy bill per month', 'Digital health check', 'Interior protection', '3 Free Quick sparkle per month']},
+                'silver': {'discount': 0, 'free_service': []},
+                'gold': {'discount': 0, 'free_service': []},
+                'platinum': {'discount': 0, 'free_service': []},
             }
         else:
             benefits = {
                 'bronze': {'discount': 0, 'free_service': []},
-                'silver': {'discount': 5, 'free_service': ['Air freshner']},
-                'gold': {'discount': 8, 'free_service': ['Air freshner', 'Digital health check']},
-                'platinum': {'discount': 12, 'free_service': ['Air freshner', 'Interior protection', '1 Free Quick sparkle per month', 'Digital health check']},
+                'silver': {'discount': 5, 'free_service': ['Air freshner', 'Digital health check']},
+                'gold': {'discount': 5, 'free_service': ['Air freshner', 'Digital health check', 'Interior protection']},
+                'platinum': {'discount': 10, 'free_service': ['Air freshner', 'Interior protection', '1 Free Quick sparkle per month', 'Digital health check']},
             }
         return benefits.get(self.current_tier, benefits['bronze'])
 
     def get_free_wash_limit(self):
         if self.current_tier != 'platinum':
             return 0
-        if self.user.is_fleet_admin_or_manager():
-            return 3
+        if not self.user.is_b2c_user():
+            return 0
         return 1
 
     def can_use_free_quick_sparkle(self):
         if self.current_tier != 'platinum':
+            return False
+        if not self.user.is_b2c_user():
             return False
         today = timezone.now().date()
         if self.free_quick_sparkle_reset_date:

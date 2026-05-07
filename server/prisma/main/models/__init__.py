@@ -30,7 +30,6 @@ from .vehicle import (
     BookedAppointmentImage,
     PendingBooking,
     BulkOrder,
-    VinLookupPurchase,
     PaymentTransaction,
     RefundRecord,
 )
@@ -56,6 +55,7 @@ from .partner import (
 )
 from .ticket import Ticket, TicketUpdate
 from .voucher import WinnerVoucher
+from .b2c import B2CSubcriptionTier, B2CSubcriptionPlan, B2CSubcription, B2CSubcriptionBilling
 
 __all__ = [
     'User', 'UserManager', 'Referral', 'Address', 'LoyaltyProgram', 'Promotions',
@@ -63,11 +63,15 @@ __all__ = [
     'Vehicle', 'VehicleOwnership', 'VehicleEvent', 'VehicleTransfer',
     'ServiceType', 'ValetType', 'DetailerProfile', 'AddOns',
     'BookedAppointment', 'BookedAppointmentImage', 'EventDataManagement',
-    'PendingBooking', 'BulkOrder', 'VinLookupPurchase', 'PaymentTransaction', 'RefundRecord',
+    'PendingBooking', 'BulkOrder', 'PaymentTransaction', 'RefundRecord',
     'Fleet', 'Branch', 'FleetMember', 'FleetVehicle',
     'SubscriptionTier', 'SubscriptionPlan', 'FleetSubscription', 'SubscriptionBilling',
     'Partner', 'PartnerBankAccount', 'PartnerPayoutRequest', 'ReferralAttribution', 'CommissionPayout', 'CommissionEarning',
     'PartnerMetricsCache', 'CommissionAdminLog',
     'Ticket', 'TicketUpdate',
     'WinnerVoucher',
+    'B2CSubcriptionTier',
+    'B2CSubcriptionPlan',
+    'B2CSubcription',
+    'B2CSubcriptionBilling',
 ]

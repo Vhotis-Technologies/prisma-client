@@ -14,6 +14,7 @@ import { RootState, useAppDispatch, useAppSelector } from "../store/main_store";
 import { useAlertContext } from "../contexts/AlertContext";
 import {
   useAddNewVehicleMutation,
+  useLookupVehicleRegistrationMutation,
   useDeleteVehicleMutation,
   useGetMyVehiclesQuery,
   useGetVehicleStatsQuery,
@@ -51,6 +52,8 @@ const useGarage = () => {
     addNewVehicle,
     { isLoading: isAddingNewVehicle, error: addNewVehicleError },
   ] = useAddNewVehicleMutation();
+  const [lookupVehicleRegistration, { isLoading: isLookupRegistrationLoading }] =
+    useLookupVehicleRegistrationMutation();
   const [
     deleteVehicle,
     { isLoading: isDeletingVehicle, error: deleteVehicleError },
@@ -338,17 +341,20 @@ const useGarage = () => {
    *
    * @returns {Promise<FormData | null>} A Promise that resolves to FormData object or null if no vehicle data
    */
-  const prepareVehicleFormData = async (): Promise<FormData | null> => {
+  const prepareVehicleFormData = useCallback(async (): Promise<FormData | null> => {
     if (!newVehicle) return null;
     const formData = new FormData();
     if (newVehicle.make) formData.append("make", newVehicle.make);
     if (newVehicle.model) formData.append("model", newVehicle.model);
     if (newVehicle.year) formData.append("year", newVehicle.year.toString());
     if (newVehicle.color) formData.append("color", newVehicle.color);
-    if (newVehicle.licence) formData.append("licence", newVehicle.licence);
-    if (newVehicle.vin) formData.append("vin", newVehicle.vin);
-
-    // Add branch_id if provided (for fleet owners)
+    formData.append("entry_mode", "manual");
+    if (newVehicle.licence) {
+      formData.append("licence", newVehicle.licence);
+      formData.append("registration_number", newVehicle.licence);
+    }
+    if (newVehicle.country)
+      formData.append("country", String(newVehicle.country));
     if (newVehicle.branch_id) {
       formData.append("branch_id", newVehicle.branch_id);
     }
@@ -364,36 +370,73 @@ const useGarage = () => {
     }
 
     return formData;
-  };
+  }, [newVehicle]);
 
   /**
-   * Handles the form submission for adding a new vehicle.
-   * Validates that all required fields are filled before submission.
-   * Prepares FormData for server upload and dispatches loading state.
-   * Creates the new vehicle in the Redux store and shows success/error alerts.
-   *
-   * @throws {Error} If validation fails or vehicle creation encounters an error
+   * Confirm Ireland lookup and create vehicle server-side using lookup_token.
    */
-  const handleSubmit = useCallback(async () => {
-    // Validate required fields including VIN
-    if (
-      !newVehicle?.make ||
-      !newVehicle?.model ||
-      !newVehicle?.year ||
-      !newVehicle?.licence ||
-      !newVehicle?.color ||
-      !newVehicle?.vin
-    ) {
+  const confirmLookupVehicle = useCallback(
+    async (lookupToken: string, options?: { branchId?: string }) => {
+      const formData = new FormData();
+      formData.append("lookup_token", lookupToken);
+      if (options?.branchId) {
+        formData.append("branch_id", options.branchId);
+      }
+      const response = await addNewVehicle(formData).unwrap();
+      if (response?.message) {
+        setAlertConfig({
+          title: "Success",
+          message: response.message,
+          type: "success",
+          isVisible: true,
+          onConfirm() {
+            setIsVisible(false);
+            dispatch(resetNewVehicle());
+          },
+        });
+      }
+      refetchVehicles();
+    },
+    [addNewVehicle, dispatch, setAlertConfig, setIsVisible, refetchVehicles],
+  );
+
+  /**
+   * Handles manual add (after failed lookup): make, model, year, colour, image, licence, country.
+   */
+  const handleSubmit = useCallback(async (): Promise<boolean> => {
+    if (newVehicle?.entry_mode !== "manual") {
       setAlertConfig({
-        title: "Missing Information",
-        message: "Please fill in all required fields. VIN is required.",
+        title: "Cannot submit",
+        message: "Complete registration lookup first, or switch to manual entry.",
         type: "error",
         isVisible: true,
         onConfirm() {
           setIsVisible(false);
         },
       });
-      return;
+      return false;
+    }
+
+    // Validate required fields (manual mode — registration + vehicle details only)
+    if (
+      !newVehicle?.make ||
+      !newVehicle?.model ||
+      !newVehicle?.year ||
+      !newVehicle?.licence ||
+      !newVehicle?.color ||
+      !newVehicle?.image
+    ) {
+      setAlertConfig({
+        title: "Missing Information",
+        message:
+          "Please fill make, model, year, licence, colour, and add a photo.",
+        type: "error",
+        isVisible: true,
+        onConfirm() {
+          setIsVisible(false);
+        },
+      });
+      return false;
     }
 
     // Validate branch selection for fleet owners
@@ -407,7 +450,7 @@ const useGarage = () => {
           setIsVisible(false);
         },
       });
-      return;
+      return false;
     }
 
     // Validate the year is a number and is between 1900 and the current year
@@ -425,7 +468,7 @@ const useGarage = () => {
           setIsVisible(false);
         },
       });
-      return;
+      return false;
     }
 
     try {
@@ -444,11 +487,11 @@ const useGarage = () => {
             },
           });
         }
-      } else {
-        throw new Error("Failed to prepare vehicle data for submission");
+        refetchVehicles();
+        return true;
       }
+      throw new Error("Failed to prepare vehicle data for submission");
     } catch (error: any) {
-      /* If the error is thrown, call the alert and the dispatch {setIsLoading} */
       let errorMessage = "Failed to add vehicle. Please try again.";
       if (error?.data?.error) {
         errorMessage = error.data.error;
@@ -471,14 +514,17 @@ const useGarage = () => {
           setIsVisible(false);
         },
       });
+      return false;
     }
   }, [
     newVehicle,
+    user,
     dispatch,
     setAlertConfig,
     setIsVisible,
     addNewVehicle,
     refetchVehicles,
+    prepareVehicleFormData,
   ]);
 
   /**
@@ -590,6 +636,9 @@ const useGarage = () => {
     setIsModalVisible,
     handleVehicleStatsSelection,
     collectNewVehicleData,
+    confirmLookupVehicle,
+    lookupVehicleRegistration,
+    isLookupRegistrationLoading,
     handleSubmit,
     prepareVehicleFormData,
     handleDeleteVehicle,

@@ -158,18 +158,18 @@ class SubscriptionTier(models.Model):
 
     def get_limits(self):
         limits = {
-            'Basic': {'max_admins': 3, 'max_branches': 3, 'max_vehicles': 50},
-            'Pro': {'max_admins': 10, 'max_branches': 10, 'max_vehicles': 200},
-            'Enterprise': {'max_admins': None, 'max_branches': None, 'max_vehicles': None},
+            'Prisma Starter': {'max_admins': 3, 'max_branches': 3, 'max_vehicles': 50},
+            'Prisma Plus': {'max_admins': 10, 'max_branches': 10, 'max_vehicles': 200},
+            'Prisma Enterprise': {'max_admins': None, 'max_branches': None, 'max_vehicles': None},
         }
         tier_name_lower = self.name.lower()
-        if 'basic' in tier_name_lower:
+        if 'starter' in tier_name_lower:
             return limits['Basic']
-        if 'pro' in tier_name_lower:
-            return limits['Pro']
+        if 'plus' in tier_name_lower:
+            return limits['Plus']
         if 'enterprise' in tier_name_lower:
             return limits['Enterprise']
-        return limits['Basic']
+        return limits['Starter']
 
 
 class SubscriptionPlan(models.Model):

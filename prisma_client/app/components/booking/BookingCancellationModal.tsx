@@ -13,6 +13,7 @@ interface BookingCancellationModalProps {
     booking_status: string;
     refund: { amount: number; tier?: "full" | "half" | "none" } | null;
     hours_until_appointment: number;
+    time_remaining_label?: string;
     tier?: "full" | "half" | "none";
   };
   onCancel: () => void;
@@ -34,13 +35,15 @@ const BookingCancellationModal: React.FC<BookingCancellationModalProps> = ({
 
   const getRefundMessage = () => {
     const tier = cancellationData.tier ?? cancellationData.refund?.tier;
-    if (tier === "none" || !cancellationData.refund) {
+    if (tier === "none") {
       return "No refund applicable";
     }
     if (tier === "half") {
       if (
         typeof cancellationData.refund === "object" &&
-        cancellationData.refund.amount != null
+        cancellationData.refund != null &&
+        cancellationData.refund.amount != null &&
+        cancellationData.refund.amount > 0
       ) {
         const refundAmount = cancellationData.refund.amount / 100;
         return `50% refund: ${formatCurrency(refundAmount)}`;
@@ -50,7 +53,9 @@ const BookingCancellationModal: React.FC<BookingCancellationModalProps> = ({
     if (tier === "full") {
       if (
         typeof cancellationData.refund === "object" &&
-        cancellationData.refund.amount != null
+        cancellationData.refund != null &&
+        cancellationData.refund.amount != null &&
+        cancellationData.refund.amount > 0
       ) {
         const refundAmount = cancellationData.refund.amount / 100;
         return `Full refund: ${formatCurrency(refundAmount)}`;
@@ -59,7 +64,9 @@ const BookingCancellationModal: React.FC<BookingCancellationModalProps> = ({
     }
     if (
       typeof cancellationData.refund === "object" &&
-      cancellationData.refund.amount != null
+      cancellationData.refund != null &&
+      cancellationData.refund.amount != null &&
+      cancellationData.refund.amount > 0
     ) {
       const refundAmount = cancellationData.refund.amount / 100;
       return `Refund: ${formatCurrency(refundAmount)}`;
@@ -133,7 +140,8 @@ const BookingCancellationModal: React.FC<BookingCancellationModalProps> = ({
                   variant="bodyLarge"
                   style={[styles.infoValue, { color: textColor }]}
                 >
-                  {cancellationData.hours_until_appointment}h
+                  {cancellationData.time_remaining_label ??
+                    `${cancellationData.hours_until_appointment}h`}
                 </StyledText>
               </View>
             </View>
@@ -151,7 +159,14 @@ const BookingCancellationModal: React.FC<BookingCancellationModalProps> = ({
                   variant="bodyLarge"
                   style={[
                     styles.infoValue,
-                    { color: cancellationData.refund ? "#10B981" : "#EF4444" },
+                    {
+                      color:
+                        cancellationData.tier === "none" ||
+                        (!cancellationData.tier &&
+                          !cancellationData.refund)
+                          ? "#EF4444"
+                          : "#10B981",
+                    },
                   ]}
                 >
                   {getRefundMessage()}

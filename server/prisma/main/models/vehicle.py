@@ -12,13 +12,24 @@ class Vehicle(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     registration_number = models.CharField(max_length=50)
     country = models.CharField(max_length=100)
-    vin = models.CharField(max_length=17, unique=True)
+    county = models.CharField(max_length=100, blank=True, null=True)
+    registration_provider_payload = models.JSONField(blank=True, null=True)
+    abi_code = models.CharField(max_length=100, null=True, blank=True)
     make = models.CharField(max_length=100)
     model = models.CharField(max_length=100)
     year = models.IntegerField()
     color = models.CharField(max_length=100)
     image = models.ImageField(upload_to='vehicles/', null=True, blank=True)
     owner_count = models.IntegerField(default=0)
+    engine_size = models.IntegerField(null=True, blank=True)
+    fuel_type = models.CharField(max_length=100, null=True, blank=True)
+    transmission_type = models.CharField(max_length=100, null=True, blank=True)
+    body_style = models.CharField(max_length=100, null=True, blank=True)
+    number_of_doors = models.IntegerField(null=True, blank=True)
+    number_of_seats = models.IntegerField(null=True, blank=True)
+    driver_side = models.CharField(max_length=100, null=True, blank=True)
+    wheel_pan = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    weight = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -26,7 +37,6 @@ class Vehicle(models.Model):
         unique_together = [['registration_number', 'country']]
         indexes = [
             models.Index(fields=['registration_number', 'country']),
-            models.Index(fields=['vin']),
         ]
 
     def __str__(self):
@@ -168,7 +178,7 @@ class BookedAppointment(models.Model):
     total_amount = models.DecimalField(max_digits=10, decimal_places=2)
     subtotal_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     vat_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    vat_rate = models.DecimalField(max_digits=5, decimal_places=2, default=23.00)
+    vat_rate = models.DecimalField(max_digits=5, decimal_places=2, default=13.50)
     start_time = models.TimeField(null=True, blank=True)
     duration = models.IntegerField(null=True, blank=True)
     special_instructions = models.TextField(null=True, blank=True)
@@ -181,6 +191,17 @@ class BookedAppointment(models.Model):
     assigned_detailers = models.JSONField(default=list, blank=True)  # list of {"id", "name", "rating", "phone", "image"} from job_acceptance (express = 2)
     service_reminder_push_sent_at = models.DateTimeField(null=True, blank=True)
     reminder_email_6h_sent_at = models.DateTimeField(null=True, blank=True)
+    applied_free_quick_sparkle = models.BooleanField(default=False)
+    complimentary_quick_sparkle_source = models.CharField(
+        max_length=20,
+        blank=True,
+        null=True,
+        choices=[
+            ("loyalty", "Loyalty"),
+            ("subscription", "Subscription"),
+            ("partner", "Partner referral"),
+        ],
+    )
 
     def __str__(self):
         vehicle = getattr(self, "vehicle", None)
@@ -332,9 +353,10 @@ class PaymentTransaction(models.Model):
     TRANSACTION_TYPES = [
         ('payment', 'Payment'),
         ('refund', 'Refund'),
-        ('vin_lookup', 'VIN Lookup'),
+        ('vin_lookup', 'Legacy VIN lookup (deprecated)'),
         ('tip', 'Tip'),
-        ('subscription', 'Subscription'),
+        ('fleet_subscription', 'Fleet Subscription'),
+        ('b2c_subscription', 'B2C Subscription'),
         ('reschedule_fee', 'Reschedule Fee'),
     ]
     STATUS_CHOICES = [
@@ -450,6 +472,9 @@ class BulkOrder(models.Model):
     client_confirmation_notifications_sent_at = models.DateTimeField(null=True, blank=True)
     service_reminder_push_sent_at = models.DateTimeField(null=True, blank=True)
     reminder_email_6h_sent_at = models.DateTimeField(null=True, blank=True)
+    # App-owned Stripe invoice reminders (invoice.will_be_due / invoice.overdue automations)
+    invoice_due_soon_email_sent_at = models.DateTimeField(null=True, blank=True)
+    invoice_overdue_email_sent_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         indexes = [
@@ -463,43 +488,3 @@ class BulkOrder(models.Model):
         return f"BulkOrder {self.booking_reference} - {self.payment_status}"
 
 
-class VinLookupPurchase(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='vin_lookup_purchases')
-    email = models.EmailField()
-    vehicle = models.ForeignKey(Vehicle, on_delete=models.CASCADE, related_name='vin_lookup_purchases')
-    vin = models.CharField(max_length=17)
-    purchase_reference = models.CharField(max_length=255, unique=True)
-    payment_transaction = models.ForeignKey(PaymentTransaction, on_delete=models.CASCADE, related_name='vin_lookup_purchases')
-    purchased_at = models.DateTimeField(auto_now_add=True)
-    expires_at = models.DateTimeField()
-    is_active = models.BooleanField(default=True)
-
-    class Meta:
-        ordering = ['-purchased_at']
-        indexes = [
-            models.Index(fields=['user', 'vin']),
-            models.Index(fields=['email', 'vin']),
-            models.Index(fields=['vehicle', 'vin']),
-            models.Index(fields=['purchase_reference']),
-            models.Index(fields=['expires_at', 'is_active']),
-        ]
-
-    def is_valid(self):
-        if not self.is_active:
-            return False
-        return timezone.now() < self.expires_at
-
-    def get_user_identifier(self):
-        if self.user:
-            return str(self.user.id)
-        return self.email
-
-    def save(self, *args, **kwargs):
-        if self.user and not self.email:
-            self.email = self.user.email
-        super().save(*args, **kwargs)
-
-    def __str__(self):
-        user_identifier = self.user.name if self.user else self.email
-        return f"VIN Lookup Purchase - {self.vin} - {user_identifier} - {self.purchase_reference}"

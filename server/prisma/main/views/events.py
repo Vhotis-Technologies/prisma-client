@@ -2,23 +2,33 @@
 Events/booking API view for Prisma Car Care client app.
 
 Provides GET/POST/PATCH/DELETE actions: get_service_type, get_valet_type, get_add_ons,
-get_promotions, mark_promotion_used, check_free_wash, book_appointment, cancel_booking,
+get_promotions, mark_promotion_used, check_free_wash, quote_booking, book_appointment, cancel_booking,
 reschedule_booking, reschedule_intent, get_payment_methods, delete_payment_method.
 
 - book_appointment (_book_appointment): Legacy path that creates BookedAppointment directly
   from request (used when not using the payment sheet flow). Resolves vehicle, valet, service,
   address (or branch), applies free Quick Sparkle, creates booking and add-ons.
-- cancel_booking: Cancels by booking_reference, tiered refund (>12h full, 6–12h half, <6h none),
+- cancel_booking: Cancels by booking_reference, tiered refund (>24h full, 12–24h half, ≤12h none),
   publishes to Redis for detailer, processes Stripe refund.
-- reschedule_booking / reschedule_intent: Validate slot, update booking (preserve status), publish_booking_rescheduled for detailer subscriber.
+- reschedule_booking / reschedule_intent: Validate slot; free reschedule if >=12h before start.
+  Within 12h the app must use create_reschedule_fee_payment_sheet + webhook (see payment view).
 
 See docs/BOOKING_FLOW.md for the full booking and payment flow.
 """
+from main.services.NotificationServices import NotificationService
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
-from main.models import BookedAppointment, BookedAppointmentImage, ServiceType, ValetType, AddOns, Address, DetailerProfile, Vehicle, Promotions, PaymentTransaction, RefundRecord, User, LoyaltyProgram, Branch, ReferralAttribution, Partner
+from main.models import BookedAppointment, BookedAppointmentImage, ServiceType, ValetType, AddOns, Address, DetailerProfile, Vehicle, Promotions, PaymentTransaction, RefundRecord, User, Branch, Partner
+from main.utils.booking_quote import (
+    build_quick_sparkle_entitlements,
+    quote_booking_for_user,
+    validate_complimentary_choice,
+    validate_booking_financials,
+    consume_complimentary_quick_sparkle,
+    is_quick_sparkle_service_name,
+)
 import uuid
 import stripe
 import requests
@@ -49,6 +59,7 @@ class EventsView(APIView):
         'check_free_wash' : 'check_free_wash',
         'get_payment_methods' : 'get_payment_methods',
         'delete_payment_method' : 'delete_payment_method',
+        'quote_booking' : 'quote_booking',
     }
     
     def get(self, request, *args, **kwargs):
@@ -213,7 +224,7 @@ class EventsView(APIView):
         """
         Cancel a booking by booking_reference. User must own the booking.
 
-        Refund: >12h until appointment = full refund; 6–12h = 50%; <6h = no refund.
+        Refund: >24h until start = full; 12–24h = 50%; ≤12h (including past start) = no refund.
         Updates status to cancelled, publishes to Redis (publish_booking_cancelled), processes
         Stripe refund when applicable, sends push notification.
         """
@@ -268,13 +279,12 @@ class EventsView(APIView):
                 return Response({'error': 'Invalid appointment data'}, 
                               status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             
-            # Tiered refund: >12h full, 6-12h half, <6h none
-            if hours_until_appointment <= 6:
+            # Tiered refund: >24h full, 12-24h half, <=12h none (includes already-started / past start)
+            if hours_until_appointment <= 12:
                 refund_tier = 'none'
                 refund_amount = 0
-            elif hours_until_appointment <= 12:
+            elif hours_until_appointment >12 and hours_until_appointment <= 24:
                 refund_tier = 'half'
-                # Will set refund_amount after we have original_transaction
                 refund_amount = None  # computed in refund block
             else:
                 refund_tier = 'full'
@@ -316,7 +326,7 @@ class EventsView(APIView):
                             refund_amount = float(original_transaction.amount) * 0.5
                         refund_data['amount'] = refund_amount
                         if refund_amount > 0:
-                            logger.info(f"Processing refund for booking {booking_reference}, amount: {refund_amount} ({refund_tier})")
+                            # Call the _process_refund method to process the refund
                             refund_result = self._process_refund(booking, amount=refund_amount)
                             refund_data.update(refund_result)
                             logger.info(f"Refund processing result: {refund_result}")
@@ -336,41 +346,38 @@ class EventsView(APIView):
                     
                     # Send push notification for refunded cancellation
                     try:
-                        send_push_notification.delay(
-                            request.user.id,
-                            "Booking Cancelled - Refund Processed!",
-                            f"Your valet service has been cancelled for {booking.appointment_date} at {booking.start_time}. You will be refunded within 3-5 business days.",
-                            "booking_cancelled_refunded"
-                        )
+                        NotificationService().send_booking_cancelled(request.user, booking, message)
                         logger.info("Sent refund notification")
                     except Exception as e:
                         logger.error(f"Error sending refund notification: {str(e)}")
                 elif refund_tier == 'half':
                     message += f"\n\n50% refund was available but could not be processed. Please contact support."
                     try:
-                        send_push_notification.delay(
-                            request.user.id,
-                            "Booking Cancelled",
-                            f"Your valet service has been cancelled for {booking.appointment_date} at {booking.start_time}. Refund issue - please contact support.",
-                            "booking_cancelled_no_refund"
-                        )
+                        NotificationService().send_booking_cancelled(request.user, booking, message)
                     except Exception as e:
                         logger.error(f"Error sending push notification: {str(e)}")
                 else:
                     if refund_tier == 'none':
-                        message += f"\n\nNo refund available - cancellation was within 6 hours of appointment start time."
+                        if hours_until_appointment <= 0:
+                            message += (
+                                "\n\nNo refund available — the appointment start time has already passed."
+                            )
+                        else:
+                            message += (
+                                "\n\nNo refund available — cancellations within 12 hours of the "
+                                "start time are non-refundable."
+                            )
                     else:
-                        message += f"\n\nNo refund available - cancellation was within 12 hours of appointment start time."
-                    
-                    # Send push notification for non-refunded cancellation
-                    try:
-                        send_push_notification.delay(
-                            request.user.id,
-                            "Booking Cancelled",
-                            f"Your valet service has been cancelled for {booking.appointment_date} at {booking.start_time}. No refund available due to late cancellation.",
-                            "booking_cancelled_no_refund"
+                        message += (
+                            "\n\nNo refund available — please contact support if this looks wrong."
                         )
-                        logger.info("Sent no-refund notification")
+                    
+                    # Non-refunded / no-refund cancellation — same channel as refund path (push + email + in-app)
+                    try:
+                        NotificationService().send_booking_cancelled(
+                            request.user, booking, message
+                        )
+                        logger.info("Sent cancellation notification (no refund path)")
                     except Exception as e:
                         logger.error(f"Error sending no-refund notification: {str(e)}")
                 
@@ -655,7 +662,8 @@ class EventsView(APIView):
             except Exception:
                 hours_until = 24
             requires_fee = hours_until < 12
-            fee_amount_cents = 1000 if requires_fee else 0
+            fee_cents = int(getattr(settings, 'RESCHEDULE_FEE_CENTS', 1000))
+            fee_amount_cents = fee_cents if requires_fee else 0
             valid, err_msg = self._validate_reschedule_slot(booking, new_date, new_time)
             if not valid:
                 return Response(
@@ -701,6 +709,35 @@ class EventsView(APIView):
                     {'error': 'This booking cannot be rescheduled'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
+            if booking.bulk_order_id:
+                return Response(
+                    {'error': 'Bulk bookings must be rescheduled using the fleet flow.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            now = timezone.now()
+            try:
+                _apt_dt = timezone.datetime.combine(
+                    booking.appointment_date,
+                    booking.start_time or datetime.min.time(),
+                )
+                _apt_dt = timezone.make_aware(_apt_dt)
+                hours_until_reschedule = (_apt_dt - now).total_seconds() / 3600
+            except Exception:
+                hours_until_reschedule = 999.0
+            if hours_until_reschedule < 12:
+                fee_cents = int(getattr(settings, 'RESCHEDULE_FEE_CENTS', 1000))
+                return Response(
+                    {
+                        'error': (
+                            'This reschedule requires a late reschedule fee. '
+                            'Complete payment in the app; your booking will update automatically when payment succeeds.'
+                        ),
+                        'code': 'RESCHEDULE_FEE_REQUIRED',
+                        'requires_fee': True,
+                        'fee_amount_cents': fee_cents,
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             valid, err_msg = self._validate_reschedule_slot(booking, new_date, new_time)
             if not valid:
                 return Response(
@@ -721,12 +758,10 @@ class EventsView(APIView):
                 booking.start_time,
                 booking.total_amount
             )
-            send_push_notification.delay(
-                request.user.id,
-                "Booking Rescheduled!",
-                f"Your valet service has been rescheduled for {booking.appointment_date} at {booking.start_time}",
-                "booking_rescheduled"
-            )
+            try:
+                NotificationService().send_booking_rescheduled(request.user, booking)
+            except Exception as e:
+                logger.error(f"Error sending reschedule notification: {str(e)}")
             vehicle_name = f"{booking.vehicle.make} {booking.vehicle.model}" if booking.vehicle else "your vehicle"
             return Response(
                 {'message': f'You have rescheduled your booking for {vehicle_name} on {booking.appointment_date}'},
@@ -842,35 +877,32 @@ class EventsView(APIView):
             except Exception as e:
                 logger.error(f"Error converting start time: {str(e)}")
                 raise e
-            
-            # Check if free Quick Sparkle should be applied (loyalty or partner referral)
-            applied_free_wash = booking_data.get('applied_free_quick_sparkle', False)
-            if applied_free_wash and service_type.name == 'The Quick Sparkle':
-                loyalty_used = False
-                try:
-                    loyalty = LoyaltyProgram.objects.get(user=request.user)
-                    if loyalty.can_use_free_quick_sparkle():
-                        loyalty.use_free_quick_sparkle()
-                        loyalty_used = True
-                        logger.info(f"Free Quick Sparkle applied for user {request.user.id} (loyalty)")
-                    else:
-                        logger.warning(f"User {request.user.id} tried to use free wash but limit reached")
-                except LoyaltyProgram.DoesNotExist:
-                    pass
 
-                if not loyalty_used:
-                    try:
-                        attr = ReferralAttribution.objects.get(
-                            referred_user=request.user, source='partner'
-                        )
-                        if not attr.partner_free_wash_used and (
-                            attr.expires_at is None or attr.expires_at > timezone.now()
-                        ):
-                            attr.partner_free_wash_used = True
-                            attr.save()
-                            logger.info(f"Free Quick Sparkle applied for user {request.user.id} (partner referral)")
-                    except ReferralAttribution.DoesNotExist:
-                        pass
+            booking_data_clean = booking_data if isinstance(booking_data, dict) else {}
+            err_cq = validate_complimentary_choice(request.user, booking_data_clean)
+            if err_cq:
+                return Response({'error': err_cq}, status=status.HTTP_400_BAD_REQUEST)
+            err_fin = validate_booking_financials(request.user, booking_data_clean)
+            if err_fin:
+                return Response({'error': err_fin}, status=status.HTTP_400_BAD_REQUEST)
+
+            applied_free_wash = bool(booking_data.get('applied_free_quick_sparkle', False))
+            complimentary_source_booking = booking_data.get('complimentary_quick_sparkle_source')
+            consumed_tag = ''
+            if applied_free_wash and is_quick_sparkle_service_name(service_type.name):
+                ok_c, consumed_tag = consume_complimentary_quick_sparkle(request.user, booking_data)
+                if not ok_c:
+                    return Response(
+                        {'error': 'Complimentary Quick Sparkle could not be applied for this booking.'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+            resolved_source = None
+            if applied_free_wash and is_quick_sparkle_service_name(service_type.name):
+                if complimentary_source_booking in ('loyalty', 'subscription', 'partner'):
+                    resolved_source = complimentary_source_booking
+                elif consumed_tag in ('loyalty', 'subscription', 'partner'):
+                    resolved_source = consumed_tag
             
             # Create the booking in the database without detailer
             try:
@@ -918,7 +950,9 @@ class EventsView(APIView):
                     duration = booking_data.get('duration'),
                     special_instructions = booking_data.get('special_instructions'),
                     booking_reference = booking_data.get('booking_reference'),
-                    is_express_service = is_express_service
+                    is_express_service = is_express_service,
+                    applied_free_quick_sparkle=applied_free_wash,
+                    complimentary_quick_sparkle_source=resolved_source,
                 )
                 logger.info(f"BookedAppointment created successfully: {appointment.id}")
                 logger.info(f"Booking reference: {appointment.booking_reference}")
@@ -990,58 +1024,76 @@ class EventsView(APIView):
         
 
 
+        
+    def quote_booking(self, request):
+        """POST: Server-priced quote and Quick Sparkle entitlements from a cart snapshot."""
+        body = request.data or {}
+        try:
+            sid = body.get('service_type_id')
+            if not sid:
+                return Response({'error': 'service_type_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+            service = ServiceType.objects.get(id=sid)
+        except ServiceType.DoesNotExist:
+            return Response({'error': 'Invalid service_type_id'}, status=status.HTTP_400_BAD_REQUEST)
+
+        addon_ids = body.get('addon_ids')
+        if addon_ids is None:
+            addon_ids = []
+        if not isinstance(addon_ids, (list, tuple)):
+            return Response({'error': 'addon_ids must be an array'}, status=status.HTTP_400_BAD_REQUEST)
+        addons = list(AddOns.objects.filter(id__in=list(addon_ids)))
+        is_suv = bool(body.get('is_suv'))
+        is_express = bool(body.get('is_express'))
+        apply_partner_booking_discount = bool(body.get('apply_partner_booking_discount'))
+
+        payload = quote_booking_for_user(
+            request.user,
+            service=service,
+            addons=addons,
+            is_suv=is_suv,
+            is_express=is_express,
+            apply_partner_booking_discount=apply_partner_booking_discount,
+        )
+        return Response(payload, status=status.HTTP_200_OK)
 
     def check_free_wash(self, request):
         """
-        Check if user can use a free Quick Sparkle: loyalty (Platinum) or partner referral.
-        Returns can_use_free_wash, remaining_quick_sparkles, total_monthly_limit, resets_in_days,
-        free_wash_source (loyalty|partner), partner_free_wash.
+        Check complimentary Quick Sparkle eligibility: loyalty (Platinum), partner referral,
+        or B2C subscription allowance. Uses read-only loyalty peek (does not mutate reset dates).
         """
         try:
-            from datetime import timedelta
+            qs = build_quick_sparkle_entitlements(request.user, eligibility_only=True)
+            can_use = (
+                qs["eligible_loyalty"]
+                or qs["eligible_partner"]
+                or qs["eligible_subscription"]
+            )
+            if qs["eligible_loyalty"]:
+                free_wash_source = "loyalty"
+            elif qs["eligible_partner"]:
+                free_wash_source = "partner"
+            elif qs["eligible_subscription"]:
+                free_wash_source = "subscription"
+            else:
+                free_wash_source = None
 
-            user = request.user
-            can_use_loyalty = False
-            remaining_quick_sparkles = 0
-            total_monthly_limit = 0
-            days_until_reset = 30
-
-            try:
-                loyalty = LoyaltyProgram.objects.get(user=user)
-                can_use_loyalty = loyalty.can_use_free_quick_sparkle()
-                remaining_quick_sparkles = loyalty.get_remaining_free_quick_sparkles()
-                total_monthly_limit = loyalty.get_free_wash_limit()
-                if loyalty.free_quick_sparkle_reset_date:
-                    reset_date = loyalty.free_quick_sparkle_reset_date + timedelta(days=30)
-                    days_until_reset = (reset_date - timezone.now().date()).days
-            except LoyaltyProgram.DoesNotExist:
-                pass
-
-            can_use_partner = False
-            try:
-                attr = ReferralAttribution.objects.get(referred_user=user, source='partner')
-                if not attr.partner_free_wash_used and (attr.expires_at is None or attr.expires_at > timezone.now()):
-                    can_use_partner = True
-            except ReferralAttribution.DoesNotExist:
-                pass
-
-            can_use = can_use_loyalty or can_use_partner
-            free_wash_source = 'loyalty' if can_use_loyalty else ('partner' if can_use_partner else None)
-            partner_free_wash = can_use_partner
-
-            return Response({
-                'can_use_free_wash': can_use,
-                'remaining_quick_sparkles': remaining_quick_sparkles,
-                'total_monthly_limit': total_monthly_limit,
-                'resets_in_days': days_until_reset,
-                'free_wash_source': free_wash_source,
-                'partner_free_wash': partner_free_wash,
-            }, status=status.HTTP_200_OK)
-
+            body = {
+                "can_use_free_wash": can_use,
+                "remaining_quick_sparkles": qs.get("remaining_loyalty") or 0,
+                "total_monthly_limit": qs.get("total_monthly_limit") or 0,
+                "resets_in_days": qs.get("resets_in_days") or 30,
+                "free_wash_source": free_wash_source,
+                "partner_free_wash": qs.get("partner_free_wash"),
+                "eligible_loyalty": qs["eligible_loyalty"],
+                "eligible_partner": qs["eligible_partner"],
+                "eligible_subscription": qs["eligible_subscription"],
+                "remaining_subscription": qs.get("remaining_subscription") or 0,
+                "max_subscription": qs.get("max_subscription") or 0,
+                "subscription_period_label": qs.get("period_label") or "",
+            }
+            return Response(body, status=status.HTTP_200_OK)
         except Exception as e:
-            return Response({
-                'error': str(e)
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def get_payment_methods(self, request):
         """

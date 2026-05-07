@@ -11,6 +11,7 @@ import { useAuthContext } from "../contexts/AuthContextProvider";
 import StyledText from "../components/helpers/StyledText";
 import StyledTextInput from "../components/helpers/StyledTextInput";
 import StyledButton from "../components/helpers/StyledButton";
+import SquareCheckbox from "../components/helpers/SquareCheckbox";
 import { useThemeColor } from "@/hooks/useThemeColor";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
@@ -34,6 +35,7 @@ const SigninScreen = () => {
   const borderColor = useThemeColor({}, "borders");
   const primaryColor = useThemeColor({}, "primary");
   const cardColor = useThemeColor({}, "cards");
+  const iconColor = useThemeColor({}, "icons");
 
   /**
    * Handle the sign-in process
@@ -87,7 +89,7 @@ const SigninScreen = () => {
    * Navigate to sign up screen
    */
   const handleSignUp = () => {
-    router.push("/onboarding/OnboardingScreen");
+    router.push("/onboarding/" as any);
   };
 
   return (
@@ -140,7 +142,7 @@ const SigninScreen = () => {
               <Ionicons
                 name={showPassword ? "eye-off" : "eye"}
                 size={20}
-                color={"black"}
+                color={iconColor}
               />
             </TouchableOpacity>
           </View>
@@ -151,11 +153,14 @@ const SigninScreen = () => {
               style={styles.rememberMeContainer}
               onPress={() => setRememberMe(!rememberMe)}
             >
-              <View style={[styles.checkbox, { borderColor }]}>
-                {rememberMe && (
-                  <Ionicons name="checkmark" size={16} color={textColor} />
-                )}
-              </View>
+              <SquareCheckbox
+                checked={rememberMe}
+                borderColor={borderColor}
+                mode="outline"
+                checkColor={textColor}
+                size="medium"
+                style={styles.rememberMeCheckboxOffset}
+              />
               <StyledText
                 variant="bodyMedium"
                 style={[styles.rememberMeText, { color: textColor }]}
@@ -259,8 +264,8 @@ const styles = StyleSheet.create({
   },
   eyeIcon: {
     position: "absolute",
-    right: 10,
-    top: 25,
+    right: 12,
+    top: 28,
     padding: 8,
   },
   optionsRow: {
@@ -273,14 +278,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
   },
-  checkbox: {
-    width: 20,
-    height: 20,
-    borderWidth: 2,
-    borderRadius: 4,
+  rememberMeCheckboxOffset: {
     marginRight: 8,
-    alignItems: "center",
-    justifyContent: "center",
   },
   rememberMeText: {
     fontSize: 14,

@@ -12,9 +12,35 @@ const getConfig = () => {
 
 const config = getConfig();
 
-// Stripe Configuration
+/** Baked at build time via app.config.js (EXPO_PUBLIC_APP_ENV) + eas.json per profile. */
+export const APP_ENV =
+  (config.appEnv as string | undefined) ||
+  (typeof process !== "undefined" &&
+    (process as { env?: { EXPO_PUBLIC_APP_ENV?: string } }).env
+      ?.EXPO_PUBLIC_APP_ENV) ||
+  "development";
+
+/**
+ * Stripe publishable key: live pk only when APP_ENV is `production` (store / prod EAS builds).
+ * Otherwise test pk (local dev, preview, staging profiles).
+ */
+/* export function getStripePublishableKey(): string | undefined {
+  const stripe = config.stripe as
+    | { publishableKey?: string; productionPublishableKey?: string }
+    | undefined;
+  if (!stripe) return undefined;
+  if (APP_ENV === "production") {
+    return stripe.productionPublishableKey || stripe.publishableKey;
+  }
+  return stripe.publishableKey;
+} */
+
+export const STRIPE_PUBLISHABLE_KEY = config.stripe?.publishableKey;
+
+// Stripe Configuration (raw keys; prefer STRIPE_PUBLISHABLE_KEY / getStripePublishableKey in UI)
 export const STRIPE_CONFIG = {
   publishableKey: config.stripe?.publishableKey,
+  productionPublishableKey: config.stripe?.productionPublishableKey,
 };
 
 // API Configuration with fallbacks for testing

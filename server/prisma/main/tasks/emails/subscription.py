@@ -13,10 +13,11 @@ def send_subscription_renewal_reminder_email(
     renewal_date_iso,
     amount_due,
     currency,
+    hosted_invoice_url=None,
 ):
     """
     Sent when Stripe emits invoice.upcoming for a fleet subscription — backup if Stripe
-    customer invoice emails are disabled.
+    customer invoice emails are disabled. Optional Stripe hosted invoice URL when available.
     """
     try:
         if isinstance(renewal_date_iso, str):
@@ -31,6 +32,7 @@ def send_subscription_renewal_reminder_email(
             'renewal_date': renewal_dt.strftime('%B %d, %Y') if renewal_dt else 'your next billing date',
             'amount_due': amount_due,
             'currency': (currency or 'EUR').upper(),
+            'hosted_invoice_url': hosted_invoice_url,
         })
 
         graph_send_mail(subject, html_message, user_email)

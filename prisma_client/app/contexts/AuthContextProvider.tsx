@@ -152,7 +152,19 @@ const AuthContextProvider = ({ children }: { children: React.ReactNode }) => {
         console.error("Invalid response structure:", response);
       }
     } catch (error) {
-      console.error("Error during login:", error);
+      let status = (error as any).status;
+      if (status === 401) {
+        setAlertConfig({
+          title: "Login Failed",
+          message: "One of your credential is incorrect. Confirm your email and password again.\nIf you have forgotten your password, please reset it.",
+          type: "error",
+          isVisible: true,
+          onConfirm: () => {
+            setIsVisible(false);
+          },
+        });
+        return;
+      }
     }
   };
 

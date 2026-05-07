@@ -143,7 +143,6 @@ export interface BranchVehiclesResponse {
     color: string;
     registration_number: string;
     country: string;
-    vin: string;
     current_owner: string | null;
     branch_id: string;
     branch_name: string;

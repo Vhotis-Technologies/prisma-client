@@ -46,15 +46,6 @@ const HistoryScreen = () => {
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [selectedBooking, setSelectedBooking] =
     useState<RecentServicesProps | null>(null);
-
-  /* Get the currency symbol by getting the user's country */
-  let currencySymbol = "$";
-  if (user?.address?.country === "United Kingdom") {
-    currencySymbol = "£";
-  } else if (user?.address?.country === "Ireland") {
-    currencySymbol = "€";
-  }
-
   /**
    * Handle pull-to-refresh functionality
    */
@@ -109,18 +100,16 @@ const HistoryScreen = () => {
   }, [serviceHistory]);
 
   /**
-   * Match item against search query (reg, VIN, amount spent, reference id)
+   * Match item against search query (registration, amount spent, reference id)
    */
   const itemMatchesSearch = useCallback((item: any, query: string) => {
     if (!query.trim()) return true;
     const q = query.trim().toLowerCase();
     const reg = (item.vehicle_reg ?? "").toLowerCase();
-    const vin = (item.vin ?? "").toLowerCase();
     const amount = String(item.total_amount ?? "");
     const reference = (item.booking_reference ?? item.id ?? "").toLowerCase();
     return (
       reg.includes(q) ||
-      vin.includes(q) ||
       amount.includes(q) ||
       reference.includes(q)
     );
@@ -369,7 +358,7 @@ const HistoryScreen = () => {
               variant="bodyMedium"
               style={[styles.emptyStateDescription, { color: textColor }]}
             >
-              No bookings match "{searchQuery.trim()}". Try reg, VIN, amount or reference.
+              No bookings match "{searchQuery.trim()}". Try registration, amount or reference.
             </StyledText>
           </View>
         </View>
@@ -389,7 +378,7 @@ const HistoryScreen = () => {
             <Ionicons name="search" size={20} color={iconColor} style={styles.searchIcon} />
             <View style={styles.searchInputContainer}>
               <StyledTextInput
-                placeholder="Search by reg, VIN, amount or reference..."
+                placeholder="Search by registration, amount or reference..."
                 value={searchQuery}
                 onChangeText={setSearchQuery}
                 style={styles.searchInput}
@@ -438,7 +427,6 @@ const HistoryScreen = () => {
         }}
         component={
           <ReviewComponent
-            currencySymbol={currencySymbol}
             bookingData={selectedBooking || undefined}
             onReviewSubmitted={handleReviewSubmitted}
           />

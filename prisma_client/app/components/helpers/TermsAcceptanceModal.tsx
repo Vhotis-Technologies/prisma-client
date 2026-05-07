@@ -10,6 +10,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { WebView } from "react-native-webview";
 import StyledText from "./StyledText";
+import SquareCheckbox from "./SquareCheckbox";
 import { useGetTermsAndConditionsQuery } from "@/app/store/api/authApi";
 import { ActivityIndicator } from "react-native-paper";
 
@@ -138,16 +139,14 @@ const TermsAcceptanceModal: React.FC<TermsAcceptanceModalProps> = ({
                     onPress={() => setAgreeTerms((v) => !v)}
                     activeOpacity={0.7}
                   >
-                    <View
-                      style={[
-                        styles.checkbox,
-                        agreeTerms && styles.checkboxChecked,
-                      ]}
-                    >
-                      {agreeTerms && (
-                        <Ionicons name="checkmark" size={16} color={PRIMARY_BLUE} />
-                      )}
-                    </View>
+                    <SquareCheckbox
+                      checked={agreeTerms}
+                      borderColor={TEXT_MUTED}
+                      checkedBackgroundColor={PRIMARY_BLUE}
+                      checkColor="#FFFFFF"
+                      size="default"
+                      style={styles.checkboxLeading}
+                    />
                     <StyledText style={styles.checkboxLabel}>
                       I agree with the{" "}
                       <StyledText style={styles.checkboxLabelBold}>
@@ -161,16 +160,14 @@ const TermsAcceptanceModal: React.FC<TermsAcceptanceModalProps> = ({
                     onPress={() => setAgreePrivacy((v) => !v)}
                     activeOpacity={0.7}
                   >
-                    <View
-                      style={[
-                        styles.checkbox,
-                        agreePrivacy && styles.checkboxChecked,
-                      ]}
-                    >
-                      {agreePrivacy && (
-                        <Ionicons name="checkmark" size={16} color={PRIMARY_BLUE} />
-                      )}
-                    </View>
+                    <SquareCheckbox
+                      checked={agreePrivacy}
+                      borderColor={TEXT_MUTED}
+                      checkedBackgroundColor={PRIMARY_BLUE}
+                      checkColor="#FFFFFF"
+                      size="default"
+                      style={styles.checkboxLeading}
+                    />
                     <StyledText style={styles.checkboxLabel}>
                       I agree with the{" "}
                       <StyledText style={styles.checkboxLabelBold}>
@@ -322,19 +319,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 14,
   },
-  checkbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: TEXT_MUTED,
+  checkboxLeading: {
     marginRight: 12,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  checkboxChecked: {
-    backgroundColor: "#E8EFF5",
-    borderColor: "#9E9E9E",
   },
   checkboxLabel: {
     flex: 1,

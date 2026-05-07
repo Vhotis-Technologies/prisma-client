@@ -34,6 +34,18 @@ export interface AddOnsProps {
   extra_duration: number;
 }
 
+/** Server-aligned price breakdown for booking summary (amounts VAT-inclusive until ex-VAT subtotal elsewhere). */
+export interface BookingPriceSummaryBreakdown {
+  stickerSubtotalIncVat: number;
+  loyaltyDiscountIncVat: number;
+  promotionDiscountIncVat: number;
+  partnerReferralDiscountIncVat: number;
+  complimentaryStickerSavingsIncVat: number;
+  totalIncVat: number;
+  loyaltyDiscountPercent?: number;
+  partnerReferralDiscountPercent?: number;
+}
+
 export interface BookingScreenProps {
   vehicle?: MyVehiclesProps;
   service_type: ServiceTypeProps;
@@ -60,6 +72,7 @@ export interface BookedAppointmentProps {
   duration?: number;
   special_instructions?: string;
   applied_free_quick_sparkle?: boolean;
+  apply_partner_booking_discount?: boolean;
 }
 export default interface BookingState {
   selected_service_type: ServiceTypeProps | null;

@@ -1,0 +1,36 @@
+{% extends "base_email.html" %}
+{% block title %}Payment failed — Prisma subscription{% endblock %}
+{% block content %}
+<div class="greeting">Hi {{ user_name }},</div>
+
+<div class="intro-text">
+  We were <strong>unable to charge</strong> your card for <strong>{{ plan_name }}</strong>. Your subscription may be interrupted if this is not resolved.
+</div>
+
+<div class="details-card">
+  <div class="details-title">What happened</div>
+  <div class="details-grid">
+    <div class="detail-row">
+      <div class="detail-item detail-label">Amount due</div>
+      <div class="detail-item detail-value"><strong>{{ currency }} {{ failed_amount }}</strong></div>
+    </div>
+    <div class="detail-row">
+      <div class="detail-item detail-label">Next retry</div>
+      <div class="detail-item detail-value">{{ retry_date }}</div>
+    </div>
+    <div class="detail-row">
+      <div class="detail-item detail-label">Grace reminder</div>
+      <div class="detail-item detail-value">{{ grace_period_until }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="intro-text">
+  Update your payment method in the Prisma app under <strong>Settings → Subscription</strong>.
+</div>
+
+<div class="contact-box">
+  <div class="contact-title">Need help?</div>
+  <div class="contact-text">Reply to this email or contact support from the app if you believe this charge is wrong.</div>
+</div>
+{% endblock %}

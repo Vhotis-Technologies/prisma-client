@@ -1,0 +1,39 @@
+{% extends "base_email.html" %}
+{% block title %}Upcoming subscription charge — Prisma{% endblock %}
+{% block content %}
+<div class="greeting">Hi {{ user_name }},</div>
+
+<div class="intro-text">
+  This is a friendly heads-up: your <strong>{{ plan_name }}</strong> membership has a charge coming up. We send this from Prisma so you are never surprised, even if Stripe invoice emails are disabled.
+</div>
+
+<div class="details-card">
+  <div class="details-title">Upcoming charge</div>
+  <div class="details-grid">
+    <div class="detail-row">
+      <div class="detail-item detail-label">Plan</div>
+      <div class="detail-item detail-value">{{ plan_name }}</div>
+    </div>
+    <div class="detail-row">
+      <div class="detail-item detail-label">Expected date</div>
+      <div class="detail-item detail-value">{{ renewal_date }}</div>
+    </div>
+    <div class="detail-row">
+      <div class="detail-item detail-label">Estimated amount</div>
+      <div class="detail-item detail-value"><strong>{{ currency }} {{ amount_due }}</strong></div>
+    </div>
+  </div>
+</div>
+
+{% if hosted_invoice_url %}
+<div class="intro-text">
+  <a href="{{ hosted_invoice_url }}" style="color: #2563eb; font-weight: 600;">Pay invoice (Stripe)</a>
+</div>
+{% endif %}
+
+<div class="reminders-box">
+  <div class="contact-text">
+    If your card is current, you do not need to do anything. To update your payment method, open the app, tap the setting icon, then tap <strong> Manage Subscription</strong>.
+  </div>
+</div>
+{% endblock %}

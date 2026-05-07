@@ -1,0 +1,14 @@
+{% extends "base_email.html" %}
+{% block title %}Payment method updated — Prisma{% endblock %}
+{% block content %}
+<div class="greeting">Hi {{ user_name }},</div>
+
+<div class="intro-text">
+  Your default card for Prisma Car Care subscriptions has been <strong>updated successfully</strong>. Future renewals will use this payment method unless you change it again.
+</div>
+
+<div class="closing">
+  <div class="closing-text">If you did not make this change, reset your password and contact support immediately.</div>
+  <div class="signature"><span class="signature-name">Prisma Car Care</span></div>
+</div>
+{% endblock %}

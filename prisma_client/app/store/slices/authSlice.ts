@@ -1,8 +1,8 @@
 /**
  * Auth slice: user, tokens, isAuthenticated, signUpData. Reducers for login, logout, setCredentials, etc.
  */
-import { createSlice } from "@reduxjs/toolkit";
-import AuthState, { SignUpScreenProps } from "@/app/interfaces/AuthInterface";
+import { createSlice, PayloadAction } from "@reduxjs/toolkit";
+import AuthState, { SignUpAccountType } from "@/app/interfaces/AuthInterface";
 
 const initialState: AuthState = {
   user: null,
@@ -70,6 +70,35 @@ const authSlice = createSlice({
     },
 
     /**
+     * Set onboarding account persona and sync legacy flags for the register API.
+     */
+    setSignUpAccountType: (state, action: PayloadAction<SignUpAccountType>) => {
+      if (!state.signUpData) {
+        state.signUpData = { name: "", email: "", phone: "", password: "" };
+      }
+      const t = action.payload;
+      state.signUpData.signUpAccountType = t;
+      state.signUpData.isFleetOwner = t === "fleet_operator";
+      state.signUpData.isDealership = t === "dealership";
+      if (t === "b2c") {
+        state.signUpData.business_name = undefined;
+        state.signUpData.business_address = undefined;
+      }
+    },
+
+    /**
+     * Clear account-type selection and business fields; keeps name/email/etc. when user taps Change.
+     */
+    clearSignUpAccountSelection: (state) => {
+      if (!state.signUpData) return;
+      state.signUpData.signUpAccountType = undefined;
+      state.signUpData.isFleetOwner = false;
+      state.signUpData.isDealership = false;
+      state.signUpData.business_name = undefined;
+      state.signUpData.business_address = undefined;
+    },
+
+    /**
      * Update specific user data fields in the state
      * @param state - The current state of the auth slice
      * @param action - The action payload containing the field and value to update
@@ -89,6 +118,8 @@ export const {
   setIsAuthenticated,
   setSignUpData,
   clearSignUpData,
+  setSignUpAccountType,
+  clearSignUpAccountSelection,
   logout,
   setAccessToken,
   setRefreshToken,

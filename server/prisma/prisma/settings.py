@@ -7,9 +7,8 @@ import dj_database_url
 from celery.schedules import crontab
 from google.oauth2 import service_account
 
-
-
-
+# Env names
+CAR_REG_USERNAME = os.getenv("CAR_REG_USERNAME", "vhotis").strip() or None
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -24,22 +23,57 @@ BASE_URL = os.getenv('BASE_URL')
 
 
 # Production: client.prismavalet.com on droplet. Override via env for local/dev.
-_CLIENT_ORIGIN = os.getenv('CLIENT_ORIGIN', 'https://c620-2a02-8084-c80-ea80-3d81-12aa-43f9-717.ngrok-free.app')
+_CLIENT_ORIGIN = os.getenv('CLIENT_ORIGIN', 'https://450e-2a02-8084-c81-a480-c018-9c4e-4107-9d95.ngrok-free.app')
 # Base URL for email links (e.g. Privacy Policy, Terms). Defaults to client origin.
 FRONTEND_BASE_URL = os.getenv('FRONTEND_BASE_URL', _CLIENT_ORIGIN).rstrip('/')
+
+# Partner-referred users: optional % discount on bookings (separate from one-time complimentary wash).
+PARTNER_REFERRED_BOOKING_DISCOUNT_PERCENT = int(
+    os.getenv('PARTNER_REFERRED_BOOKING_DISCOUNT_PERCENT', '30').strip().split('.', 1)[0] or '30'
+)
 # Prismahome (landing site) often runs on localhost:3000; allow it for terms/privacy API calls.
 _DEFAULT_CORS_ORIGINS = [_CLIENT_ORIGIN, 'http://localhost:3000', 'http://127.0.0.1:3000']
 ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', _CLIENT_ORIGIN).split(',') if os.getenv('ALLOWED_ORIGINS') else [_CLIENT_ORIGIN]
 CSRF_TRUSTED_ORIGINS = os.getenv('CSRF_TRUSTED_ORIGINS', _CLIENT_ORIGIN).split(',') if os.getenv('CSRF_TRUSTED_ORIGINS') else [_CLIENT_ORIGIN]
-CORS_ALLOWED_ORIGINS = ['http://localhost:3000', 'http://127.0.0.1:3000', 'https://c620-2a02-8084-c80-ea80-3d81-12aa-43f9-717.ngrok-free.app']
+CORS_ALLOWED_ORIGINS = ['http://localhost:3000', 'http://127.0.0.1:3000', 'https://450e-2a02-8084-c81-a480-c018-9c4e-4107-9d95.ngrok-free.app']
 
 CORS_ALLOW_CREDENTIALS = True
-_allowed_hosts_env = os.getenv('ALLOWED_HOSTS')
-if _allowed_hosts_env:
-    ALLOWED_HOSTS = [h.strip() for h in _allowed_hosts_env.split(',') if h.strip()]
-else:
-    ALLOWED_HOSTS = ['*']
 
+
+def _build_allowed_hosts() -> list[str]:
+    raw = (os.getenv('ALLOWED_HOSTS') or '').strip()
+    hosts = [h.strip() for h in raw.split(',') if h.strip()] if raw else [
+        'localhost',
+        '127.0.0.1',
+        'client.prismavalet.com',
+        'client_staging_server',
+    ]
+    explicit_wildcard = '*' in hosts
+    if explicit_wildcard:
+        # Single-item wildcard supported by Django; never mix with hostname list.
+        return ['*']
+
+    seen: set[str] = set()
+    out: list[str] = []
+
+    def add(h: str) -> None:
+        key = h.lower()
+        if key not in seen:
+            seen.add(key)
+            out.append(h)
+
+    for h in hosts:
+        add(h)
+
+    # Rotating Ngrok tunnels: subdomain changes per session — allow any subdomain of these roots.
+    if IS_STAGING:
+        for suffix in ('.ngrok-free.app', '.ngrok.io', '.ngrok.app'):
+            add(suffix)
+
+    return out
+
+
+ALLOWED_HOSTS = _build_allowed_hosts()
 
 USE_X_FORWARDED_HOST = True
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
@@ -132,11 +166,22 @@ DATABASES = {
 
 # Staging: local media. Production: Google Cloud Storage (django-storages reads GS_* from settings).
 if IS_STAGING:
-    MEDIA_URL = '/media/'
-    MEDIA_ROOT = BASE_DIR / 'media'
+    GS_CREDENTIALS_PATH_STAGING = os.path.join(BASE_DIR, 'prisma-6fc48-642e49c334e8.json')
+    GS_BUCKET_NAME_STAGING = os.getenv('GS_BUCKET_NAME_STAGING', 'prisma_staging_bucket')
+    GS_LOCATION_STAGING = os.getenv('GS_LOCATION_STAGING', 'main-app')
+    GS_CREDENTIALS_STAGING = service_account.Credentials.from_service_account_file(
+        GS_CREDENTIALS_PATH_STAGING,
+        scopes=['https://www.googleapis.com/auth/cloud-platform'],
+    )
     STORAGES = {
         'default': {
-            'BACKEND': 'django.core.files.storage.FileSystemStorage',
+            'BACKEND': 'storages.backends.gcloud.GoogleCloudStorage',
+            'OPTIONS': {
+                'bucket_name': GS_BUCKET_NAME_STAGING,
+                'location': GS_LOCATION_STAGING,
+                'credentials': GS_CREDENTIALS_STAGING,
+                'default_acl': None,
+            },
         },
         'staticfiles': {
             'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage',
@@ -145,23 +190,26 @@ if IS_STAGING:
 else:
     GS_BUCKET_NAME = os.getenv('GS_BUCKET_NAME', 'prisma-valet-bucket')
     GS_LOCATION = os.getenv('GS_LOCATION', 'main-app')
-    GS_CREDENTIALS_PATH = os.getenv('GS_CREDENTIALS_PATH', '')
-    GS_CREDENTIALS = None
-    if GS_CREDENTIALS_PATH and Path(GS_CREDENTIALS_PATH).is_file():
-        GS_CREDENTIALS = service_account.Credentials.from_service_account_file(
-            GS_CREDENTIALS_PATH,
-            scopes=['https://www.googleapis.com/auth/cloud-platform'],
-        )
-    MEDIA_URL = f'https://storage.googleapis.com/{GS_BUCKET_NAME}/'
-    MEDIA_ROOT = BASE_DIR / 'media'
+    GS_CREDENTIALS_PATH = os.path.join(BASE_DIR, 'prisma-6fc48-642e49c334e8.json')
+    GS_CREDENTIALS = service_account.Credentials.from_service_account_file(
+        GS_CREDENTIALS_PATH,
+        scopes=['https://www.googleapis.com/auth/cloud-platform'],
+    )
     STORAGES = {
         'default': {
             'BACKEND': 'storages.backends.gcloud.GoogleCloudStorage',
+            'OPTIONS': {
+                'bucket_name': GS_BUCKET_NAME,
+                'location': GS_LOCATION,
+                'credentials': GS_CREDENTIALS,
+                'default_acl': None,
+            },
         },
         'staticfiles': {
             'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage',
         },
     }
+    MEDIA_URL = f'https://storage.googleapis.com/{GS_BUCKET_NAME}/{GS_LOCATION}/'
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
@@ -306,6 +354,10 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'main.tasks.check_loyalty_decay',
         'schedule': crontab(hour=3, minute=0)  # Run at 3:00 AM every day
     },
+    'send-b2c-subscription-expiry-reminders': {
+        'task': 'main.tasks.send_b2c_subscription_expiry_reminders',
+        'schedule': crontab(hour=7, minute=30),
+    },
 }
 
 AUTH_USER_MODEL = 'main.User'
@@ -333,11 +385,8 @@ ASGI_APPLICATION = 'prisma.asgi.application'
 # Stripe Configuration
 STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY')
 STRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET')
-
-# VIN Lookup Configuration
-from decimal import Decimal
-VIN_LOOKUP_PRICE = Decimal(os.getenv('VIN_LOOKUP_PRICE', '3.00'))
-VIN_LOOKUP_ACCESS_DURATION_HOURS = int(os.getenv('VIN_LOOKUP_ACCESS_DURATION_HOURS', '24'))
+# Late reschedule fee (minor units / “cents”, same as Stripe PaymentIntent.amount)
+RESCHEDULE_FEE_CENTS = int(os.getenv('RESCHEDULE_FEE_CENTS', '1000'))
 
 # Detailer app URL for server-to-server communication (client -> detailer booking API).
 # Set DETAILER_APP_URL to the detailer app's full base URL so the client can reach it without
@@ -347,6 +396,10 @@ DETAILER_APP_URL = os.getenv('DETAILER_APP_URL', '').strip() or None
 
 # Shared secret for support server -> client dashboard metrics (header X-Support-Internal-Key).
 SUPPORT_INTERNAL_API_KEY = (os.getenv('SUPPORT_INTERNAL_API_KEY') or '').strip()
+
+# Mobile app store URLs (winner voucher notification emails).
+APP_STORE_URL = (os.getenv('APP_STORE_URL') or 'https://example.com/dummy-app-store').strip()
+PLAY_STORE_URL = (os.getenv('PLAY_STORE_URL') or 'https://example.com/dummy-play-store').strip()
 
 # Logging Configuration
 LOGGING = {

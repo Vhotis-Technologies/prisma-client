@@ -1,0 +1,39 @@
+{% extends "base_email.html" %}
+{% block title %}Welcome to Prisma — subscription active{% endblock %}
+{% block content %}
+<div class="greeting">Hi {{ user_name }},</div>
+
+<div class="intro-text">
+  Thank you for joining <strong>{{ plan_name }}</strong>. Your subscription is <strong>active</strong> and your Prisma member benefits are unlocked.
+</div>
+
+<div class="details-card">
+  <div class="details-title">Billing summary</div>
+  <div class="details-grid">
+    <div class="detail-row">
+      <div class="detail-item detail-label">Plan</div>
+      <div class="detail-item detail-value">{{ plan_name }}</div>
+    </div>
+    <div class="detail-row">
+      <div class="detail-item detail-label">Amount charged</div>
+      <div class="detail-item detail-value"><strong>{{ currency }} {{ amount_paid }}</strong></div>
+    </div>
+    <div class="detail-row">
+      <div class="detail-item detail-label">Included through</div>
+      <div class="detail-item detail-value">{{ membership_valid_until }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="info-box">
+  <div class="contact-title">Manage your membership</div>
+  <div class="contact-text">
+    Go to <strong>Settings → Subscription</strong> in the Prisma app to view billing history and update your card.
+  </div>
+</div>
+
+<div class="closing">
+  <div class="closing-text">We are glad you are with us.</div>
+  <div class="signature"><span class="signature-name">Prisma Car Care</span></div>
+</div>
+{% endblock %}

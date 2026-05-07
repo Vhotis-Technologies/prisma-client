@@ -87,9 +87,9 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace 'com.giftezra.ifeanyi.prisma_client'
+    namespace 'com.prismavalet.client'
     defaultConfig {
-        applicationId 'com.giftezra.ifeanyi.prisma_client'
+        applicationId 'com.prismavalet.client'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

@@ -6,7 +6,7 @@ B2C, fleet, and partner customer data for the support app.
 **GET actions** (see ``get_action_handler``): segmented list, B2C/fleet/partner/branch/referral
 detail payloads shaped for the React Native screens.
 
-**PATCH actions**: fleet subscription lifecycle (terminate/renew), remove vehicle/branch,
+**PATCH actions**: fleet and B2C subscription lifecycle (terminate/renew), remove vehicle/branch,
 ``vehicle_transfer`` (approve/reject, same rules as web flow), with Stripe or model updates
 as implemented per handler.
 
@@ -29,6 +29,7 @@ from rest_framework.views import APIView
 
 from main.models import (
     Address,
+    B2CSubcription,
     BookedAppointment,
     Branch,
     Fleet,
@@ -109,7 +110,6 @@ def _serialize_vehicle(vehicle: Vehicle, last_service: str | None = None) -> dic
         "year": int(vehicle.year or 0),
         "registration_number": vehicle.registration_number or "",
         "color": vehicle.color or "",
-        "vin": vehicle.vin or "",
         "image_url": _vehicle_media_url(vehicle),
         "status": _vehicle_status_for_support(vehicle),
         "last_service_date": last_service or "",
@@ -262,7 +262,6 @@ def _vehicle_stats_payload_for_support(vehicle: Vehicle) -> dict:
             "registration_number": vehicle.registration_number,
             "licence": vehicle.registration_number,
             "country": vehicle.country,
-            "vin": vehicle.vin,
             "image": image_url,
             "owner_count": int(vehicle.owner_count or 0),
         },
@@ -288,6 +287,47 @@ def _support_subscription_status(db_status: str) -> str:
     if db_status in ("expired",):
         return "expired"
     return "active"
+
+
+def _latest_b2c_subscription(user: User) -> B2CSubcription | None:
+    # B2CSubcription has no created_at; start_date is the best proxy for "most recent" row.
+    return (
+        B2CSubcription.objects.filter(user=user)
+        .select_related("plan", "plan__tier")
+        .order_by("-start_date", "-id")
+        .first()
+    )
+
+
+def _serialize_b2c_subscription(sub: B2CSubcription | None) -> dict:
+    """Support payload shape matches :func:`_serialize_fleet_subscription` (no consumer trials in model)."""
+    if not sub:
+        return {
+            "subtype": "No plan",
+            "billing_type": "monthly",
+            "started_at": "",
+            "ends_at": "",
+            "is_trial": False,
+            "status": "expired",
+        }
+    plan = sub.plan
+    tier = plan.tier if plan else None
+    subtype = (tier.name if tier else "") or "Plan"
+    billing = (plan.billing_cycle if plan else "monthly") or "monthly"
+    if billing not in ("monthly", "yearly"):
+        billing = "monthly"
+    out_status = _support_subscription_status(sub.status)
+    terminated_at = _iso(sub.cancellation_date) if sub.cancellation_date else None
+    return {
+        "subtype": subtype,
+        "billing_type": billing,
+        "started_at": _iso(sub.start_date),
+        "ends_at": _iso(sub.end_date),
+        "is_trial": False,
+        "trial_ends_at": None,
+        "status": out_status,
+        "terminated_at": terminated_at if out_status == "terminated" else None,
+    }
 
 
 def _serialize_fleet_subscription(
@@ -356,6 +396,7 @@ def _serialize_b2c_list_item(user: User) -> dict:
     raw_tier = (loyalty.current_tier or "bronze") if loyalty else ""
     tier = raw_tier.title() if raw_tier else "Bronze"
     total_bookings, total_spend, _, _, _ = _b2c_booking_stats(user)
+    b2c_sub = _latest_b2c_subscription(user)
     return {
         "id": str(user.id),
         "type": "b2c",
@@ -367,6 +408,7 @@ def _serialize_b2c_list_item(user: User) -> dict:
         "loyalty_tier": tier,
         "total_spend": _float_or_0(total_spend),
         "total_bookings": total_bookings,
+        "subscription": _serialize_b2c_subscription(b2c_sub),
     }
 
 
@@ -725,6 +767,8 @@ class SupportCustomersView(APIView):
     patch_action_handler = {
         "terminate_fleet_subscription": "_patch_terminate_fleet_subscription",
         "renew_fleet_subscription": "_patch_renew_fleet_subscription",
+        "terminate_b2c_subscription": "_patch_terminate_b2c_subscription",
+        "renew_b2c_subscription": "_patch_renew_b2c_subscription",
         "remove_vehicle": "_patch_remove_vehicle",
         "remove_branch": "_patch_remove_branch",
         "vehicle_transfer": "_patch_vehicle_transfer",
@@ -900,6 +944,81 @@ class SupportCustomersView(APIView):
         )
         return Response(
             {"data": {"message": "Subscription renewed", "customer": _serialize_fleet_detail(fleet)}},
+            status=status.HTTP_200_OK,
+        )
+
+    def _patch_terminate_b2c_subscription(self, request, **kwargs):
+        uid = request.data.get("user_id")
+        reason = (request.data.get("reason") or "Support termination").strip()
+        if not uid:
+            return Response({"error": "user_id required"}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            user = User.objects.get(pk=uid)
+        except User.DoesNotExist:
+            return Response({"error": "Customer not found"}, status=status.HTTP_404_NOT_FOUND)
+        sub = (
+            B2CSubcription.objects.filter(user=user, status__in=["active", "pending", "past_due"])
+            .order_by("-start_date", "-id")
+            .first()
+        )
+        if not sub:
+            return Response({"error": "No active subscription"}, status=status.HTTP_400_BAD_REQUEST)
+        if sub.stripe_subscription_id and stripe.api_key:
+            try:
+                stripe.Subscription.delete(sub.stripe_subscription_id)
+            except Exception as exc:
+                logger.warning("Stripe B2C subscription delete failed: %s", exc)
+        sub.status = "cancelled"
+        sub.cancellation_date = timezone.now()
+        sub.cancellation_reason = reason[:500]
+        sub.auto_renew = False
+        sub.save()
+        return Response(
+            {
+                "data": {
+                    "message": "Subscription terminated",
+                    "customer": _serialize_b2c_detail(user),
+                }
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    def _patch_renew_b2c_subscription(self, request, **kwargs):
+        uid = request.data.get("user_id")
+        if not uid:
+            return Response({"error": "user_id required"}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            user = User.objects.get(pk=uid)
+        except User.DoesNotExist:
+            return Response({"error": "Customer not found"}, status=status.HTTP_404_NOT_FOUND)
+        sub = (
+            B2CSubcription.objects.filter(user=user)
+            .select_related("plan")
+            .order_by("-start_date", "-id")
+            .first()
+        )
+        if not sub or not sub.plan:
+            return Response({"error": "No subscription record"}, status=status.HTTP_400_BAD_REQUEST)
+        now = timezone.now()
+        cycle_months = 12 if sub.plan.billing_cycle == "yearly" else 1
+        sub.status = "active"
+        sub.cancellation_date = None
+        sub.cancellation_reason = None
+        sub.auto_renew = True
+        sub.start_date = now
+        sub.end_date = now + timedelta(days=30 * cycle_months)
+        sub.save(
+            update_fields=[
+                "status",
+                "cancellation_date",
+                "cancellation_reason",
+                "auto_renew",
+                "start_date",
+                "end_date",
+            ]
+        )
+        return Response(
+            {"data": {"message": "Subscription renewed", "customer": _serialize_b2c_detail(user)}},
             status=status.HTTP_200_OK,
         )
 

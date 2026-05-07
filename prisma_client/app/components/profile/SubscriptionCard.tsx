@@ -3,6 +3,8 @@ import { View, StyleSheet, Pressable, ActivityIndicator } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import StyledText from "../helpers/StyledText";
 import { useGetCurrentSubscriptionQuery } from "@/app/store/api/subscriptionApi";
+import { useGetB2cCurrentSubscriptionQuery } from "@/app/store/api/b2cSubscriptionApi";
+import { useAppSelector, RootState } from "@/app/store/main_store";
 import { useThemeColor } from "@/hooks/useThemeColor";
 
 interface SubscriptionCardProps {
@@ -12,18 +14,35 @@ interface SubscriptionCardProps {
 const SubscriptionCard: React.FC<SubscriptionCardProps> = ({
   onManageSubscription,
 }) => {
+  const isFleetOwner = useAppSelector(
+    (state: RootState) => state.auth.user?.is_fleet_owner === true,
+  );
+
+  const {
+    data: fleetResponse,
+    isLoading: fleetLoading,
+    error: fleetError,
+  } = useGetCurrentSubscriptionQuery(undefined, { skip: !isFleetOwner });
+
+  const {
+    data: b2cResponse,
+    isLoading: b2cLoading,
+    error: b2cError,
+  } = useGetB2cCurrentSubscriptionQuery(undefined, {
+    skip: isFleetOwner,
+  });
+
+  const response = isFleetOwner ? fleetResponse : b2cResponse;
+  const isLoading = isFleetOwner ? fleetLoading : b2cLoading;
+  const error = isFleetOwner ? fleetError : b2cError;
+
   const backgroundColor = useThemeColor({}, "background");
   const textColor = useThemeColor({}, "text");
   const borderColor = useThemeColor({}, "borders");
+  const tintColor = useThemeColor({}, "tint");
   const successColor = useThemeColor({}, "success");
   const errorColor = useThemeColor({}, "error");
   const warningColor = useThemeColor({}, "warning");
-
-  const {
-    data: response,
-    isLoading,
-    error,
-  } = useGetCurrentSubscriptionQuery();
 
   const subscription = response?.subscription ?? null;
 
@@ -96,7 +115,7 @@ const SubscriptionCard: React.FC<SubscriptionCardProps> = ({
           <Ionicons
             name="card-outline"
             size={24}
-            color={useThemeColor({}, "tint")}
+            color={tintColor}
           />
           <View style={styles.headerText}>
             <StyledText
@@ -106,7 +125,11 @@ const SubscriptionCard: React.FC<SubscriptionCardProps> = ({
             <StyledText
               style={[styles.subtitle, { color: textColor }]}
               variant="bodySmall"
-              children="Manage your fleet subscription"
+              children={
+                isFleetOwner
+                  ? "Manage your fleet subscription"
+                  : "Manage your Prisma subscription"
+              }
             />
           </View>
         </View>

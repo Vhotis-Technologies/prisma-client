@@ -29,6 +29,7 @@ const OnboardingLayout = () => {
         <BackButton />
         <StatusBar barStyle={statusBarStyle} />
         <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="index" />
           <Stack.Screen name="OnboardingScreen" />
           <Stack.Screen name="SigninScreen" />
         </Stack>

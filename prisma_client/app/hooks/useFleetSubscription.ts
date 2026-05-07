@@ -16,6 +16,7 @@ import { useStripe } from "@stripe/stripe-react-native";
 import { useSnackbar } from "@/app/contexts/SnackbarContext";
 import { useAddresses } from "@/app/app-hooks/useAddresses";
 import usePayment from "@/app/app-hooks/usePayment";
+import { APP_ENV } from "@/constants/Config";
 import { CreateSubscriptionResponse, CurrentSubscriptionView } from "@/app/interfaces/SubscriptionInterfaces";
 
 /**
@@ -55,7 +56,9 @@ export const useFleetSubscription = () => {
     data: plans,
     isLoading: isLoadingPlans,
     error: plansError,
-  } = useGetSubscriptionPlansQuery();
+  } = useGetSubscriptionPlansQuery(undefined, {
+    skip: !(user?.is_fleet_owner === true),
+  });
 
   const [createSubscription, { isLoading: isCreatingSubscription }] =
     useCreateSubscriptionMutation();
@@ -364,7 +367,7 @@ export const useFleetSubscription = () => {
         applePay: { merchantCountryCode: countryCode },
         googlePay: {
           merchantCountryCode: countryCode,
-          testEnv: __DEV__,
+          testEnv: APP_ENV !== "production",
           currencyCode: currencyCode,
         },
         allowsDelayedPaymentMethods: true,

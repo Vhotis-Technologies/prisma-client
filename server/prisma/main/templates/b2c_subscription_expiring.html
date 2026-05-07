@@ -1,0 +1,21 @@
+{% extends "base_email.html" %}
+{% block title %}Your Prisma membership ends soon{% endblock %}
+{% block content %}
+<div class="greeting">Hi {{ user_name }},</div>
+
+<div class="intro-text">
+  Your <strong>{{ plan_name }}</strong> subscription period is ending soon. After <strong>{{ access_until }}</strong>, member pricing and included services (such as complimentary Quick Sparkles, where applicable) may no longer apply unless you renew.
+</div>
+
+<div class="info-box">
+  <div class="contact-title">Renew in a few taps</div>
+  <div class="contact-text">
+    Open the app, tap the setting icon, then tap <strong> Manage Subscription</strong> to renew your plan before your end date to stay on your plan without a gap.
+  </div>
+</div>
+
+<div class="closing">
+  <div class="closing-text">Questions? We are happy to help.</div>
+  <div class="signature"><span class="signature-name">Prisma Car Care</span></div>
+</div>
+{% endblock %}

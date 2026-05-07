@@ -365,7 +365,7 @@ const VehicleDataUploadScreen = () => {
                 {vehicle.year} {vehicle.make} {vehicle.model}
               </StyledText>
               <StyledText variant="bodySmall" style={{ color: iconColor }}>
-                {vehicle.licence?.toUpperCase()} • {vehicle.vin || "No VIN"}
+                {vehicle.licence?.toUpperCase()}
               </StyledText>
             </View>
           </View>
@@ -809,14 +809,14 @@ const VehicleDataUploadScreen = () => {
           >
             <StyledText variant="bodyMedium" style={{ color: textColor }}>
               {formData.visibility === "public"
-                ? "Public (Accessible via VIN)"
+                ? "Public (registered users)"
                 : "Private (Owner only)"}
             </StyledText>
             <MaterialIcons name="arrow-drop-down" size={24} color={iconColor} />
           </TouchableOpacity>
 
           <StyledText variant="bodySmall" style={{ color: iconColor, marginTop: 8 }}>
-            Public documents can be accessed by anyone with the vehicle's VIN number
+            Private uploads are only visible to you. Public uploads may appear in shared views for this registration.
           </StyledText>
         </View>
 

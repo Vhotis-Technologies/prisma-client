@@ -28,10 +28,6 @@ export const axiosBaseQuery = (): BaseQueryFn => {
       const publicEndpoints = [
         "/api/v1/authentication/login/",
         "/api/v1/authentication/refresh/",
-        "/api/v1/vin-lookup/check_vin_exists/",
-        "/api/v1/vin-lookup/get_vehicle_history/",
-        "/api/v1/vin-lookup/initiate_vin_lookup_payment/",
-        "/api/v1/vin-lookup/verify_vin_lookup_payment/",
       ];
 
       // Check if data is FormData (React Native compatible check)

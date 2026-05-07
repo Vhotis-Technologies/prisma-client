@@ -52,7 +52,6 @@ services:
       - .env.staging
     environment:
       - DJANGO_SETTINGS_MODULE=prisma.settings
-      - DJANGO_ALLOWED_HOSTS=*
       - PRISMA_ENV=staging
     command: python manage.py runserver 0.0.0.0:8000
     depends_on:

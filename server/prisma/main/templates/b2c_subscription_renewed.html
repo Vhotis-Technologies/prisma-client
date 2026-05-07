@@ -1,0 +1,31 @@
+{% extends "base_email.html" %}
+{% block title %}Payment received — Prisma subscription renewed{% endblock %}
+{% block content %}
+<div class="greeting">Hi {{ user_name }},</div>
+
+<div class="intro-text">
+  We have received your payment for <strong>{{ plan_name }}</strong>. Your subscription is renewed and benefits stay active.
+</div>
+
+<div class="details-card">
+  <div class="details-title">Receipt</div>
+  <div class="details-grid">
+    <div class="detail-row">
+      <div class="detail-item detail-label">Plan</div>
+      <div class="detail-item detail-value">{{ plan_name }}</div>
+    </div>
+    <div class="detail-row">
+      <div class="detail-item detail-label">Amount</div>
+      <div class="detail-item detail-value"><strong>{{ currency }} {{ amount_paid }}</strong></div>
+    </div>
+    <div class="detail-row">
+      <div class="detail-item detail-label">Current period through</div>
+      <div class="detail-item detail-value">{{ membership_valid_until }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="intro-text">
+  View invoices and payment methods under <strong>Settings → Subscription</strong> in the Prisma app.
+</div>
+{% endblock %}

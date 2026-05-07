@@ -26,7 +26,13 @@
   </div>
 </div>
 
+{% if hosted_invoice_url %}
 <div class="intro-text">
-  If your payment method is up to date, no action is needed. To update billing details, use the subscription or billing section in the Prisma app.
+  <a href="{{ hosted_invoice_url }}" style="color: #2563eb; font-weight: 600;">Pay invoice (Stripe)</a>
+</div>
+{% endif %}
+
+<div class="intro-text">
+  If your payment method is up to date, no action is needed. To update billing details, open the app, tap the setting icon, then tap <strong> Manage Subscription</strong>.
 </div>
 {% endblock %}

@@ -1,0 +1,45 @@
+{% extends "base_email.html" %}
+{% block title %}Invoice payment – Prisma{% endblock %}
+{% block content %}
+<div class="greeting">Hello,</div>
+
+{% if reminder_kind == "overdue" %}
+<div class="intro-text">
+  Your Prisma Car Care invoice for booking <strong>{{ booking_reference }}</strong> is <strong>overdue</strong>. Please
+  complete payment using the secure link below.
+</div>
+{% else %}
+<div class="intro-text">
+  This is a reminder that your Prisma Car Care invoice for booking <strong>{{ booking_reference }}</strong> will be due
+  soon. You can pay when ready using the link below.
+</div>
+{% endif %}
+
+<div class="details-card">
+  <div class="details-title">Invoice</div>
+  <div class="details-grid">
+    <div class="detail-row">
+      <div class="detail-item detail-label">Booking reference</div>
+      <div class="detail-item detail-value"><strong>{{ booking_reference }}</strong></div>
+    </div>
+    {% if due_date_display %}
+    <div class="detail-row">
+      <div class="detail-item detail-label">Due date</div>
+      <div class="detail-item detail-value">{{ due_date_display }}</div>
+    </div>
+    {% endif %}
+    <div class="detail-row">
+      <div class="detail-item detail-label">Amount due</div>
+      <div class="detail-item detail-value"><strong>{{ amount_due_display }} {{ currency }}</strong></div>
+    </div>
+  </div>
+</div>
+
+<div class="intro-text">
+  <a href="{{ hosted_invoice_url }}" style="color: #2563eb; font-weight: 600;">Pay invoice (Stripe)</a>
+</div>
+
+<div class="intro-text" style="font-size: 13px; color: #6b7280;">
+  If you already paid, you can ignore this email — it may take a few minutes to update.
+</div>
+{% endblock %}

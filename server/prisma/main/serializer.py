@@ -4,7 +4,7 @@ DRF serializers for main models: User, Vehicle, Fleet, BookedAppointment, Addres
 Includes CustomTokenObtainPairSerializer for JWT with custom claims.
 """
 from rest_framework import serializers
-from .models import User, Vehicle, VehicleOwnership, VehicleEvent, Fleet, FleetMember, FleetVehicle, VehicleTransfer, ServiceType, ValetType, DetailerProfile, BookedAppointment, Address, AddOns, LoyaltyProgram, Promotions, Branch, SubscriptionTier, SubscriptionPlan, FleetSubscription, SubscriptionBilling, EventDataManagement
+from .models import User, Vehicle, VehicleOwnership, VehicleEvent, Fleet, FleetMember, FleetVehicle, VehicleTransfer, ServiceType, ValetType, DetailerProfile, BookedAppointment, Address, AddOns, LoyaltyProgram, Promotions, Branch, SubscriptionTier, SubscriptionPlan, FleetSubscription, SubscriptionBilling, EventDataManagement, B2CSubcriptionTier, B2CSubcriptionPlan, B2CSubcription, B2CSubcriptionBilling
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework.exceptions import ValidationError   
 
@@ -110,6 +110,60 @@ class FleetSubscriptionSerializer(serializers.ModelSerializer):
         model = FleetSubscription
         fields = '__all__'
 
+class B2CSubscriptionTierSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = B2CSubcriptionTier
+        fields = '__all__'
+
+
+class B2CSubscriptionPlanSerializer(serializers.ModelSerializer):
+    tier = B2CSubscriptionTierSerializer(read_only=True)
+    tier_id = serializers.PrimaryKeyRelatedField(
+        queryset=B2CSubcriptionTier.objects.all(),
+        source='tier',
+        write_only=True,
+        required=False,
+    )
+    limits = serializers.SerializerMethodField(read_only=True)
+
+    class Meta:
+        model = B2CSubcriptionPlan
+        fields = (
+            'id',
+            'tier',
+            'tier_id',
+            'billing_cycle',
+            'price',
+            'created_at',
+            'updated_at',
+            'limits',
+        )
+
+    def get_limits(self, obj):
+        return obj.get_limits()
+
+
+class B2CSubscriptionSerializer(serializers.ModelSerializer):
+    plan = B2CSubscriptionPlanSerializer(read_only=True)
+    plan_id = serializers.PrimaryKeyRelatedField(
+        queryset=B2CSubcriptionPlan.objects.all(),
+        source='plan',
+        write_only=True,
+        required=False,
+    )
+
+    class Meta:
+        model = B2CSubcription
+        fields = '__all__'
+
+
+class B2CSubscriptionBillingSerializer(serializers.ModelSerializer):
+    subscription = B2CSubscriptionSerializer(read_only=True)
+
+    class Meta:
+        model = B2CSubcriptionBilling
+        fields = '__all__'
+
 class SubscriptionBillingSerializer(serializers.ModelSerializer):
     subscription = FleetSubscriptionSerializer(read_only=True)
     
@@ -152,7 +206,11 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         user = self.user
         # Check if the user has an address
         address = Address.objects.filter(user=user).first()
-        loyalty = LoyaltyProgram.objects.filter(user=user).first()
+        loyalty = (
+            LoyaltyProgram.objects.filter(user=user).first()
+            if user.is_b2c_user()
+            else None
+        )
         loyalty_benefits = loyalty.get_tier_benefits() if loyalty else None
         
         # Get managed branch if user is branch admin

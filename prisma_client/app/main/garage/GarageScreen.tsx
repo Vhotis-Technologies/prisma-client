@@ -30,22 +30,24 @@ const GarageScreen = () => {
 
   const user = useAppSelector((state: RootState) => state.auth.user);
   const isFleetOwner = user?.is_fleet_owner;
-  const isAuthenticated = useAppSelector((state: RootState) => state.auth.isAuthenticated);
 
   const backgroundColor = useThemeColor({}, "background");
   const iconColor = useThemeColor({}, "icons");
   const textColor = useThemeColor({}, "text");
   const primaryColor = useThemeColor({}, "primary");
-  const borderColor = useThemeColor({}, "borders"); 
+  const borderColor = useThemeColor({}, "borders");
 
   const [isAddVehicleModalVisible, setIsAddVehicleModalVisible] =
     useState(false);
   const [loadingVehicleId, setLoadingVehicleId] = useState<string | null>(null);
 
-
   if (isLoadingVehicles) {
     return (
-      <ActivityIndicator size="large" color={primaryColor} />
+      <ActivityIndicator
+        size="large"
+        color={primaryColor}
+        style={{ flex: 1, backgroundColor: backgroundColor }}
+      />
     );
   }
 
@@ -67,7 +69,12 @@ const GarageScreen = () => {
             <View style={styles.branchesContainer}>
               {vehiclesByBranch.map((branch) => (
                 <View key={branch.branch_id} style={styles.branchSection}>
-                  <View style={[styles.branchHeader, { borderBottomColor: borderColor }]}>
+                  <View
+                    style={[
+                      styles.branchHeader,
+                      { borderBottomColor: borderColor },
+                    ]}
+                  >
                     <StyledText
                       variant="titleMedium"
                       style={[styles.branchHeaderText, { color: textColor }]}
@@ -78,7 +85,8 @@ const GarageScreen = () => {
                       variant="bodySmall"
                       style={[styles.branchVehicleCount, { color: textColor }]}
                     >
-                      {branch.vehicles.length} {branch.vehicles.length === 1 ? "vehicle" : "vehicles"}
+                      {branch.vehicles.length}{" "}
+                      {branch.vehicles.length === 1 ? "vehicle" : "vehicles"}
                     </StyledText>
                   </View>
                   <View style={styles.vehiclesGrid}>
@@ -88,7 +96,9 @@ const GarageScreen = () => {
                         vehicle={vehicle}
                         onViewDetailsPress={async () => {
                           setLoadingVehicleId(vehicle.id);
-                          const success = await handleViewDetailsPress(vehicle.id);
+                          const success = await handleViewDetailsPress(
+                            vehicle.id,
+                          );
                           setLoadingVehicleId(null);
                           if (success) {
                             router.push({
@@ -181,49 +191,20 @@ const GarageScreen = () => {
       />
 
       {/* Floating action buttons */}
-      {/* VIN Lookup Button (for authenticated users) */}
-      {isAuthenticated && (
-        <TouchableOpacity
-          style={[
-            {
-              position: "absolute",
-              bottom: 70,
-              left: 20,
-              borderRadius: 30,
-              padding: 10,
-              borderWidth: 1,
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.25,
-              shadowRadius: 3.84,
-              elevation: 3,
-            },
-            {
-              backgroundColor: primaryColor,
-              borderColor: borderColor,
-            },
-          ]}
-          onPress={() => {
-            router.push("/vehiclehistory/VehicleDataInputScreen");
-          }}
-        >
-          <MaterialIcons name="search" size={24} color={textColor} />
-        </TouchableOpacity>
-      )}
-
       {/* Add Vehicle Button */}
       <TouchableOpacity
         style={[
           {
             position: "absolute",
+            width: 60,
+            height: 60,
+            justifyContent: "center",
+            alignItems: "center",
             bottom: 70,
             right: 20,
-            borderRadius: 30,
+            borderRadius: 10,
             padding: 10,
             borderWidth: 1,
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.25,
-            shadowRadius: 3.84,
-            elevation: 3,
           },
           {
             backgroundColor: primaryColor,

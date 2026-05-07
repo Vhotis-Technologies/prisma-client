@@ -17,10 +17,10 @@ import bookingApi from "./api/eventApi";
 import notificationApi from "./api/notificationApi";
 import fleetApi from "./api/fleetApi";
 import subscriptionApi from "./api/subscriptionApi";
-import vinLookupApi from "./api/vinLookupApi";
-import serviceHistoryApi from "./api/serviceHistoryApi";
-import partnerApi from "./api/partnerApi";
+import b2cSubscriptionApi from "./api/b2cSubscriptionApi";
 import ticketApi from "./api/ticketApi";
+import partnerApi from "./api/partnerApi";
+import serviceHistoryApi from "./api/serviceHistoryApi";
 
 const store = configureStore({
   reducer: {
@@ -38,7 +38,7 @@ const store = configureStore({
     [notificationApi.reducerPath]: notificationApi.reducer,
     [fleetApi.reducerPath]: fleetApi.reducer,
     [subscriptionApi.reducerPath]: subscriptionApi.reducer,
-    [vinLookupApi.reducerPath]: vinLookupApi.reducer,
+    [b2cSubscriptionApi.reducerPath]: b2cSubscriptionApi.reducer,
     [serviceHistoryApi.reducerPath]: serviceHistoryApi.reducer,
     [partnerApi.reducerPath]: partnerApi.reducer,
     [ticketApi.reducerPath]: ticketApi.reducer,
@@ -53,7 +53,7 @@ const store = configureStore({
       notificationApi.middleware,
       fleetApi.middleware,
       subscriptionApi.middleware,
-      vinLookupApi.middleware,
+      b2cSubscriptionApi.middleware,
       serviceHistoryApi.middleware,
       partnerApi.middleware,
       ticketApi.middleware,

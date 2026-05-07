@@ -5,11 +5,11 @@
 
 export const Colors = {
   light: {
-    background: "#FAF9F6",
+    background: "#F1F1F1",
     borders: "#E5E5E5",
     icons: "#424242",
     text: "#212121",
-    cards: "#F5F5F5",
+    cards: "#F2F2F2",
     button: "#6A0DAD",
     secondaryButton: "#0d6da0",
     primary: "#0074d4",

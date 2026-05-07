@@ -18,6 +18,7 @@ import traceback
 from datetime import datetime
 from decimal import Decimal
 
+from django.conf import settings
 from django.db.models import Prefetch, Q, Sum
 from django.utils import timezone
 from rest_framework import status
@@ -31,7 +32,8 @@ from main.models import (
     LoyaltyProgram,
     PaymentTransaction,
 )
-from main.tasks import publish_booking_cancelled, publish_booking_rescheduled, send_push_notification
+from main.tasks import publish_booking_cancelled, publish_booking_rescheduled
+from main.services.NotificationServices import NotificationService
 from main.views.events import EventsView
 from main.views.fleet import perform_bulk_order_cancellation, perform_bulk_order_reschedule
 from main.views.support.support_permission_access import SupportPermissionAccess
@@ -704,7 +706,8 @@ class SupportBookingsView(APIView):
         except Exception:
             hours_until = 24
         requires_fee = hours_until < 12
-        fee_amount_cents = 1000 if requires_fee else 0
+        fee_cents = int(getattr(settings, "RESCHEDULE_FEE_CENTS", 1000))
+        fee_amount_cents = fee_cents if requires_fee else 0
 
         events = EventsView()
         valid, err_msg = events._validate_reschedule_slot(booking, new_date, new_time)
@@ -769,12 +772,10 @@ class SupportBookingsView(APIView):
             booking.start_time,
             booking.total_amount,
         )
-        send_push_notification.delay(
-            booking.user_id,
-            "Booking Rescheduled!",
-            f"Your valet service has been rescheduled for {booking.appointment_date} at {booking.start_time}",
-            "booking_rescheduled",
-        )
+        try:
+            NotificationService().send_booking_rescheduled(booking.user, booking)
+        except Exception as exc:
+            logger.error("Support reschedule: notification error: %s", exc)
         vehicle_name = (
             f"{booking.vehicle.make} {booking.vehicle.model}"
             if booking.vehicle_id
@@ -829,9 +830,9 @@ class SupportBookingsView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-        if hours_until_appointment <= 6:
+        if hours_until_appointment <= 12:
             refund_tier = "none"
-        elif hours_until_appointment <= 12:
+        elif hours_until_appointment <= 24:
             refund_tier = "half"
         else:
             refund_tier = "full"
@@ -874,47 +875,33 @@ class SupportBookingsView(APIView):
         )
         message = f"Your booking for {vehicle_name} on {booking.appointment_date} was cancelled by support."
 
-        customer_id = booking.user_id
-        try:
-            if refund_data.get("processed", False):
-                message += (
-                    f"\n\nRefund of £{refund_data['amount']} has been processed and will appear "
-                    "in your account within 3-5 business days."
-                )
-                send_push_notification.delay(
-                    customer_id,
-                    "Booking Cancelled - Refund Processed!",
-                    f"Your valet service has been cancelled for {booking.appointment_date} at {booking.start_time}. "
-                    "You will be refunded within 3-5 business days.",
-                    "booking_cancelled_refunded",
-                )
-            elif refund_tier == "half":
-                message += "\n\n50% refund was available but could not be processed. Please contact support."
-                send_push_notification.delay(
-                    customer_id,
-                    "Booking Cancelled",
-                    f"Your valet service has been cancelled for {booking.appointment_date} at {booking.start_time}. "
-                    "Refund issue - please contact support.",
-                    "booking_cancelled_no_refund",
-                )
-            else:
-                if refund_tier == "none":
+        if refund_data.get("processed", False):
+            message += (
+                f"\n\nRefund of £{refund_data['amount']} has been processed and will appear "
+                "in your account within 3-5 business days."
+            )
+        elif refund_tier == "half":
+            message += "\n\n50% refund was available but could not be processed. Please contact support."
+        else:
+            if refund_tier == "none":
+                if hours_until_appointment <= 0:
                     message += (
-                        "\n\nNo refund available - cancellation was within 6 hours of appointment start time."
+                        "\n\nNo refund available — the appointment start time has already passed."
                     )
                 else:
                     message += (
-                        "\n\nNo refund available - cancellation was within 12 hours of appointment start time."
+                        "\n\nNo refund available — cancellations within 12 hours of the "
+                        "start time are non-refundable."
                     )
-                send_push_notification.delay(
-                    customer_id,
-                    "Booking Cancelled",
-                    f"Your valet service has been cancelled for {booking.appointment_date} at {booking.start_time}. "
-                    "No refund available due to late cancellation.",
-                    "booking_cancelled_no_refund",
+            else:
+                message += (
+                    "\n\nNo refund available — please contact support if this looks wrong."
                 )
+
+        try:
+            NotificationService().send_booking_cancelled(booking.user, booking, message)
         except Exception as exc:
-            logger.error("Support cancel: push notification error: %s", exc)
+            logger.error("Support cancel: notification error: %s", exc)
 
         return Response(
             {

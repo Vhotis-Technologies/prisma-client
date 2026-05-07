@@ -1,0 +1,19 @@
+{% extends "base_email.html" %}
+{% block title %}Booking rescheduled – Prisma Car Care{% endblock %}
+
+{% block content %}
+<div class="greeting">Hello {{ user.name|default:"there" }},</div>
+
+<div class="intro-text">
+  Your booking <strong>{{ booking_reference }}</strong> has been updated.
+  Your valet service is now scheduled for
+  <strong>{{ booking.appointment_date }}</strong> at <strong>{{ booking.start_time }}</strong>.
+</div>
+
+<div class="contact-box">
+  <div class="contact-text">
+    If you have questions, contact us at
+    <a href="mailto:support@prismavalet.com" class="contact-link">support@prismavalet.com</a>
+  </div>
+</div>
+{% endblock %}

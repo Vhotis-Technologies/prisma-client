@@ -1,7 +1,8 @@
 /**
  * RTK Query API for booking, payment sheet, promotions, cancel/reschedule, and payment methods.
  *
- * Key endpoints: fetchPaymentSheetDetails (create_payment_sheet), confirmPaymentIntent (poll until webhook),
+ * Key endpoints: fetchPaymentSheetDetails (create_payment_sheet), createRescheduleFeePaymentSheet,
+ * confirmPaymentIntent (poll until webhook),
  * fetchServiceType, fetchValetType, fetchAddOns, cancelBooking, rescheduleBooking, checkFreeWash,
  * createBulkOrderInvoiceLater. See docs/BOOKING_FLOW.md for the booking and payment flow.
  */
@@ -17,6 +18,64 @@ import {
   BookedAppointmentProps,
 } from "@/app/interfaces/BookingInterfaces";
 import { PromotionsProps } from "@/app/interfaces/GarageInterface";
+
+/** Server booking quote (step 5) — amounts and Quick Sparkle entitlements. */
+export type BookingQuoteAmounts = {
+  subtotal: number;
+  vat: number;
+  total: number;
+};
+
+/** Pre–VAT-split sticker and discount amounts (all VAT-inclusive €), matching server quote_booking. */
+export type BookingQuotePricingLines = {
+  sticker_total_inc_vat: number;
+  loyalty_discount_inc_vat: number;
+  promotion_discount_inc_vat: number;
+  partner_referral_discount_inc_vat: number;
+};
+
+export type PartnerBookingOfferPayload = {
+  eligible: boolean;
+  percent: number;
+  expires_at: string | null;
+};
+
+export type BookingQuickSparkleEntitlements = {
+  is_quick_sparkle: boolean;
+  eligible_loyalty: boolean;
+  remaining_loyalty: number;
+  total_monthly_limit: number;
+  resets_in_days: number;
+  eligible_partner: boolean;
+  eligible_subscription: boolean;
+  remaining_subscription: number;
+  max_subscription: number;
+  period_start: string | null;
+  period_end: string | null;
+  period_label: string;
+  partner_free_wash?: boolean;
+};
+
+export type BookingQuoteResponse = {
+  issued_at: string;
+  quick_sparkle: BookingQuickSparkleEntitlements;
+  payable_full: BookingQuoteAmounts;
+  payable_if_complimentary: {
+    loyalty: BookingQuoteAmounts | null;
+    partner: BookingQuoteAmounts | null;
+    subscription: BookingQuoteAmounts | null;
+  };
+  pricing_lines_full: BookingQuotePricingLines;
+  pricing_lines_if_complimentary: {
+    loyalty: BookingQuotePricingLines | null;
+    partner: BookingQuotePricingLines | null;
+    subscription: BookingQuotePricingLines | null;
+  };
+  partner_booking_offer: PartnerBookingOfferPayload | null;
+  vat_rate_percent: number;
+};
+
+export type ComplimentarySparkleSource = "loyalty" | "subscription" | "partner";
 
 // PaymentMethod interface for saved payment methods
 export interface PaymentMethod {
@@ -201,6 +260,23 @@ const createBookingApi = createApi({
       }),
     }),
 
+    /** Late reschedule: Stripe sheet for RESCHEDULE_FEE_CENTS; webhook applies slot after payment. */
+    createRescheduleFeePaymentSheet: builder.mutation<
+      PaymentSheetResponse & {
+        paymentIntentId: string;
+        booking_reference: string;
+        fee_amount_cents: number;
+        currency: string;
+      },
+      { booking_reference: string; new_date: string; new_time: string }
+    >({
+      query: (body) => ({
+        url: "/api/v1/payment/create_reschedule_fee_payment_sheet/",
+        method: "POST",
+        data: body,
+      }),
+    }),
+
     /**
      * Confirm payment intent has been processed via webhook
      * ARGS : { payment_intent_id: string }
@@ -337,6 +413,24 @@ const createBookingApi = createApi({
       }),
     }),
 
+    /** Server-verified price + complimentary Quick Sparkle options for the current cart. */
+    quoteBooking: builder.mutation<
+      BookingQuoteResponse,
+      {
+        service_type_id: string;
+        addon_ids: string[];
+        is_suv: boolean;
+        is_express: boolean;
+        apply_partner_booking_discount?: boolean;
+      }
+    >({
+      query: (body) => ({
+        url: "/api/v1/events/quote_booking/",
+        method: "POST",
+        data: body,
+      }),
+    }),
+
     /**
      * Check if user can use a free Quick Sparkle (loyalty or partner referral)
      * ARGS : void
@@ -355,8 +449,14 @@ const createBookingApi = createApi({
         remaining_quick_sparkles: number;
         total_monthly_limit: number;
         resets_in_days: number;
-        free_wash_source?: "loyalty" | "partner";
+        free_wash_source?: "loyalty" | "partner" | "subscription";
         partner_free_wash?: boolean;
+        eligible_loyalty?: boolean;
+        eligible_partner?: boolean;
+        eligible_subscription?: boolean;
+        remaining_subscription?: number;
+        max_subscription?: number;
+        subscription_period_label?: string;
       },
       void
     >({
@@ -399,10 +499,12 @@ export const {
   useRescheduleBookingMutation,
   useFetchAddOnsQuery,
   useFetchPaymentSheetDetailsMutation,
+  useCreateRescheduleFeePaymentSheetMutation,
   useFetchPromotionsQuery,
   useMarkPromotionAsUsedMutation,
   useGetPaymentMethodsQuery,
   useDeletePaymentMethodMutation,
+  useQuoteBookingMutation,
   useCheckFreeWashQuery,
   useLazyCheckFreeWashQuery,
   useConfirmPaymentIntentMutation,

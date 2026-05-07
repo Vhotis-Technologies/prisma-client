@@ -10,7 +10,6 @@ from main.models import (
     BookedAppointmentImage,
     LoyaltyProgram,
     Notification,
-    Partner,
     Promotions,
     VehicleEvent,
 )
@@ -20,101 +19,90 @@ from main.utils.bulk_notifications import try_send_bulk_client_confirmation_noti
 
 @receiver(post_save, sender=BookedAppointment)
 def handle_booking_completion(sender, instance, created, **kwargs):
-    if instance.status == 'completed':
-        user = instance.user
-        now = timezone.now()
+    if instance.status != 'completed':
+        return
 
-        if instance.service_type.name != 'Basic Wash':
+    user = instance.user
+    now = timezone.now()
+
+    if user.is_b2c_user():
+        service_name = (instance.service_type.name).lower()
+        # Quick sparkle bookings do not advance loyalty (fleet/subscription benefits are separate).
+        if 'quick sparkle' not in service_name:
             loyalty, _ = LoyaltyProgram.objects.get_or_create(user=user)
+            old_tier = loyalty.current_tier
             loyalty.completed_bookings += 1
             loyalty.last_booking_date = now.date()
-            old_tier = loyalty.current_tier
-            is_fleet_user = user.is_fleet_admin_or_manager()
-            if is_fleet_user:
-                if loyalty.completed_bookings >= 100:
-                    loyalty.current_tier = 'platinum'
-                elif loyalty.completed_bookings >= 50:
-                    loyalty.current_tier = 'gold'
-                elif loyalty.completed_bookings >= 20:
-                    loyalty.current_tier = 'silver'
-                else:
-                    loyalty.current_tier = 'bronze'
+
+            if loyalty.completed_bookings >= 40:
+                loyalty.current_tier = 'platinum'
+            elif loyalty.completed_bookings >= 25:
+                loyalty.current_tier = 'gold'
+            elif loyalty.completed_bookings >= 10:
+                loyalty.current_tier = 'silver'
             else:
-                if loyalty.completed_bookings >= 40:
-                    loyalty.current_tier = 'platinum'
-                elif loyalty.completed_bookings >= 25:
-                    loyalty.current_tier = 'gold'
-                elif loyalty.completed_bookings >= 10:
-                    loyalty.current_tier = 'silver'
-                else:
-                    loyalty.current_tier = 'bronze'
+                loyalty.current_tier = 'bronze'
+
             loyalty.save()
-        else:
-            loyalty, _ = LoyaltyProgram.objects.get_or_create(user=user)
-            old_tier = loyalty.current_tier
 
-        if old_tier != loyalty.current_tier:
-            if user.allow_push_notifications and user.notification_token:
-                send_push_notification.delay(
-                    user.id,
-                    f"Tier Upgraded to {loyalty.current_tier.title()}! ⭐",
-                    f"Congratulations! You've been upgraded to {loyalty.current_tier.title()} tier!",
-                    "tier_upgrade"
-                )
-
-        thirty_days_ago = now - timedelta(days=30)
-        recent_washes = BookedAppointment.objects.filter(
-            user=user,
-            status='completed',
-            updated_at__gte=thirty_days_ago
-        ).exclude(service_type__name='Basic Wash').count()
-
-        existing_promotion = Promotions.objects.filter(
-            user=user,
-            title__contains="Activity Bonus",
-            created_at__gte=thirty_days_ago,
-            is_active=True,
-            valid_until__gte=now.date()
-        ).exists()
-
-        if instance.service_type.name != 'Basic Wash':
-            # Activity Bonus: only for regular users (not fleet, not partner)
-            is_fleet = user.is_fleet_owner or user.is_branch_admin or user.is_fleet_admin_or_manager()
-            is_partner = Partner.objects.filter(user=user).exists()
-            is_regular_user = not is_fleet and not is_partner
-
-            if recent_washes >= 3 and not existing_promotion and is_regular_user:
-                Promotions.objects.create(
-                    title=f"Activity Bonus - {user.name}",
-                    description=f"Congratulations! You have completed 3 washes in 30 days. You have earned a 5% discount on your next wash!",
-                    discount_percentage=5,
-                    valid_until=(now + timedelta(days=30)).date(),
-                    is_active=True,
-                    terms_conditions="Valid for 30 days from earning. Cannot be combined with other offers.",
-                    user=user
-                )
-                if user.allow_email_notifications:
-                    send_promotional_email.delay(user.email, user.name)
+            # If the old tier is not the same as the new tier, send a notification
+            # If the user has a notification token, send a push notification allowed on their device
+            if old_tier != loyalty.current_tier:
                 if user.allow_push_notifications and user.notification_token:
                     send_push_notification.delay(
                         user.id,
-                        "Activity Bonus Earned!🎉",
-                        "Great job! You've completed 3 washes in 30 days. You've earned a 5% discount on your next wash!",
-                        "activity_bonus"
+                        f"Tier Upgraded to {loyalty.current_tier.title()}! ⭐",
+                        f"Congratulations! You've been upgraded to {loyalty.current_tier.title()} tier!",
+                        "tier_upgrade"
                     )
                 Notification.objects.create(
                     user=user,
-                    title="Activity Bonus Earned! 🎉",
-                    message=f"Great job! You've completed 3 washes in 30 days. You've earned a 5% discount on your next wash!",
+                    title=f"Tier Upgraded to {loyalty.current_tier.title()}! ⭐",
+                    message=f"Congratulations! You've been upgraded to {loyalty.current_tier.title()} tier!",
                     type='info',
                     status='success'
                 )
 
-        if old_tier != loyalty.current_tier:
+    thirty_days_ago = now - timedelta(days=30)
+    recent_washes = BookedAppointment.objects.filter(
+        user=user,
+        status='completed',
+        updated_at__gte=thirty_days_ago
+    ).exclude(service_type__name__icontains='quick sparkle').count()
+
+    existing_promotion = Promotions.objects.filter(
+        user=user,
+        title__contains="Activity Bonus",
+        created_at__gte=thirty_days_ago,
+        is_active=True,
+        valid_until__gte=now.date()
+    ).exists()
+
+    if 'quick sparkle' not in instance.service_type.name.lower():
+        # Activity Bonus: only for regular (B2C) users
+        if recent_washes >= 3 and not existing_promotion and user.is_b2c_user():
+            Promotions.objects.create(
+                title=f"Activity Bonus - {user.name}",
+                description=f"Congratulations! You have completed 3 washes in 30 days. You have earned a 5% discount on your next wash!",
+                discount_percentage=5,
+                valid_until=(now + timedelta(days=30)).date(),
+                is_active=True,
+                terms_conditions="Valid for 30 days from earning. Cannot be combined with other offers.",
+                user=user
+            )
+            if user.allow_email_notifications:
+                send_promotional_email.delay(user.email, user.name)
+            if user.allow_push_notifications and user.notification_token:
+                send_push_notification.delay(
+                    user.id,
+                    "Activity Bonus Earned!🎉",
+                    "Great job! You've completed 3 washes in 30 days. You've earned a 5% discount on your next wash!",
+                    "activity_bonus"
+                )
             Notification.objects.create(
                 user=user,
-                title=f"Tier Upgraded to {loyalty.current_tier.title()}! ⭐",
-                message=f"Congratulations! You've been upgraded to {loyalty.current_tier.title()} tier!",
+                title="Activity Bonus Earned! 🎉",
+                message=f"Great job! You've completed 3 washes in 30 days. You've earned a 5% discount on your next wash!",
                 type='info',
                 status='success'
             )

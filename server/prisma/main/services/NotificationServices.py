@@ -9,6 +9,8 @@ from django.conf import settings
 from django.template.loader import render_to_string
 from main.models import User, BookedAppointment
 import logging
+from django.utils import timezone
+from main.models import Notification
 
 logger = logging.getLogger(__name__)
 
@@ -23,14 +25,23 @@ class NotificationService:
             'email_notification': None,
             'errors': []
         }
+
+        title = "Booking Confirmed! ��"
+        message = f"Your valet service is confirmed for {booking.appointment_date} at {booking.start_time}"
+        notification_type = "booking_confirmation"
+
+        # Create an inapp notification in the database
+        self._create_notification(
+            user, title, message, notification_type, status="success"
+        )
         
         # Send push notification if enabled
         if user.allow_push_notifications and user.notification_token:
             try:
                 push_result = self._send_push_notification(
                     user=user,
-                    title="Booking Confirmed! ��",
-                    body=f"Your valet service is confirmed for {booking.appointment_date} at {booking.start_time}",
+                    title=title,
+                    body=message,
                     data={
                         "type": "booking_confirmation",
                         "booking_id": str(booking.id),
@@ -48,7 +59,7 @@ class NotificationService:
             try:
                 email_result = self._send_email_notification(
                     user=user,
-                    subject="Booking Confirmation - PRISMA VALET",
+                    subject="Booking Confirmation - Prisma Car Care",
                     template="booking_confirmation.html",
                     context={
                         'user': user,
@@ -122,7 +133,7 @@ class NotificationService:
             try:
                 email_result = self._send_email_notification(
                     user=user,
-                    subject="Service Completed - PRISMA VALET",
+                    subject="Service Completed - Prisma Car Care",
                     template="service_completed.html",
                     context={
                         'user': user,
@@ -136,28 +147,38 @@ class NotificationService:
         
         return results
     
-    def send_booking_cancelled(self, user, booking):
+    """ Send a booking cancellation notification to users. Send emails if they have email notification enabled, and then send a in app notification too."""
+    def send_booking_cancelled(self, user, booking, message=None):
         """Send booking cancellation notification"""
         results = {
             'push_notification': None,
             'email_notification': None,
             'errors': []
         }
-        
+
+        title = "Booking Cancelled"
+        if message is None:
+            message = f"Your valet service for {booking.appointment_date} at {booking.start_time} has been cancelled. You will be refunded within 3-5 business days."
+        notification_type = "booking_cancelled"
+
+        # Create an inapp notification in the database
+        self._create_notification(user, title, message, notification_type, status="info")
+
         # Send push notification if enabled
         if user.allow_push_notifications and user.notification_token:
             try:
                 push_result = self._send_push_notification(
                     user=user,
-                    title="Booking Cancelled",
-                    body=f"Your valet service for {booking.appointment_date} has been cancelled",
+                    title=title,
+                    body=message,
                     data={
                         "type": "booking_cancelled",
                         "booking_id": str(booking.id),
-                        "screen": "booking_details"
-                    }
+                        "booking_reference": booking.booking_reference,
+                        "screen": "booking_details",
+                    },
                 )
-                results['push_notification'] = push_result
+                results["push_notification"] = push_result
             except Exception as e:
                 results['errors'].append(f"Push notification failed: {str(e)}")
         
@@ -166,7 +187,7 @@ class NotificationService:
             try:
                 email_result = self._send_email_notification(
                     user=user,
-                    subject="Booking Cancelled - PRISMA VALET",
+                    subject=title,
                     template="booking_cancelled.html",
                     context={
                         'user': user,
@@ -179,8 +200,57 @@ class NotificationService:
                 results['errors'].append(f"Email notification failed: {str(e)}")
         
         return results
-    
 
+    def send_booking_rescheduled(self, user, booking, message=None):
+        """Send booking reschedule notification: in-app, push (if enabled), email (if enabled)."""
+        results = {
+            "push_notification": None,
+            "email_notification": None,
+            "errors": [],
+        }
+        title = "Booking Rescheduled!"
+        if message is None:
+            message = f"Your valet service has been rescheduled for {booking.appointment_date} at {booking.start_time}."
+        notification_type = "booking_rescheduled"
+
+        self._create_notification(
+            user, title, message, notification_type, status="success"
+        )
+
+        if user.allow_push_notifications and user.notification_token:
+            try:
+                push_result = self._send_push_notification(
+                    user=user,
+                    title=title,
+                    body=message,
+                    data={
+                        "type": "booking_rescheduled",
+                        "booking_id": str(booking.id),
+                        "booking_reference": booking.booking_reference,
+                        "screen": "booking_details",
+                    },
+                )
+                results["push_notification"] = push_result
+            except Exception as e:
+                results["errors"].append(f"Push notification failed: {str(e)}")
+
+        if user.allow_email_notifications:
+            try:
+                email_result = self._send_email_notification(
+                    user=user,
+                    subject="Booking Rescheduled - Prisma Car Care",
+                    template="booking_rescheduled.html",
+                    context={
+                        "user": user,
+                        "booking": booking,
+                        "booking_reference": booking.booking_reference,
+                    },
+                )
+                results["email_notification"] = email_result
+            except Exception as e:
+                results["errors"].append(f"Email notification failed: {str(e)}")
+
+        return results
 
     def send_marketing_notification(self, users, subject, message, data=None):
         """Send marketing notification to multiple users"""
@@ -272,3 +342,22 @@ class NotificationService:
         )
         
         return result
+
+    
+    # This method create a notification in the database
+    def _create_notification(
+        self, user, title, message, notification_type, status="info"
+    ) -> bool:
+        """Create a notification in the database"""
+        try:
+            Notification.objects.create(
+                user=user,
+                title=title,
+                message=message,
+                type=notification_type,
+                status=status,
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Failed to create notification: {e}")
+            return False

@@ -1,0 +1,9 @@
+{% extends "base_email.html" %}
+{% block title %}{{ headline }}{% endblock %}
+{% block content %}
+<div class="greeting">Hi {{ user_name }},</div>
+
+<div class="intro-text"><strong>{{ headline }}</strong></div>
+
+<div class="intro-text">{{ body_paragraph_html|safe }}</div>
+{% endblock %}

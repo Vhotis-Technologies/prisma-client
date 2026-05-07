@@ -1,5 +1,6 @@
 """
-Re-export email Celery tasks: welcome, booking confirmation, promotional, refund, auth, transfer, subscription, branch admin.
+Re-export email Celery tasks: welcome, booking confirmation, promotional, refund, auth,
+transfer, subscription, branch admin, winner voucher.
 """
 from main.tasks.emails.welcome import send_welcome_email
 from main.tasks.emails.booking import send_booking_confirmation_email, send_bulk_booking_confirmation_email
@@ -21,6 +22,8 @@ from main.tasks.emails.subscription import (
     send_subscription_renewal_reminder_email,
 )
 from main.tasks.emails.branch_admin import send_branch_admin_credentials_email
+from main.tasks.emails.voucher_email import send_winner_voucher_email
+from main.tasks.emails.bulk_invoice import send_bulk_invoice_payment_reminder_email
 
 __all__ = [
     'send_welcome_email',
@@ -41,4 +44,6 @@ __all__ = [
     'send_trial_subscription_welcome_email',
     'send_subscription_renewal_reminder_email',
     'send_branch_admin_credentials_email',
+    'send_winner_voucher_email',
+    'send_bulk_invoice_payment_reminder_email',
 ]

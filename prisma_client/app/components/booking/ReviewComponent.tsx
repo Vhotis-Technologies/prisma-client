@@ -10,13 +10,11 @@ import { RecentServicesProps } from "@/app/interfaces/DashboardInterfaces";
 import { useAppSelector, RootState } from "@/app/store/main_store";
 
 interface ReviewComponentProps {
-  currencySymbol: string;
   bookingData?: RecentServicesProps;
   onReviewSubmitted?: () => void;
 }
 
 const ReviewComponent: React.FC<ReviewComponentProps> = ({
-  currencySymbol,
   bookingData,
   onReviewSubmitted,
 }) => {

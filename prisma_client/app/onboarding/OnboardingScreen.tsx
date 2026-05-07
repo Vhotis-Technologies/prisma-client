@@ -1,18 +1,16 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   StyleSheet,
   ScrollView,
   Platform,
-  Dimensions,
   TouchableOpacity,
   KeyboardAvoidingView,
-  LayoutAnimation,
-  UIManager,
 } from "react-native";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-  import StyledText from "../components/helpers/StyledText";
+import StyledText from "../components/helpers/StyledText";
+import SquareCheckbox from "../components/helpers/SquareCheckbox";
 import StyledTextInput from "../components/helpers/StyledTextInput";
 import DocumentModal from "../components/helpers/DocumentModal";
 import type { DocumentModalType } from "../components/helpers/DocumentModal";
@@ -21,17 +19,21 @@ import { useThemeColor } from "@/hooks/useThemeColor";
 import useOnboarding from "../app-hooks/useOnboarding";
 import { useAlertContext } from "../contexts/AlertContext";
 import StyledButton from "../components/helpers/StyledButton";
+import { useAppDispatch } from "../store/main_store";
+import {
+  clearSignUpAccountSelection,
+  setSignUpAccountType,
+} from "../store/slices/authSlice";
+import type { SignUpAccountType } from "../interfaces/AuthInterface";
 
-if (
-  Platform.OS === "android" &&
-  UIManager.setLayoutAnimationEnabledExperimental
-) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
-
-const { width, height } = Dimensions.get("window");
+const ACCOUNT_TITLE: Record<SignUpAccountType, string> = {
+  b2c: "Personal",
+  fleet_operator: "Fleet operator",
+  dealership: "Dealership",
+};
 
 const OnboardingScreen = () => {
+  const dispatch = useAppDispatch();
   const {
     signUpData,
     collectSignupData: handleSignUpData,
@@ -50,8 +52,24 @@ const OnboardingScreen = () => {
   const borderColor = useThemeColor({}, "borders");
   const buttonColor = useThemeColor({}, "button");
   const errorColor = useThemeColor({}, "error");
-  const cardColor = useThemeColor({}, "cards");
   const iconColor = useThemeColor({}, "icons");
+
+  const accountType = signUpData?.signUpAccountType;
+  const signUpIsFleet = signUpData?.isFleetOwner;
+  const signUpIsDealership = signUpData?.isDealership;
+
+  useEffect(() => {
+    if (accountType) return;
+    if (signUpIsDealership) {
+      dispatch(setSignUpAccountType("dealership"));
+      return;
+    }
+    if (signUpIsFleet) {
+      dispatch(setSignUpAccountType("fleet_operator"));
+      return;
+    }
+    router.replace("/onboarding/" as any);
+  }, [dispatch, accountType, signUpIsFleet, signUpIsDealership]);
 
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [isConfirmPasswordVisible, setIsConfirmPasswordVisible] =
@@ -79,11 +97,10 @@ const OnboardingScreen = () => {
         });
         return;
       }
-      if (signUpData.isDealership && signUpData.isFleetOwner) {
+      if (!signUpData.signUpAccountType) {
         setAlertConfig({
-          title: "Invalid Selection",
-          message:
-            "You cannot be both a fleet operator and a dealership. Please choose one.",
+          title: "Account type required",
+          message: "Please go back and choose how you will use Prisma.",
           type: "error",
           isVisible: true,
           onConfirm: () => setIsVisible(false),
@@ -91,7 +108,8 @@ const OnboardingScreen = () => {
         return;
       }
       const needsBusinessData =
-        signUpData.isDealership || signUpData.isFleetOwner;
+        signUpData.signUpAccountType === "fleet_operator" ||
+        signUpData.signUpAccountType === "dealership";
       if (needsBusinessData) {
         if (!signUpData.business_name?.trim()) {
           setAlertConfig({
@@ -148,8 +166,40 @@ const OnboardingScreen = () => {
                 style={[styles.title, { color: textColor }]}
                 variant="headlineMedium"
               >
-                Create Account
+                Your details
               </StyledText>
+              {accountType && (
+                <View style={[styles.accountRow, { borderColor }]}>
+                  <View style={styles.accountRowText}>
+                    <StyledText
+                      variant="bodySmall"
+                      style={[styles.accountKindLabel, { color: textColor }]}
+                    >
+                      Signing up as
+                    </StyledText>
+                    <StyledText
+                      variant="titleSmall"
+                      style={{ color: textColor, fontWeight: "600" }}
+                    >
+                      {ACCOUNT_TITLE[accountType]}
+                    </StyledText>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => {
+                      dispatch(clearSignUpAccountSelection());
+                      router.replace("/onboarding/" as any);
+                    }}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <StyledText
+                      variant="labelLarge"
+                      style={{ color: buttonColor, fontWeight: "600" }}
+                    >
+                      Change
+                    </StyledText>
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
 
             {/* Form Section */}
@@ -201,94 +251,6 @@ const OnboardingScreen = () => {
                     textColor === "#FFFFFF" ? "#B0B0B0" : "#999999"
                   }
                 />
-              </View>
-
-              {/* Fleet Owner Checkbox */}
-              <View style={styles.fleetOwnerContainer}>
-                <TouchableOpacity
-                  style={styles.checkboxContainer}
-                  onPress={() => {
-                    LayoutAnimation.configureNext(
-                      LayoutAnimation.Presets.easeInEaseOut,
-                    );
-                    const newVal = !signUpData?.isFleetOwner;
-                    handleSignUpData("isFleetOwner", newVal);
-                    if (newVal && signUpData?.isDealership) {
-                      handleSignUpData("isDealership", false);
-                    }
-                    if (!newVal && !signUpData?.isDealership) {
-                      handleSignUpData("business_name", undefined);
-                      handleSignUpData("business_address", undefined);
-                    }
-                  }}
-                >
-                  <View
-                    style={[
-                      styles.checkbox,
-                      {
-                        borderColor: borderColor,
-                        backgroundColor: signUpData?.isFleetOwner
-                          ? buttonColor
-                          : "transparent",
-                      },
-                    ]}
-                  >
-                    {signUpData?.isFleetOwner && (
-                      <Ionicons name="checkmark" size={16} color="white" />
-                    )}
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <StyledText
-                      style={[styles.fleetOwnerText, { color: textColor }]}
-                    >
-                      I operate a fleet
-                    </StyledText>
-                  </View>
-                </TouchableOpacity>
-              </View>
-
-              {/* Is Dealership Checkbox */}
-              <View style={styles.fleetOwnerContainer}>
-                <TouchableOpacity
-                  style={styles.checkboxContainer}
-                  onPress={() => {
-                    LayoutAnimation.configureNext(
-                      LayoutAnimation.Presets.easeInEaseOut,
-                    );
-                    const newVal = !signUpData?.isDealership;
-                    handleSignUpData("isDealership", newVal);
-                    if (newVal && signUpData?.isFleetOwner) {
-                      handleSignUpData("isFleetOwner", false);
-                    }
-                    if (!newVal && !signUpData?.isFleetOwner) {
-                      handleSignUpData("business_name", undefined);
-                      handleSignUpData("business_address", undefined);
-                    }
-                  }}
-                >
-                  <View
-                    style={[
-                      styles.checkbox,
-                      {
-                        borderColor: borderColor,
-                        backgroundColor: signUpData?.isDealership
-                          ? buttonColor
-                          : "transparent",
-                      },
-                    ]}
-                  >
-                    {signUpData?.isDealership && (
-                      <Ionicons name="checkmark" size={16} color="white" />
-                    )}
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <StyledText
-                      style={[styles.fleetOwnerText, { color: textColor }]}
-                    >
-                      I operate a dealership
-                    </StyledText>
-                  </View>
-                </TouchableOpacity>
               </View>
 
               {/* Password Input */}
@@ -354,33 +316,36 @@ const OnboardingScreen = () => {
                 )}
               </View>
 
-              {/* Referral Code Input */}
-              <View style={styles.inputContainer}>
-                <StyledTextInput
-                  label="Referral Code (Optional)"
-                  placeholder="Enter referral code if you have one"
-                  value={signUpData?.referred_code || ""}
-                  onChangeText={(text) =>
-                    handleSignUpData("referred_code", text)
-                  }
-                  keyboardType="default"
-                  autoCapitalize="characters"
-                  style={styles.textInput}
-                  placeholderTextColor={
-                    textColor === "#FFFFFF" ? "#B0B0B0" : "#999999"
-                  }
-                />
-                <StyledText
-                  style={[styles.helpText, { color: textColor }]}
-                  variant="bodySmall"
-                >
-                  Get 10% off your first service with a valid referral code.
-                  only valid for B2C users.
-                </StyledText>
-              </View>
+              {/* Referral Code Input — B2C only */}
+              {signUpData?.signUpAccountType === "b2c" && (
+                <View style={styles.inputContainer}>
+                  <StyledTextInput
+                    label="Referral Code (Optional)"
+                    placeholder="Enter referral code if you have one"
+                    value={signUpData?.referred_code || ""}
+                    onChangeText={(text) =>
+                      handleSignUpData("referred_code", text)
+                    }
+                    keyboardType="default"
+                    autoCapitalize="characters"
+                    style={styles.textInput}
+                    placeholderTextColor={
+                      textColor === "#FFFFFF" ? "#B0B0B0" : "#999999"
+                    }
+                  />
+                  <StyledText
+                    style={[styles.helpText, { color: textColor }]}
+                    variant="bodySmall"
+                  >
+                    Get 10% off your first service with a valid referral code.
+                    Only valid for personal accounts.
+                  </StyledText>
+                </View>
+              )}
 
-              {/* Business section - shown when Fleet Owner or Dealership is checked */}
-              {(signUpData?.isDealership || signUpData?.isFleetOwner) && (
+              {/* Business section — fleet operator or dealership */}
+              {(signUpData?.signUpAccountType === "fleet_operator" ||
+                signUpData?.signUpAccountType === "dealership") && (
                 <View style={styles.businessSection}>
                   <View style={styles.inputContainer}>
                     <StyledTextInput
@@ -438,21 +403,14 @@ const OnboardingScreen = () => {
                 onPress={() => setTermsAccepted((prev) => !prev)}
                 activeOpacity={0.7}
               >
-                <View
-                  style={[
-                    styles.checkbox,
-                    {
-                      borderColor,
-                      backgroundColor: termsAccepted
-                        ? buttonColor
-                        : "transparent",
-                    },
-                  ]}
-                >
-                  {termsAccepted && (
-                    <Ionicons name="checkmark" size={16} color="white" />
-                  )}
-                </View>
+                <SquareCheckbox
+                  checked={termsAccepted}
+                  borderColor={borderColor}
+                  checkedBackgroundColor={buttonColor}
+                  checkColor="white"
+                  size="compact"
+                  style={styles.checkboxBoxOffset}
+                />
                 <View style={{ flex: 1 }}>
                   <StyledText variant="bodySmall">
                     I have read and accepted the terms and conditions and
@@ -518,6 +476,24 @@ const styles = StyleSheet.create({
   title: {
     fontWeight: "bold",
   },
+  accountRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  accountRowText: {
+    flex: 1,
+    marginRight: 12,
+  },
+  accountKindLabel: {
+    opacity: 0.75,
+    marginBottom: 2,
+  },
   formSection: {
     flex: 1,
   },
@@ -550,37 +526,18 @@ const styles = StyleSheet.create({
     marginLeft: 4,
     opacity: 0.7,
   },
-  fleetOwnerContainer: {
-    marginBottom: 10,
-    paddingLeft: 10,
-  },
   businessSection: {
     marginBottom: 20,
     marginTop: 4,
-  },
-  fleetOwnerText: {
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: "500",
   },
   checkboxContainer: {
     flexDirection: "row",
     alignItems: "flex-start",
     padding: 10,
   },
-  checkbox: {
-    width: 18,
-    height: 18,
-    borderRadius: 4,
-    borderWidth: 1.5,
-    alignItems: "center",
-    justifyContent: "center",
+  checkboxBoxOffset: {
     marginRight: 12,
     marginTop: 2,
-  },
-  continueButtonText: {
-    fontSize: 16,
-    fontWeight: "600",
   },
   signInContainer: {
     alignItems: "center",

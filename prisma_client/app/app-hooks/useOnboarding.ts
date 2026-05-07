@@ -76,7 +76,9 @@ const useOnboarding = () => {
     }
     try {
       dispatch(setIsLoading(true));
-      const response = await registerMutation(signUpData).unwrap();
+      const credentials = { ...signUpData };
+      delete credentials.signUpAccountType;
+      const response = await registerMutation(credentials).unwrap();
       if (response) {
         /* Save the return data in the state and also the storage */
         saveDataToStorage(response.user, response.access, response.refresh);

@@ -3,8 +3,11 @@ import {
   ValetTypeProps,
   AddOnsProps,
   CreateBookingProps,
+  BookingPriceSummaryBreakdown,
+  TimeSlot,
+  CalendarDay,
 } from "@/app/interfaces/BookingInterfaces";
-import React, { useEffect, useCallback, useState } from "react";
+import { useEffect, useCallback, useState } from "react";
 import { MyVehiclesProps } from "@/app/interfaces/GarageInterface";
 import {
   MyAddressProps,
@@ -21,15 +24,20 @@ import {
   useRescheduleBookingMutation,
   useFetchPromotionsQuery,
   useMarkPromotionAsUsedMutation,
-  useLazyCheckFreeWashQuery,
+  useQuoteBookingMutation,
   useApplyWinnerVoucherMutation,
+} from "@/app/store/api/eventApi";
+import type {
+  BookingQuoteResponse,
+  ComplimentarySparkleSource,
+  BookingQuotePricingLines,
 } from "@/app/store/api/eventApi";
 import * as SecureStore from "expo-secure-store";
 import { useAlertContext } from "@/app/contexts/AlertContext";
 import { useSnackbar } from "@/app/contexts/SnackbarContext";
 import dayjs from "dayjs";
-import { TimeSlot, CalendarDay } from "@/app/interfaces/BookingInterfaces";
 import { formatCurrency } from "@/app/utils/methods";
+import { vehicleBodyStyleRequiresSuvMpvSurcharge } from "@/app/utils/vehicleBodyStyle";
 import { Alert } from "react-native";
 import { router } from "expo-router";
 import { ReturnBookingProps } from "../interfaces/OtherInterfaces";
@@ -84,7 +92,8 @@ const useBooking = () => {
   const user = useAppSelector((state: RootState) => state.auth.user);
   const userAddress = user?.address;
   const { refetchAppointments } = useDashboard();
-  const { openPaymentSheet, waitForPaymentConfirmation } = usePayment();
+  const { openPaymentSheet, waitForPaymentConfirmation, openRescheduleFeePaymentSheet } =
+    usePayment();
 
   /* Api hooks */
 
@@ -108,8 +117,8 @@ const useBooking = () => {
     useRescheduleBookingMutation();
   const [markPromotionAsUsed] = useMarkPromotionAsUsedMutation();
 
-  // Lazy query for checking free wash - only runs when trigger is called
-  const [checkFreeWash] = useLazyCheckFreeWashQuery();
+  const [quoteBookingMut, { isLoading: bookingQuoteLoading }] =
+    useQuoteBookingMutation();
 
   const { setAlertConfig, setIsVisible } = useAlertContext();
   const { showSnackbarWithConfig, showSnackbar } = useSnackbar();
@@ -140,6 +149,14 @@ const useBooking = () => {
     discountApplied: number;
     preTotal: number;
   } | null>(null);
+  const [serverQuote, setServerQuote] = useState<BookingQuoteResponse | null>(
+    null
+  );
+  const [complimentarySparkleSource, setComplimentarySparkleSource] =
+    useState<ComplimentarySparkleSource | null>(null);
+  const [applyPartnerBookingDiscount, setApplyPartnerBookingDiscount] =
+    useState(false);
+
   const [winnerVoucherCode, setWinnerVoucherCode] = useState("");
   const [applyWinnerVoucherMut] = useApplyWinnerVoucherMutation();
 
@@ -164,6 +181,8 @@ const useBooking = () => {
     booking_status: string;
     refund: any;
     hours_until_appointment: number;
+    time_remaining_label?: string;
+    tier?: "full" | "half" | "none";
   } | null>(null);
   const [cancellationBookingReference, setCancellationBookingReference] =
     useState<string>("");
@@ -178,6 +197,15 @@ const useBooking = () => {
   const [selectedDay, setSelectedDay] = useState<dayjs.Dayjs>(
     dayjs(selectedDate)
   );
+
+  useEffect(() => {
+    if (
+      selectedVehicle &&
+      vehicleBodyStyleRequiresSuvMpvSurcharge(selectedVehicle.body_style)
+    ) {
+      setIsSUV(true);
+    }
+  }, [selectedVehicle?.id, selectedVehicle?.body_style]);
 
   /**
    * Helper function to calculate total service duration including addons
@@ -1085,8 +1113,18 @@ const useBooking = () => {
   const isStepValid = useCallback(
     (step: number): boolean => {
       switch (step) {
-        case 1: // Vehicle selection
-          return selectedVehicle !== null;
+        case 1: {
+          if (!selectedVehicle) return false;
+          if (
+            vehicleBodyStyleRequiresSuvMpvSurcharge(
+              selectedVehicle.body_style
+            ) &&
+            !isSUV
+          ) {
+            return false;
+          }
+          return true;
+        }
         case 2: // Service type selection
           return selectedServiceType !== null;
         case 3: // Valet type selection
@@ -1097,19 +1135,33 @@ const useBooking = () => {
             selectedDate > new Date() &&
             hasSelectedTimeSlot()
           );
-        case 5: // Summary and confirmation
+        case 5: {
+          // Server quote loaded; complimentary Quick Sparkle needs an explicit choice if multiple pools apply.
+          if (!serverQuote || bookingQuoteLoading) return false;
+          const qs = serverQuote.quick_sparkle;
+          if (!qs?.is_quick_sparkle) return true;
+          const elig: ComplimentarySparkleSource[] = [];
+          if (qs.eligible_loyalty) elig.push("loyalty");
+          if (qs.eligible_partner) elig.push("partner");
+          if (qs.eligible_subscription) elig.push("subscription");
+          if (elig.length >= 2 && !complimentarySparkleSource) return false;
           return true;
+        }
         default:
           return false;
       }
     },
     [
       selectedVehicle,
+      isSUV,
       selectedServiceType,
       selectedValetType,
       selectedAddress,
       selectedDate,
       hasSelectedTimeSlot,
+      serverQuote,
+      bookingQuoteLoading,
+      complimentarySparkleSource,
     ]
   );
 
@@ -1154,7 +1206,12 @@ const useBooking = () => {
    * const canProceed = canProceedToSummary(); // Returns true if all fields are completed
    */
   const canProceedToSummary = useCallback((): boolean => {
+    const suvOk =
+      !selectedVehicle ||
+      !vehicleBodyStyleRequiresSuvMpvSurcharge(selectedVehicle.body_style) ||
+      isSUV;
     return (
+      suvOk &&
       selectedVehicle !== null &&
       selectedServiceType !== null &&
       selectedValetType !== null &&
@@ -1164,6 +1221,7 @@ const useBooking = () => {
     );
   }, [
     selectedVehicle,
+    isSUV,
     selectedServiceType,
     selectedValetType,
     selectedAddress,
@@ -1377,33 +1435,6 @@ const useBooking = () => {
   }, [isSUV, selectedServiceType, user?.is_fleet_owner, user?.is_branch_admin, selectedAddons]);
 
   /**
-   * Gets the original price before loyalty discount (for display purposes)
-   *
-   * @returns The original price before any loyalty discount
-   */
-  const getOriginalPrice = useCallback((): number => {
-    // Use fleet_price if user is fleet owner/admin, otherwise use regular price
-    const servicePrice = selectedServiceType
-      ? (selectedServiceType.user_price !== undefined
-          ? selectedServiceType.user_price
-          : (user?.is_fleet_owner || user?.is_branch_admin) && selectedServiceType.fleet_price
-          ? selectedServiceType.fleet_price
-          : selectedServiceType.price)
-      : 0;
-
-    const basePrice = servicePrice;
-    const addonCosts = selectedAddons.reduce(
-      (total, addon) => total + addon.price,
-      0
-    );
-    const totalBeforeSurcharge = basePrice + addonCosts;
-    const suvSurcharge = isSUV ? totalBeforeSurcharge * 0.15 : 0;
-    const expressServiceFee = isExpressService ? 30 : 0;
-
-    return totalBeforeSurcharge + suvSurcharge + expressServiceFee;
-  }, [selectedServiceType, user?.is_fleet_owner, user?.is_branch_admin, isSUV, isExpressService, selectedAddons]);
-
-  /**
    * Calculate final price with option to exclude service base price (for free washes)
    *
    * This method provides a unified price calculation that can optionally exclude
@@ -1417,8 +1448,8 @@ const useBooking = () => {
    * // Normal booking
    * const breakdown = calculateFinalPrice(false);  // { subtotal: 35.88, vat: 8.25, total: 44.13 }
    *
-   * // Free Quick Sparkle (only charge addons)
-   * const breakdown = calculateFinalPrice(true);   // { subtotal: 13.45, vat: 3.09, total: 16.54 }
+   * // Free Quick Sparkle — base + SUV waived; addons + express €30 + tier/promo % still apply.
+   * const breakdown = calculateFinalPrice(true);
    */
   const calculateFinalPrice = useCallback(
     (
@@ -1455,15 +1486,14 @@ const useBooking = () => {
       // Step 3: Calculate subtotal
       const subtotal = basePrice + addonCosts;
 
-      // Step 4: Add SUV surcharge (NO surcharge when free wash is applied)
+      // Complimentary QS: no SUV surcharge; express still billed when selected
       const suvSurcharge = excludeServicePrice
         ? 0
         : isSUV
-        ? subtotal * 0.15
-        : 0;
+          ? subtotal * 0.15
+          : 0;
 
-      // Step 4b: Add express service fee (NO fee when free wash is applied)
-      const expressServiceFee = excludeServicePrice ? 0 : isExpressService ? 30 : 0;
+      const expressServiceFee = isExpressService ? 30 : 0;
 
       // Step 5: Total before loyalty/promotion discounts
       const totalBeforeDiscounts = subtotal + suvSurcharge + expressServiceFee;
@@ -1514,6 +1544,142 @@ const useBooking = () => {
     ]
   );
 
+  /** Server quote resolution for summary step (complimentary QS + VAT breakdown). */
+  const getResolvedServerPayable =
+    useCallback((): BookingQuoteResponse["payable_full"] | null => {
+      if (!serverQuote || winnerVoucherApplied) return null;
+      const qs = serverQuote.quick_sparkle;
+      const elig: ComplimentarySparkleSource[] = [];
+      if (qs?.eligible_loyalty) elig.push("loyalty");
+      if (qs?.eligible_partner) elig.push("partner");
+      if (qs?.eligible_subscription) elig.push("subscription");
+      if (!qs?.is_quick_sparkle) return serverQuote.payable_full;
+      if (elig.length === 0) return serverQuote.payable_full;
+      if (elig.length >= 2) {
+        if (
+          !complimentarySparkleSource ||
+          !elig.includes(complimentarySparkleSource)
+        ) {
+          return serverQuote.payable_full;
+        }
+        return (
+          serverQuote.payable_if_complimentary[complimentarySparkleSource] ??
+          serverQuote.payable_full
+        );
+      }
+      return (
+        serverQuote.payable_if_complimentary[elig[0]] ??
+        serverQuote.payable_full
+      );
+    }, [serverQuote, winnerVoucherApplied, complimentarySparkleSource]);
+
+  /** VAT-inclusive sticker + tier/promo/partner € deductions matching payable total. */
+  const getResolvedPricingLines =
+    useCallback((): BookingQuotePricingLines | null => {
+      if (!serverQuote || winnerVoucherApplied) return null;
+      const baseMeta = serverQuote.pricing_lines_full;
+      if (!baseMeta) return null;
+      const qs = serverQuote.quick_sparkle;
+      const elig: ComplimentarySparkleSource[] = [];
+      if (qs?.eligible_loyalty) elig.push("loyalty");
+      if (qs?.eligible_partner) elig.push("partner");
+      if (qs?.eligible_subscription) elig.push("subscription");
+      if (!qs?.is_quick_sparkle) return baseMeta;
+      if (elig.length === 0) return baseMeta;
+      if (elig.length >= 2) {
+        if (
+          !complimentarySparkleSource ||
+          !elig.includes(complimentarySparkleSource)
+        ) {
+          return baseMeta;
+        }
+        const alt =
+          serverQuote.pricing_lines_if_complimentary[
+            complimentarySparkleSource
+          ];
+        return alt ?? baseMeta;
+      }
+      const sole = elig[0];
+      const alt = serverQuote.pricing_lines_if_complimentary[sole];
+      return alt ?? baseMeta;
+    }, [serverQuote, winnerVoucherApplied, complimentarySparkleSource]);
+
+  /**
+   * Sticker total before loyalty/promo/partner (VAT inc.), or legacy calculation without server quote.
+   */
+  const getOriginalPrice = useCallback((): number => {
+    if (serverQuote && !winnerVoucherApplied) {
+      const lines = getResolvedPricingLines();
+      if (lines) return lines.sticker_total_inc_vat;
+      return serverQuote.payable_full.total;
+    }
+    const servicePrice = selectedServiceType
+      ? selectedServiceType.user_price !== undefined
+        ? selectedServiceType.user_price
+        : (user?.is_fleet_owner || user?.is_branch_admin) &&
+            selectedServiceType.fleet_price
+          ? selectedServiceType.fleet_price
+          : selectedServiceType.price
+      : 0;
+
+    const basePrice = servicePrice;
+    const addonCosts = selectedAddons.reduce(
+      (total, addon) => total + addon.price,
+      0
+    );
+    const totalBeforeSurcharge = basePrice + addonCosts;
+    const suvSurcharge = isSUV ? totalBeforeSurcharge * 0.15 : 0;
+    const expressServiceFee = isExpressService ? 30 : 0;
+
+    return totalBeforeSurcharge + suvSurcharge + expressServiceFee;
+  }, [
+    selectedServiceType,
+    user?.is_fleet_owner,
+    user?.is_branch_admin,
+    isSUV,
+    isExpressService,
+    selectedAddons,
+    serverQuote,
+    winnerVoucherApplied,
+    getResolvedPricingLines,
+  ]);
+
+  const getPriceSummaryBreakdown = useCallback((): BookingPriceSummaryBreakdown | null => {
+    if (!serverQuote?.pricing_lines_full || winnerVoucherApplied) return null;
+
+    const lines = getResolvedPricingLines();
+    const payable = getResolvedServerPayable();
+    if (!lines || !payable) return null;
+
+    const fullSticker = serverQuote.pricing_lines_full.sticker_total_inc_vat;
+    const resolvedSticker = lines.sticker_total_inc_vat;
+    const compSave =
+      fullSticker > resolvedSticker + 0.005
+        ? Number((fullSticker - resolvedSticker).toFixed(2))
+        : 0;
+
+    return {
+      stickerSubtotalIncVat: lines.sticker_total_inc_vat,
+      loyaltyDiscountIncVat: lines.loyalty_discount_inc_vat,
+      promotionDiscountIncVat: lines.promotion_discount_inc_vat,
+      partnerReferralDiscountIncVat: lines.partner_referral_discount_inc_vat,
+      complimentaryStickerSavingsIncVat: compSave,
+      totalIncVat: payable.total,
+      loyaltyDiscountPercent: user?.loyalty_benefits?.discount,
+      partnerReferralDiscountPercent:
+        lines.partner_referral_discount_inc_vat > 0.005 &&
+        serverQuote.partner_booking_offer?.eligible
+          ? serverQuote.partner_booking_offer.percent
+          : undefined,
+    };
+  }, [
+    serverQuote,
+    winnerVoucherApplied,
+    getResolvedPricingLines,
+    getResolvedServerPayable,
+    user?.loyalty_benefits?.discount,
+  ]);
+
   /**
    * Gets the final price after all discounts (loyalty + promotion)
    *
@@ -1521,9 +1687,33 @@ const useBooking = () => {
    * @returns The final price after all applicable discounts (including VAT)
    */
   const getFinalPrice = useCallback((): number => {
-    // Use the new unified method for consistency
+    if (winnerVoucherApplied) return winnerVoucherApplied.amountDue;
+    const srv = getResolvedServerPayable();
+    if (srv) return srv.total;
     return calculateFinalPrice(false).total;
-  }, [calculateFinalPrice]);
+  }, [
+    winnerVoucherApplied,
+    getResolvedServerPayable,
+    calculateFinalPrice,
+  ]);
+
+  /**
+   * Combined savings line for summary when server quote applies
+   * (full QS price vs payable after complimentary allocation).
+   */
+  const getSummaryDiscountDisplayAmount = useCallback((): number => {
+    if (!serverQuote || winnerVoucherApplied) return 0;
+    const resolved = getResolvedServerPayable();
+    if (!resolved) return 0;
+    return Math.max(
+      0,
+      Number((serverQuote.payable_full.total - resolved.total).toFixed(2))
+    );
+  }, [
+    serverQuote,
+    winnerVoucherApplied,
+    getResolvedServerPayable,
+  ]);
 
   /**
    * Gets the total cost of selected addons
@@ -1685,6 +1875,8 @@ const useBooking = () => {
     setCancellationBookingReference("");
     setWinnerVoucherApplied(null);
     setWinnerVoucherCode("");
+    setServerQuote(null);
+    setComplimentarySparkleSource(null);
   }, []);
 
   /**
@@ -1793,15 +1985,70 @@ const useBooking = () => {
     formatCurrency,
   ]);
 
+  useEffect(() => {
+    if (currentStep !== 5) {
+      setServerQuote(null);
+      setComplimentarySparkleSource(null);
+      setApplyPartnerBookingDiscount(false);
+    }
+  }, [currentStep]);
+
+  useEffect(() => {
+    if (!serverQuote?.partner_booking_offer?.eligible) {
+      setApplyPartnerBookingDiscount(false);
+    }
+  }, [serverQuote?.partner_booking_offer?.eligible]);
+
+  useEffect(() => {
+    if (currentStep !== 5 || !selectedServiceType?.id) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await quoteBookingMut({
+          service_type_id: String(selectedServiceType.id),
+          addon_ids: selectedAddons.map((a) => String(a.id)),
+          is_suv: isSUV,
+          is_express: isExpressService,
+          apply_partner_booking_discount: applyPartnerBookingDiscount,
+        }).unwrap();
+        if (cancelled) return;
+        setServerQuote(res);
+        const elig: ComplimentarySparkleSource[] = [];
+        const qs = res.quick_sparkle;
+        if (qs?.eligible_loyalty) elig.push("loyalty");
+        if (qs?.eligible_partner) elig.push("partner");
+        if (qs?.eligible_subscription) elig.push("subscription");
+        setComplimentarySparkleSource((prev) => {
+          if (elig.length === 0) return null;
+          if (elig.length === 1) return elig[0];
+          if (prev && elig.includes(prev)) return prev;
+          return null;
+        });
+      } catch {
+        if (!cancelled) setServerQuote(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    currentStep,
+    selectedServiceType?.id,
+    selectedAddons,
+    isSUV,
+    isExpressService,
+    quoteBookingMut,
+    applyPartnerBookingDiscount,
+  ]);
+
   const clearWinnerVoucher = useCallback(() => {
     setWinnerVoucherApplied(null);
     setWinnerVoucherCode("");
   }, []);
 
   const getPayableTotal = useCallback((): number => {
-    if (winnerVoucherApplied) return winnerVoucherApplied.amountDue;
-    return calculateFinalPrice(false).total;
-  }, [winnerVoucherApplied, calculateFinalPrice]);
+    return getFinalPrice();
+  }, [getFinalPrice]);
 
   /**
    * Handles the complete booking confirmation flow including payment and booking creation
@@ -1818,36 +2065,97 @@ const useBooking = () => {
    * // Processes payment, webhook creates bookings automatically
    */
   const handleBookingConfirmation = useCallback(async () => {
+    if (
+      selectedVehicle &&
+      vehicleBodyStyleRequiresSuvMpvSurcharge(selectedVehicle.body_style) &&
+      !isSUV
+    ) {
+      showSnackbarWithConfig({
+        message:
+          "This vehicle's registered body style counts as an SUV or MPV. Turn on SUV / MPV to apply the required 15% surcharge.",
+        type: "error",
+        duration: 5000,
+      });
+      return;
+    }
     try {
       setIsLoading(true);
       setPaymentConfirmationStatus("pending");
       // Generate a booking reference
       const bookingReference = `APT${Date.now()}`;
 
-      // Check if this is a Quick Sparkle - always call checkFreeWash; backend decides eligibility (loyalty or partner)
-      const isQuickSparkle = selectedServiceType?.name === "The Quick Sparkle";
       let priceBreakdown = calculateFinalPrice(false);
       let applyFreeQuickSparkle = false;
+      let preWinnerBreakdown = calculateFinalPrice(false);
+      let complimentarySourceForPayload: ComplimentarySparkleSource | undefined;
 
-      if (isQuickSparkle) {
+      if (!winnerVoucherApplied && selectedServiceType?.id) {
+        let freshQuote: BookingQuoteResponse;
         try {
-          const checkResult = await checkFreeWash();
+          freshQuote = await quoteBookingMut({
+            service_type_id: String(selectedServiceType.id),
+            addon_ids: selectedAddons.map((a) => String(a.id)),
+            is_suv: isSUV,
+            is_express: isExpressService,
+            apply_partner_booking_discount: applyPartnerBookingDiscount,
+          }).unwrap();
+          setServerQuote(freshQuote);
+        } catch {
+          showSnackbarWithConfig({
+            message: "Could not verify pricing. Please try again.",
+            type: "error",
+            duration: 4000,
+          });
+          setIsLoading(false);
+          setPaymentConfirmationStatus("failed");
+          return;
+        }
 
-          if (checkResult.data && checkResult.data.can_use_free_wash) {
-            priceBreakdown = calculateFinalPrice(true);
+        const isQuickSparkle = Boolean(freshQuote.quick_sparkle?.is_quick_sparkle);
+        const qs = freshQuote.quick_sparkle;
+        const elig: ComplimentarySparkleSource[] = [];
+        if (qs?.eligible_loyalty) elig.push("loyalty");
+        if (qs?.eligible_partner) elig.push("partner");
+        if (qs?.eligible_subscription) elig.push("subscription");
+
+        preWinnerBreakdown = {
+          subtotal: freshQuote.payable_full.subtotal,
+          vat: freshQuote.payable_full.vat,
+          total: freshQuote.payable_full.total,
+        };
+        priceBreakdown = { ...preWinnerBreakdown };
+
+        if (isQuickSparkle && elig.length >= 2 && !complimentarySparkleSource) {
+          showSnackbarWithConfig({
+            message: "Select how to apply your complimentary Quick Sparkle.",
+            type: "error",
+            duration: 4000,
+          });
+          setIsLoading(false);
+          setPaymentConfirmationStatus("failed");
+          return;
+        }
+
+        const effectiveSource: ComplimentarySparkleSource | null =
+          isQuickSparkle && elig.length === 1
+            ? elig[0]
+            : complimentarySparkleSource;
+
+        if (
+          isQuickSparkle &&
+          effectiveSource &&
+          elig.includes(effectiveSource)
+        ) {
+          const pb = freshQuote.payable_if_complimentary[effectiveSource];
+          if (pb) {
             applyFreeQuickSparkle = true;
-
-            const message = checkResult.data.partner_free_wash
-              ? "Partner free Quick Sparkle applied!"
-              : `Free Quick Sparkle applied! You have ${checkResult.data.remaining_quick_sparkles} left this month.`;
-
-            showSnackbarWithConfig({
-              message,
-              type: "success",
-              duration: 3000,
-            });
+            priceBreakdown = {
+              subtotal: pb.subtotal,
+              vat: pb.vat,
+              total: pb.total,
+            };
+            complimentarySourceForPayload = effectiveSource;
           }
-        } catch (error) {
         }
       }
 
@@ -1858,7 +2166,6 @@ const useBooking = () => {
         startTime.getTime() + totalDurationMinutes * 60 * 1000
       );
 
-      const preWinnerBreakdown = calculateFinalPrice(false);
       const useWinnerVoucher =
         Boolean(winnerVoucherApplied) && !applyFreeQuickSparkle;
       const amountToPay = useWinnerVoucher
@@ -1888,7 +2195,17 @@ const useBooking = () => {
         booking_reference: bookingReference,
         applied_free_quick_sparkle: applyFreeQuickSparkle,
         is_express_service: isExpressService,
+        booking_is_suv: isSUV,
       };
+      if (
+        applyFreeQuickSparkle &&
+        complimentarySourceForPayload
+      ) {
+        bookingDataForClient.complimentary_quick_sparkle_source =
+          complimentarySourceForPayload;
+      }
+      bookingDataForClient.apply_partner_booking_discount =
+        applyPartnerBookingDiscount;
       if (useWinnerVoucher) {
         bookingDataForClient.pre_voucher_total_amount = preWinnerBreakdown.total;
         bookingDataForClient.winner_voucher_id = winnerVoucherApplied!.voucherId;
@@ -2044,7 +2361,10 @@ const useBooking = () => {
     openPaymentSheet,
     waitForPaymentConfirmation,
     calculateFinalPrice,
-    checkFreeWash,
+    quoteBookingMut,
+    complimentarySparkleSource,
+    isSUV,
+    isExpressService,
     showSnackbarWithConfig,
     selectedDate,
     selectedVehicle,
@@ -2059,8 +2379,8 @@ const useBooking = () => {
     user,
     promotions,
     markPromotionAsUsed,
-    isExpressService,
     winnerVoucherApplied,
+    applyPartnerBookingDiscount,
   ]);
 
   /* Show cancellation modal with details */
@@ -2070,48 +2390,54 @@ const useBooking = () => {
       appointmentDate?: string,
       totalAmount?: number
     ) => {
-      // Calculate hours until appointment
-      let hoursUntilAppointment = 0;
+      const now = new Date();
+      let rawHoursUntil = 0;
       if (appointmentDate) {
         const appointment = new Date(appointmentDate);
-        const now = new Date();
-        const timeDifference = appointment.getTime() - now.getTime();
-        hoursUntilAppointment = Math.max(
-          0,
-          Math.ceil(timeDifference / (1000 * 60 * 60))
-        );
+        rawHoursUntil =
+          (appointment.getTime() - now.getTime()) / (1000 * 60 * 60);
       }
 
-      // Tiered refund: >12h full, 6-12h half, <=6h none
+      const hoursCeil =
+        rawHoursUntil > 0 ? Math.ceil(rawHoursUntil) : Math.floor(rawHoursUntil);
+      const timeRemainingLabel =
+        rawHoursUntil <= 0 ? "Passed" : `${hoursCeil}h`;
+
+      // Tiered refund: >24h full, 12-24h half, <=12h none (includes past start)
       const actualAmount = totalAmount || 0;
       let refundAmount = 0;
       let tier: "full" | "half" | "none" = "none";
       let message = "This booking will be cancelled.";
 
-      if (hoursUntilAppointment > 12) {
+      if (rawHoursUntil > 24) {
         tier = "full";
         refundAmount = actualAmount;
         message =
-          "This booking will be cancelled and you will receive a full refund.";
-      } else if (hoursUntilAppointment > 6) {
+          "This booking will be cancelled and you will receive a full refund (more than 24 hours before start).";
+      } else if (rawHoursUntil > 12) {
         tier = "half";
         refundAmount = actualAmount / 2;
         message =
-          "This booking will be cancelled and you will receive a 50% refund.";
+          "This booking will be cancelled and you will receive a 50% refund (between 12 and 24 hours before start).";
+      } else if (rawHoursUntil > 0) {
+        tier = "none";
+        message =
+          "This booking will be cancelled. You will not receive a refund — cancellations within 12 hours of the start time are non-refundable.";
       } else {
         tier = "none";
         message =
-          "This booking will be cancelled. You will NOT receive a refund (cancellation within 6 hours of appointment).";
+          "This booking will be cancelled. You will not receive a refund — the appointment start time has already passed.";
       }
 
       const cancellationData = {
         message,
         booking_status: "pending_cancellation",
         refund:
-          refundAmount > 0
-            ? { amount: Math.round(refundAmount * 100), tier }
-            : null,
-        hours_until_appointment: hoursUntilAppointment,
+          tier === "none"
+            ? null
+            : { amount: Math.max(0, Math.round(refundAmount * 100)), tier },
+        hours_until_appointment: rawHoursUntil <= 0 ? 0 : Math.max(0, hoursCeil),
+        time_remaining_label: timeRemainingLabel,
         tier,
       };
 
@@ -2179,6 +2505,18 @@ const useBooking = () => {
       newTime: string,
       totalCost?: number
     ) => {
+      const showRescheduleSuccess = (messageText: string) => {
+        setAlertConfig({
+          title: "Booking Rescheduled",
+          message: messageText,
+          type: "success",
+          isVisible: true,
+          onConfirm: () => {
+            setIsVisible(false);
+          },
+        });
+      };
+
       try {
         const response = await rescheduleBooking({
           booking_id: bookingId,
@@ -2191,17 +2529,44 @@ const useBooking = () => {
               ? response
               : (response as { message?: string })?.message ??
                 "Booking rescheduled successfully.";
-          setAlertConfig({
-            title: "Booking Rescheduled",
-            message: messageText,
-            type: "success",
-            isVisible: true,
-            onConfirm: () => {
-              setIsVisible(false);
-            },
-          });
+          showRescheduleSuccess(messageText);
         }
       } catch (error: any) {
+        const code = error?.data?.code;
+        if (code === "RESCHEDULE_FEE_REQUIRED") {
+          try {
+            const pay = await openRescheduleFeePaymentSheet(
+              bookingId,
+              newDate,
+              newTime
+            );
+            if (!pay.success || !pay.paymentIntentId) {
+              return;
+            }
+            await waitForPaymentConfirmation(pay.paymentIntentId);
+            refetchAppointments();
+            showRescheduleSuccess(
+              "Your booking was updated after the late reschedule fee was paid."
+            );
+            return;
+          } catch (feeErr: any) {
+            const feeMsg =
+              feeErr?.message ||
+              feeErr?.data?.error ||
+              "Payment confirmation failed. If you were charged, check your bookings or contact support.";
+            setAlertConfig({
+              title: "Error",
+              message: feeMsg,
+              type: "error",
+              isVisible: true,
+              onConfirm: () => {
+                setIsVisible(false);
+              },
+            });
+            return;
+          }
+        }
+
         let message = "Failed to reschedule booking";
         if (error?.data?.error) {
           message = error.data.error;
@@ -2217,7 +2582,14 @@ const useBooking = () => {
         });
       }
     },
-    [rescheduleBooking, setAlertConfig, setIsVisible]
+    [
+      rescheduleBooking,
+      setAlertConfig,
+      setIsVisible,
+      openRescheduleFeePaymentSheet,
+      waitForPaymentConfirmation,
+      refetchAppointments,
+    ]
   );
 
   /**
@@ -2258,6 +2630,12 @@ const useBooking = () => {
     isExpressService,
     isProcessingPayment,
     paymentConfirmationStatus,
+    serverQuote,
+    bookingQuoteLoading,
+    complimentarySparkleSource,
+    setComplimentarySparkleSource,
+    applyPartnerBookingDiscount,
+    setApplyPartnerBookingDiscount,
     selectedAddons,
     isAddonModalVisible,
     availableTimeSlots,
@@ -2344,7 +2722,9 @@ const useBooking = () => {
     getOriginalPrice,
     getFinalPrice,
     getLoyaltyDiscount,
+    getSummaryDiscountDisplayAmount,
     getPromotionDiscount,
+    getPriceSummaryBreakdown,
     calculateFinalPrice,
     winnerVoucherApplied,
     winnerVoucherCode,

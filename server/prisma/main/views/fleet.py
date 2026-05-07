@@ -718,7 +718,7 @@ class FleetView(APIView):
                     'color': vehicle.color,
                     'registration_number': vehicle.registration_number,
                     'country': vehicle.country,
-                    'vin': vehicle.vin,
+                    'body_style': vehicle.body_style,
                     'current_owner': ownership.owner.name if ownership else None,
                     'branch_id': str(branch.id),
                     'branch_name': branch.name,

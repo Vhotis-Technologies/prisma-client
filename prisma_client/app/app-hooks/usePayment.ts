@@ -3,12 +3,14 @@ import { useStripe } from "@stripe/stripe-react-native";
 import {
   useFetchPaymentSheetDetailsMutation,
   useConfirmPaymentIntentMutation,
+  useCreateRescheduleFeePaymentSheetMutation,
 } from "@/app/store/api/eventApi";
 import { useAlertContext } from "@/app/contexts/AlertContext";
 import { PaymentSheetResponse } from "@/app/interfaces/BookingInterfaces";
 import { RootState, useAppSelector } from "../store/main_store";
 import { useAddresses } from "./useAddresses";
 import { useSnackbar } from "../contexts/SnackbarContext";
+import { APP_ENV } from "@/constants/Config";
 
 /**
  * Custom hook for managing payment functionality using Stripe
@@ -30,6 +32,8 @@ const usePayment = () => {
   const { initPaymentSheet, presentPaymentSheet } = useStripe();
   const [fetchPaymentSheetDetails] = useFetchPaymentSheetDetailsMutation();
   const [confirmPaymentIntentMutation] = useConfirmPaymentIntentMutation();
+  const [createRescheduleFeePaymentSheet] =
+    useCreateRescheduleFeePaymentSheetMutation();
   const { setAlertConfig, setIsVisible } = useAlertContext();
   const { showSnackbarWithConfig } = useSnackbar();
   const { addresses } = useAddresses();
@@ -136,7 +140,7 @@ const usePayment = () => {
           },
           googlePay: {
             merchantCountryCode: countryCode,
-            testEnv: __DEV__,
+            testEnv: APP_ENV !== "production",
             currencyCode: currencyCode,
           },
           // Enable saving payment methods for future use
@@ -282,6 +286,112 @@ const usePayment = () => {
   );
 
   /**
+   * Late reschedule (<12h before start): payment sheet for reschedule fee. Webhook applies new slot.
+   */
+  const openRescheduleFeePaymentSheet = useCallback(
+    async (
+      bookingReference: string,
+      newDate: string,
+      newTime: string
+    ): Promise<{ success: boolean; paymentIntentId?: string }> => {
+      const address = addresses[0];
+      const country = (address?.country ?? "").trim();
+      const isUK =
+        country === "United Kingdom" ||
+        country === "UK" ||
+        country === "Great Britain";
+      const countryCode = isUK ? "GB" : "IE";
+      const currencyCode = isUK ? "GBP" : "EUR";
+
+      try {
+        const response = await createRescheduleFeePaymentSheet({
+          booking_reference: bookingReference,
+          new_date: newDate,
+          new_time: newTime,
+        }).unwrap();
+
+        const { paymentIntent, paymentIntentId, ephemeralKey, customer } =
+          response;
+
+        const { error } = await initPaymentSheet({
+          paymentIntentClientSecret: paymentIntent,
+          merchantDisplayName: "Prisma Valet",
+          customerEphemeralKeySecret: ephemeralKey,
+          customerId: customer,
+          returnURL: "prismaclient://payment-success",
+          applePay: {
+            merchantCountryCode: countryCode,
+          },
+          googlePay: {
+            merchantCountryCode: countryCode,
+            testEnv: APP_ENV !== "production",
+            currencyCode: currencyCode,
+          },
+          allowsDelayedPaymentMethods: true,
+        });
+
+        if (error) {
+          throw error;
+        }
+
+        const { error: presentError } = await presentPaymentSheet();
+        if (presentError) {
+          if (presentError.code === "Canceled") {
+            return { success: false };
+          }
+          showSnackbarWithConfig({
+            message: presentError.message || "Payment failed",
+            type: "error",
+            duration: 3000,
+          });
+          return { success: false };
+        }
+
+        return { success: true, paymentIntentId };
+      } catch (error: any) {
+        const status = error?.status ?? error?.originalStatus;
+        const code = error?.data?.code;
+        if (status === 403 && code === "BRANCH_SPEND_LIMIT_EXCEEDED") {
+          setAlertConfig({
+            isVisible: true,
+            title: "Spending limit exceeded",
+            message:
+              "Your branch's spending limit for this period has been reached.",
+            type: "warning",
+            onClose: () => {
+              setAlertConfig({
+                isVisible: false,
+                title: "",
+                message: "",
+                type: "error",
+              });
+            },
+          });
+          return { success: false };
+        }
+        const msg =
+          error?.data?.error ||
+          error?.message ||
+          "Could not start reschedule payment";
+        showSnackbarWithConfig({
+          message: msg,
+          type: "error",
+          duration: 3000,
+        });
+        return { success: false };
+      }
+    },
+    [
+      addresses,
+      createRescheduleFeePaymentSheet,
+      initPaymentSheet,
+      presentPaymentSheet,
+      showSnackbarWithConfig,
+      setAlertConfig,
+    ]
+  );
+
+  /**
    * Confirms if a payment intent has been processed via webhook
    *
    * @param paymentIntentId - The Stripe payment intent ID
@@ -377,6 +487,7 @@ const usePayment = () => {
     fetchPaymentSheetDetailsFromServer,
     initializePaymentSheet,
     openPaymentSheet,
+    openRescheduleFeePaymentSheet,
 
     // Payment confirmation methods
     confirmPaymentIntent,

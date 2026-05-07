@@ -397,7 +397,11 @@ class ProfileView(APIView):
             
             # Get user's loyalty program if exists
             from main.models import LoyaltyProgram
-            loyalty = LoyaltyProgram.objects.filter(user=user).first()
+            loyalty = (
+                LoyaltyProgram.objects.filter(user=user).first()
+                if user.is_b2c_user()
+                else None
+            )
             loyalty_benefits = loyalty.get_tier_benefits() if loyalty else None
             
             from main.models import Partner

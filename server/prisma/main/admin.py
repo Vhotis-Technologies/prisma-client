@@ -11,7 +11,7 @@ from django.core.exceptions import ValidationError
 from django import forms
 from django.db import models
 from django.utils import timezone
-from .models import User, Vehicle, VehicleOwnership, VehicleEvent, Fleet, FleetMember, FleetVehicle, VehicleTransfer, ServiceType, ValetType, DetailerProfile, BookedAppointment, Address, AddOns, Notification, LoyaltyProgram, Promotions, PaymentTransaction, RefundRecord, TermsAndConditions, PrivacyPolicy, Referral, Branch, SubscriptionTier, SubscriptionPlan, FleetSubscription, SubscriptionBilling, EventDataManagement, BookedAppointmentImage, Partner, PartnerBankAccount, PartnerPayoutRequest, ReferralAttribution, CommissionEarning, CommissionPayout, PartnerMetricsCache, CommissionAdminLog, PendingBooking, BulkOrder, WinnerVoucher
+from .models import User, Vehicle, VehicleOwnership, VehicleEvent, Fleet, FleetMember, FleetVehicle, VehicleTransfer, ServiceType, ValetType, DetailerProfile, BookedAppointment, Address, AddOns, Notification, LoyaltyProgram, Promotions, PaymentTransaction, RefundRecord, TermsAndConditions, PrivacyPolicy, Referral, Branch, SubscriptionTier, SubscriptionPlan, FleetSubscription, SubscriptionBilling, EventDataManagement, BookedAppointmentImage, Partner, PartnerBankAccount, PartnerPayoutRequest, ReferralAttribution, CommissionEarning, CommissionPayout, PartnerMetricsCache, CommissionAdminLog, PendingBooking, BulkOrder, WinnerVoucher, B2CSubcriptionTier, B2CSubcriptionPlan, B2CSubcription, B2CSubcriptionBilling
 
 
 
@@ -84,6 +84,36 @@ class SubscriptionTierForm(forms.ModelForm):
         else:
             instance.features = []
         
+        if commit:
+            instance.save()
+        return instance
+
+
+class B2CSubcriptionTierForm(forms.ModelForm):
+    features_text = forms.CharField(
+        widget=forms.Textarea(attrs={'rows': 8, 'cols': 50}),
+        help_text="Enter each feature on a new line. These will be stored as an array.",
+        required=False,
+    )
+
+    class Meta:
+        model = B2CSubcriptionTier
+        fields = '__all__'
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk:
+            if self.instance.features:
+                self.fields['features_text'].initial = '\n'.join(self.instance.features)
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        features_text = self.cleaned_data.get('features_text', '')
+        if features_text:
+            instance.features = [line.strip() for line in features_text.split('\n') if line.strip()]
+        else:
+            instance.features = []
+
         if commit:
             instance.save()
         return instance
@@ -237,9 +267,9 @@ class EventDataManagementAdmin(admin.ModelAdmin):
 
 @admin.register(Vehicle)
 class VehicleAdmin(admin.ModelAdmin):
-    list_display = ('make', 'model', 'year', 'color', 'registration_number', 'country', 'vin', 'created_at')
+    list_display = ('make', 'model', 'year', 'color', 'registration_number', 'country', 'created_at')
     list_filter = ('make', 'year', 'country', 'created_at')
-    search_fields = ('make', 'model', 'registration_number', 'vin', 'country')
+    search_fields = ('make', 'model', 'registration_number', 'country', 'county')
     readonly_fields = ('id', 'created_at', 'updated_at')
 
 @admin.register(VehicleOwnership)
@@ -283,7 +313,7 @@ class FleetVehicleAdmin(admin.ModelAdmin):
 class VehicleTransferAdmin(admin.ModelAdmin):
     list_display = ('vehicle', 'from_owner', 'to_owner', 'status', 'requested_at', 'expires_at')
     list_filter = ('status', 'requested_at', 'expires_at')
-    search_fields = ('vehicle__registration_number', 'vehicle__vin', 'from_owner__name', 'from_owner__email', 'to_owner__name', 'to_owner__email')
+    search_fields = ('vehicle__registration_number', 'from_owner__name', 'from_owner__email', 'to_owner__name', 'to_owner__email')
     readonly_fields = ('id', 'requested_at', 'created_at')
     date_hierarchy = 'requested_at'
     actions = ['expire_selected_transfers']
@@ -421,6 +451,80 @@ class BranchAdmin(admin.ModelAdmin):
     list_filter = ('created_at',)
     search_fields = ('name', 'address', 'postcode', 'city', 'country')
     readonly_fields = ('created_at', 'updated_at')
+
+@admin.register(B2CSubcriptionTier)
+class B2CSubcriptionTierAdmin(admin.ModelAdmin):
+    form = B2CSubcriptionTierForm
+    list_display = ('name', 'monthlyPrice', 'yearly_price', 'created_at')
+    search_fields = ('name', 'tagLine')
+    readonly_fields = ('id', 'created_at', 'updated_at')
+    fieldsets = (
+        ('Basic information', {'fields': ('name', 'tagLine', 'badge')}),
+        ('Reference pricing', {
+            'description': (
+                'List prices for catalog display only. Billing uses the amounts on each '
+                'B2C subscription plan row (monthly / yearly). No separate discount applies '
+                'to subscription list price.'
+            ),
+            'fields': ('monthlyPrice', 'yearly_price'),
+        }),
+        ('Features', {'fields': ('features_text',)}),
+        ('Metadata', {'fields': ('id', 'created_at', 'updated_at'), 'classes': ('collapse',)}),
+    )
+
+    def get_fields(self, request, obj=None):
+        fields = list(super().get_fields(request, obj))
+        if 'features' in fields:
+            fields.remove('features')
+        return fields
+
+
+@admin.register(B2CSubcriptionPlan)
+class B2CSubcriptionPlanAdmin(admin.ModelAdmin):
+    list_display = ('tier', 'billing_cycle', 'price', 'created_at')
+    list_filter = ('billing_cycle', 'tier', 'created_at')
+    search_fields = ('tier__name',)
+    readonly_fields = ('id', 'created_at', 'updated_at')
+    autocomplete_fields = ('tier',)
+    date_hierarchy = 'created_at'
+
+
+@admin.register(B2CSubcription)
+class B2CSubcriptionAdmin(admin.ModelAdmin):
+    list_display = ('user', 'plan', 'status', 'start_date', 'end_date', 'auto_renew', 'stripe_subscription_id')
+    list_filter = ('status', 'auto_renew', 'start_date')
+    search_fields = (
+        'user__email',
+        'user__name',
+        'stripe_subscription_id',
+        'plan__tier__name',
+    )
+    readonly_fields = ('id',)
+    raw_id_fields = ('user',)
+    autocomplete_fields = ('plan',)
+    date_hierarchy = 'start_date'
+    fieldsets = (
+        ('Subscription', {'fields': ('user', 'plan', 'status', 'start_date', 'end_date', 'auto_renew')}),
+        ('Stripe', {'fields': ('stripe_subscription_id',)}),
+        ('Trial', {'fields': ('trial_days', 'trial_start_date'), 'classes': ('collapse',)}),
+        ('Cancellation', {'fields': ('cancellation_date', 'cancellation_reason'), 'classes': ('collapse',)}),
+        ('Metadata', {'fields': ('id',), 'classes': ('collapse',)}),
+    )
+
+
+@admin.register(B2CSubcriptionBilling)
+class B2CSubcriptionBillingAdmin(admin.ModelAdmin):
+    list_display = ('subscription', 'amount', 'billing_date', 'status', 'transaction_id')
+    list_filter = ('status', 'billing_date')
+    search_fields = (
+        'subscription__user__email',
+        'subscription__stripe_subscription_id',
+        'transaction_id',
+    )
+    readonly_fields = ('id',)
+    raw_id_fields = ('subscription', 'payment')
+    date_hierarchy = 'billing_date'
+
 
 @admin.register(SubscriptionTier)
 class SubscriptionTierAdmin(admin.ModelAdmin):
