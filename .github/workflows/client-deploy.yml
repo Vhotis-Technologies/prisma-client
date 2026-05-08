@@ -8,8 +8,8 @@ env:
   EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
   EAS_PROJECT_ID: ${{ secrets.EAS_PROJECT_ID }}
   # Production and staging deploy paths on the droplet (separate clones / stacks).
-  DO_PROD_PATH: /${{ secrets.DO_USERNAME }}/client
-  DO_STAGING_PATH: /${{ secrets.DO_USERNAME }}/client
+  DO_PROD_PATH: /${{ secrets.DO_USERNAME }}/prisma-prod/prisma-client
+  DO_STAGING_PATH: /${{ secrets.DO_USERNAME }}/prisma-staging/prisma-client
 
 jobs:
   # Job 1: Deploy Client Mobile App (OTA Updates)

@@ -24,7 +24,7 @@ export const APP_ENV =
  * Stripe publishable key: live pk only when APP_ENV is `production` (store / prod EAS builds).
  * Otherwise test pk (local dev, preview, staging profiles).
  */
-/* export function getStripePublishableKey(): string | undefined {
+export function getStripePublishableKey(): string | undefined {
   const stripe = config.stripe as
     | { publishableKey?: string; productionPublishableKey?: string }
     | undefined;
@@ -33,9 +33,9 @@ export const APP_ENV =
     return stripe.productionPublishableKey || stripe.publishableKey;
   }
   return stripe.publishableKey;
-} */
+} 
 
-export const STRIPE_PUBLISHABLE_KEY = config.stripe?.publishableKey;
+export const STRIPE_PUBLISHABLE_KEY = getStripePublishableKey();
 
 // Stripe Configuration (raw keys; prefer STRIPE_PUBLISHABLE_KEY / getStripePublishableKey in UI)
 export const STRIPE_CONFIG = {
