@@ -99,22 +99,22 @@ services:
       timeout: 10s
       retries: 3
 
-  client_staging_nginx:
-    image: nginx:alpine
-    container_name: client_staging_nginx
-    restart: unless-stopped
-    env_file:
-      - .env.staging
-    ports:
-      - "80:80"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/conf.d:/etc/nginx/conf.d:ro
-      - ./nginx/html/static:/usr/share/nginx/html/static:ro
-    depends_on:
-      - client_staging_server
-    networks:
-      - prisma_shared_net
+  # client_staging_nginx:
+  #   image: nginx:alpine
+  #   container_name: client_staging_nginx
+  #   restart: unless-stopped
+  #   env_file:
+  #     - .env.staging
+  #   ports:
+  #     - "80:80"
+  #   volumes:
+  #     - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+  #     - ./nginx/conf.d:/etc/nginx/conf.d:ro
+  #     - ./nginx/html/static:/usr/share/nginx/html/static:ro
+  #   depends_on:
+  #     - client_staging_server
+  #   networks:
+  #     - prisma_shared_net
 
 
   client_staging_job_subscriber:
