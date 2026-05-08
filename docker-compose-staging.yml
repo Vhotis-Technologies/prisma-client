@@ -53,7 +53,6 @@ services:
     environment:
       - DJANGO_SETTINGS_MODULE=prisma.settings
       - PRISMA_ENV=staging
-    command: python manage.py runserver 0.0.0.0:8000
     depends_on:
       client_postgres:
         condition: service_healthy

@@ -13,8 +13,6 @@ services:
       - DJANGO_SETTINGS_MODULE=prisma.settings
       - DJANGO_ALLOWED_HOSTS=*
       - PRISMA_ENV=production
-    command: python manage.py runserver 0.0.0.0:8000
-
     networks:
       - prisma_shared_net
     healthcheck:
