@@ -15,15 +15,16 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # production | staging — not the same as DEBUG (staging can use DEBUG=False for prod-like behavior).
 PRISMA_ENV = os.getenv('PRISMA_ENV', 'production').strip().lower()
 IS_STAGING = PRISMA_ENV == 'staging'
+
 # Docker Redis hostname: prod share vs staging (single instance from client staging stack).
 _DEFAULT_REDIS_HOST = 'client_staging_redis' if IS_STAGING else 'prisma_redis'
 
 SECRET_KEY= os.getenv('DJANGO_SECRET_KEY')
 BASE_URL = os.getenv('BASE_URL')
 
-
+_DEFAULT_CLIENT_ORIGIN = 'https://staging.client.prismavalet.com' if IS_STAGING else 'https://client.prismavalet.com'
 # Production: client.prismavalet.com on droplet. Override via env for local/dev.
-_CLIENT_ORIGIN = os.getenv('CLIENT_ORIGIN', 'https://450e-2a02-8084-c81-a480-c018-9c4e-4107-9d95.ngrok-free.app')
+_CLIENT_ORIGIN = os.getenv('CLIENT_ORIGIN', _DEFAULT_CLIENT_ORIGIN) 
 # Base URL for email links (e.g. Privacy Policy, Terms). Defaults to client origin.
 FRONTEND_BASE_URL = os.getenv('FRONTEND_BASE_URL', _CLIENT_ORIGIN).rstrip('/')
 
@@ -32,11 +33,9 @@ PARTNER_REFERRED_BOOKING_DISCOUNT_PERCENT = int(
     os.getenv('PARTNER_REFERRED_BOOKING_DISCOUNT_PERCENT', '30').strip().split('.', 1)[0] or '30'
 )
 # Prismahome (landing site) often runs on localhost:3000; allow it for terms/privacy API calls.
-_DEFAULT_CORS_ORIGINS = [_CLIENT_ORIGIN, 'http://localhost:3000', 'http://127.0.0.1:3000']
+_DEFAULT_CORS_ORIGINS = [_CLIENT_ORIGIN, 'http://localhost:3000', 'http://127.0.0.1:3000', 'https://prismavalet.com']
 ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', _CLIENT_ORIGIN).split(',') if os.getenv('ALLOWED_ORIGINS') else [_CLIENT_ORIGIN]
 CSRF_TRUSTED_ORIGINS = os.getenv('CSRF_TRUSTED_ORIGINS', _CLIENT_ORIGIN).split(',') if os.getenv('CSRF_TRUSTED_ORIGINS') else [_CLIENT_ORIGIN]
-CORS_ALLOWED_ORIGINS = ['http://localhost:3000', 'http://127.0.0.1:3000', 'https://450e-2a02-8084-c81-a480-c018-9c4e-4107-9d95.ngrok-free.app']
-
 CORS_ALLOW_CREDENTIALS = True
 
 
@@ -102,6 +101,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -366,6 +366,8 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_DIRS = [
     BASE_DIR / 'static',
 ]
+
+WHITENOISE_USE_FINDERS = DEBUG
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 

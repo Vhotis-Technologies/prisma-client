@@ -9,7 +9,7 @@ urlpatterns = [
     path('api/v1/', include('main.urls')),
 ]
 
-# Serve static files during development
+# Dev-only static (WHITENOISE serves collected files when DEBUG=False).
+# User uploads use GCS — do not serve MEDIA_URL from disk here.
 if settings.DEBUG:
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

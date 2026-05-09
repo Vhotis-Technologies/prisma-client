@@ -19,5 +19,14 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
+
+# Bake admin/CSS into the image (runtime uses DEBUG=False + WhiteNoise).
+ENV DJANGO_SETTINGS_MODULE=prisma.settings
+RUN cd prisma && \
+    env PRISMA_ENV=staging \
+        DATABASE_URL=sqlite:////tmp/buildcollect.sqlite3 \
+        DJANGO_SECRET_KEY=build-collect-static-only-not-used-at-runtime \
+        python manage.py collectstatic --noinput
+
 EXPOSE 8000
 CMD ["daphne", "-b", "0.0.0.0", "-p", "8000", "prisma.asgi:application"]
