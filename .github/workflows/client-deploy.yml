@@ -115,9 +115,12 @@ jobs:
           host: ${{ secrets.DO_HOST }}
           username: ${{ secrets.DO_USERNAME }}
           key: ${{ secrets.DO_SSH_KEY }}
+          timeout: 5m
+          command_timeout: 60m
           script: |
+            set -euo pipefail
             cd ${{ env.DO_PROD_PATH }}
-            git stash
+            git stash || true
             git fetch origin
             git checkout ${{ github.ref_name }}
             git pull origin ${{ github.ref_name }}
@@ -125,7 +128,7 @@ jobs:
             docker container prune -f || true
 
             sleep 10
-            docker compose build --no-cache
+            docker compose build
             docker compose up -d
 
             sleep 15
@@ -158,9 +161,12 @@ jobs:
           host: ${{ secrets.DO_HOST }}
           username: ${{ secrets.DO_USERNAME }}
           key: ${{ secrets.DO_SSH_KEY }}
+          timeout: 5m
+          command_timeout: 60m
           script: |
+            set -euo pipefail
             cd ${{ env.DO_STAGING_PATH }}
-            git stash
+            git stash || true
             git fetch origin
             git checkout staging
             git pull origin staging
@@ -168,7 +174,7 @@ jobs:
             docker container prune -f || true
 
             sleep 10
-            docker compose -f docker-compose-staging.yml build --no-cache
+            docker compose -f docker-compose-staging.yml build
             docker compose -f docker-compose-staging.yml up -d
 
             sleep 15
