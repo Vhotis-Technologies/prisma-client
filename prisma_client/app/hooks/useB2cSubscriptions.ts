@@ -9,6 +9,7 @@ import {
   useGetB2cSubscriptionPlansQuery,
   useCreateB2cSubscriptionMutation,
   useCancelB2cSubscriptionMutation,
+  useAbandonIncompleteB2cSubscriptionMutation,
   useUpdateB2cPaymentMethodMutation,
   useLazyGetB2cSetupIntentQuery,
 } from "@/app/store/api/b2cSubscriptionApi";
@@ -67,6 +68,8 @@ export const useB2cSubscriptions = () => {
   const [createSubscription, { isLoading: isCreatingSubscription }] =
     useCreateB2cSubscriptionMutation();
   const [cancelSubscription] = useCancelB2cSubscriptionMutation();
+  const [abandonIncompleteSubscription] =
+    useAbandonIncompleteB2cSubscriptionMutation();
   const [updatePaymentMethod] = useUpdateB2cPaymentMethodMutation();
   const [getSetupIntent] = useLazyGetB2cSetupIntentQuery();
 
@@ -144,6 +147,20 @@ export const useB2cSubscriptions = () => {
     [initPaymentSheet, addresses, showSnackbarWithConfig]
   );
 
+  const abandonIncompleteCheckout = useCallback(
+    async (subscriptionId?: string) => {
+      try {
+        await abandonIncompleteSubscription(
+          subscriptionId ? { subscriptionId } : {},
+        ).unwrap();
+      } catch {
+        /* non-fatal: user may clear via Cancel in UI */
+      }
+      await refetchSubscription();
+    },
+    [abandonIncompleteSubscription, refetchSubscription],
+  );
+
   /* This method is used to create the subscription for the B2C user */
   const handleSubscribe = useCallback(async () => {
     if (!selectedTierId) {
@@ -164,8 +181,10 @@ export const useB2cSubscriptions = () => {
       }).unwrap()) as CreateSubscriptionResponse;
 
       if (response.paymentSheet) {
+        const createdSubId = response.subscription?.id;
         const paymentSecret = response.paymentSheet.paymentIntent;
         if (!paymentSecret) {
+          await abandonIncompleteCheckout(createdSubId);
           showSnackbarWithConfig({
             message: "Payment details not available",
             type: "error",
@@ -182,6 +201,7 @@ export const useB2cSubscriptions = () => {
         );
 
         if (!initialized) {
+          await abandonIncompleteCheckout(createdSubId);
           setIsProcessingPayment(false);
           return;
         }
@@ -191,6 +211,7 @@ export const useB2cSubscriptions = () => {
         if (error) {
           const err = error as { code?: string; message?: string };
           if (err.code === "Canceled") {
+            await abandonIncompleteCheckout(createdSubId);
             showSnackbarWithConfig({
               message: "Payment was canceled",
               type: "info",
@@ -271,6 +292,7 @@ export const useB2cSubscriptions = () => {
     selectedTierId,
     selectedBillingCycle,
     createSubscription,
+    abandonIncompleteCheckout,
     initializeSubscriptionPaymentSheet,
     presentPaymentSheet,
     refetchSubscription,

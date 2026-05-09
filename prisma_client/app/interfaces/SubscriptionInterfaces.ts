@@ -29,7 +29,7 @@ export interface PaymentFailureStatus {
 }
 
 export interface FleetSubscriptionProps {
-  id: string;
+  id?: string;
   currentPlan: string | null;
   status: "active" | "pending" | "trialing" | "past_due" | "canceled" | "expired";
   renewsOn: string | null;

@@ -41,6 +41,7 @@ class B2CSubscriptionView(APIView):
         'create_subscription': 'create_subscription',
         'update_payment_method': 'update_payment_method',
         'cancel_subscription': 'cancel_subscription',
+        'abandon_incomplete_subscription': 'abandon_incomplete_subscription',
     }
 
     def get(self, request, *args, **kwargs):
@@ -173,6 +174,60 @@ class B2CSubscriptionView(APIView):
             user=user,
             status__in=('pending', 'active', 'past_due'),
         ).exists()
+
+    def abandon_incomplete_subscription(self, request):
+        """
+        Remove a pending (unpaid checkout) subscription so the user can start again.
+        Used when the client payment sheet is closed without paying.
+        """
+        try:
+            subscription_id = (
+                request.data.get('subscriptionId')
+                or request.data.get('subscription_id')
+            )
+            qs = B2CSubcription.objects.filter(user=request.user, status='pending')
+            if subscription_id:
+                subscription = qs.filter(id=subscription_id).first()
+            else:
+                subscription = qs.order_by('-start_date').first()
+
+            if not subscription:
+                return Response(
+                    {'message': 'No incomplete subscription to remove.'},
+                    status=status.HTTP_200_OK,
+                )
+
+            if subscription.stripe_subscription_id:
+                try:
+                    stripe.Subscription.delete(subscription.stripe_subscription_id)
+                except stripe.error.InvalidRequestError:
+                    pass
+
+            now = timezone.now()
+            subscription.status = 'cancelled'
+            subscription.cancellation_date = now
+            subscription.cancellation_reason = subscription.cancellation_reason or 'Checkout abandoned'
+            subscription.auto_renew = False
+            subscription.save(
+                update_fields=[
+                    'status',
+                    'cancellation_date',
+                    'cancellation_reason',
+                    'auto_renew',
+                ]
+            )
+
+            B2CSubcriptionBilling.objects.filter(
+                subscription=subscription,
+                status='pending',
+            ).update(status='failed')
+
+            return Response(
+                {'message': 'Incomplete subscription removed.'},
+                status=status.HTTP_200_OK,
+            )
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     def _create_stripe_b2c_subscription(self, amount, subscription, billing, user, plan):
         """Paid-only Stripe subscription (no trial). Mirrors fleet SubscriptionView pattern."""
@@ -503,6 +558,10 @@ class B2CSubscriptionView(APIView):
             cancel_at_period_end = request.data.get('cancel_at_period_end', True)
             cancellation_reason = request.data.get('cancellationReason') or request.data.get('cancellation_reason')
             cancellation_reason = cancellation_reason or 'Cancelled by user'
+
+            # Pending = unpaid checkout; always release immediately (no billing period yet).
+            if subscription.status == 'pending':
+                cancel_at_period_end = False
 
             if subscription.stripe_subscription_id:
                 if cancel_at_period_end:

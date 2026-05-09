@@ -46,7 +46,7 @@ interface SubscriptionBillingHistorySectionProps {
   isFleetOwner: boolean;
   borderColor: string;
   textColor: string;
-  tintColor: string;
+  primaryColor: string;
   errorColor: string;
   mutedColor: string;
 }
@@ -84,7 +84,7 @@ const SubscriptionBillingHistorySection: React.FC<
         Billing history
       </StyledText>
       {isLoading && !rows.length ? (
-        <ActivityIndicator style={styles.loader} color={tintColor} />
+        <ActivityIndicator style={styles.loader} color={primaryColor} />
       ) : null}
       {isError ? (
         <StyledText variant="bodySmall" style={{ color: errorColor }}>
@@ -110,7 +110,7 @@ const SubscriptionBillingHistorySection: React.FC<
           const paid = st === "paid";
           const failed = st === "failed";
           const statusTone = paid
-            ? tintColor
+            ? primaryColor
             : failed
               ? errorColor
               : mutedColor;

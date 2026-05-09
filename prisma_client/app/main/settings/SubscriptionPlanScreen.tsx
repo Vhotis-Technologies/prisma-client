@@ -23,7 +23,7 @@ const SubscriptionPlanScreen = () => {
   const backgroundColor = useThemeColor({}, "background");
   const textColor = useThemeColor({}, "text");
   const borderColor = useThemeColor({}, "borders");
-  const tintColor = useThemeColor({}, "tint");
+  const primaryColor = useThemeColor({}, "primary");
   const errorColor = useThemeColor({}, "error");
   const mutedColor = useThemeColor({}, "icons");
 
@@ -71,13 +71,13 @@ const SubscriptionPlanScreen = () => {
           <View
             style={[
               styles.trialStatusBanner,
-              { backgroundColor: tintColor + "20", borderColor: tintColor },
+              { backgroundColor: primaryColor + "20", borderColor: primaryColor },
             ]}
           >
-            <Ionicons name="time-outline" size={20} color={tintColor} />
+            <Ionicons name="time-outline" size={20} color={primaryColor} />
             <View style={styles.trialStatusContent}>
               <StyledText
-                style={[styles.trialStatusTitle, { color: tintColor }]}
+                style={[styles.trialStatusTitle, { color: primaryColor }]}
                 variant="bodyMedium"
                 children={`Trial Period: ${currentSubscription.trialDaysRemaining || 0} days remaining`}
               />
@@ -128,12 +128,12 @@ const SubscriptionPlanScreen = () => {
             <View
               style={[
                 styles.currentSubscriptionBanner,
-                { backgroundColor: tintColor + "20", borderColor: tintColor },
+                { backgroundColor: primaryColor + "20", borderColor: primaryColor },
               ]}
             >
-              <Ionicons name="information-circle" size={20} color={tintColor} />
+              <Ionicons name="information-circle" size={20} color={primaryColor} />
               <StyledText
-                style={[styles.currentSubscriptionText, { color: tintColor }]}
+                style={[styles.currentSubscriptionText, { color: primaryColor }]}
                 variant="bodyMedium"
                 children={`You currently have an active ${currentSubscription.currentPlan} subscription. Selecting a new plan will replace your current subscription.`}
               />
@@ -143,6 +143,7 @@ const SubscriptionPlanScreen = () => {
         {/* Subscription Management Section */}
         {currentSubscription &&
           (currentSubscription.status === "active" ||
+            currentSubscription.status === "pending" ||
             currentSubscription.isTrialing ||
             currentSubscription.status === "past_due") && (
             <View
@@ -179,9 +180,11 @@ const SubscriptionPlanScreen = () => {
                       styles.managementValue,
                       {
                         color: currentSubscription.isTrialing
-                          ? tintColor
+                          ? primaryColor
                           : currentSubscription.status === "past_due"
                             ? errorColor
+                          : currentSubscription.status === "pending"
+                            ? primaryColor
                             : textColor,
                       },
                     ]}
@@ -189,6 +192,7 @@ const SubscriptionPlanScreen = () => {
                     children={(() => {
                       const status = currentSubscription.status;
                       if (currentSubscription.isTrialing) return "Trial";
+                      if (status === "pending") return "Pending payment";
                       if (status === "past_due") return "Payment Failed";
                       return status != null
                         ? status.charAt(0).toUpperCase() + status.slice(1)
@@ -258,7 +262,7 @@ const SubscriptionPlanScreen = () => {
                   isLoading={isUpdatingPayment}
                   variant="tonal"
                   icon={
-                    <Ionicons name="card-outline" size={18} color={tintColor} />
+                    <Ionicons name="card-outline" size={18} color={primaryColor} />
                   }
                 />
                 <StyledButton
@@ -282,14 +286,14 @@ const SubscriptionPlanScreen = () => {
           isFleetOwner={isFleetOwner}
           borderColor={borderColor}
           textColor={textColor}
-          tintColor={tintColor}
+          primaryColor={primaryColor}
           errorColor={errorColor}
           mutedColor={mutedColor}
         />
 
         {isLoadingPlans ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={tintColor} />
+            <ActivityIndicator size="large" color={primaryColor} />
             <StyledText
               style={[styles.loadingText, { color: textColor }]}
               variant="bodyMedium"
@@ -360,7 +364,7 @@ const SubscriptionPlanScreen = () => {
             style={[
               styles.subscribeButton,
               {
-                backgroundColor: tintColor,
+                backgroundColor: primaryColor,
                 opacity:
                   isProcessingPayment || isCreatingSubscription ? 0.6 : 1,
               },
@@ -393,12 +397,14 @@ const SubscriptionPlanScreen = () => {
           <CancelSubscriptionModal
             onClose={() => setShowCancelModal(false)}
             onCancelAtPeriodEnd={
-              currentSubscription?.isTrialing
+              currentSubscription?.isTrialing ||
+              currentSubscription?.status === "pending"
                 ? undefined
                 : () => handleCancelSubscription(true)
             }
             onCancelNow={() => handleCancelSubscription(false)}
             isTrialing={currentSubscription?.isTrialing}
+            isPendingCheckout={currentSubscription?.status === "pending"}
             isCanceling={isCanceling}
           />
         }

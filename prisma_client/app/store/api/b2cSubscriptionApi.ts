@@ -71,7 +71,19 @@ const b2cSubscriptionApi = createApi({
         method: "POST",
         data,
       }),
-      invalidatesTags: ["B2cSubscription"],
+      invalidatesTags: ["B2cSubscription", "B2cBilling"],
+    }),
+
+    abandonIncompleteB2cSubscription: builder.mutation<
+      { message: string },
+      { subscriptionId?: string } | void
+    >({
+      query: (data) => ({
+        url: "/api/v1/b2c-subscription/abandon_incomplete_subscription/",
+        method: "POST",
+        data: data && typeof data === "object" ? data : {},
+      }),
+      invalidatesTags: ["B2cSubscription", "B2cBilling"],
     }),
 
     updateB2cPaymentMethod: builder.mutation<
@@ -104,6 +116,7 @@ export const {
   useCreateB2cSubscriptionMutation,
   useGetB2cBillingHistoryQuery,
   useCancelB2cSubscriptionMutation,
+  useAbandonIncompleteB2cSubscriptionMutation,
   useUpdateB2cPaymentMethodMutation,
   useGetB2cSetupIntentQuery,
   useLazyGetB2cSetupIntentQuery,

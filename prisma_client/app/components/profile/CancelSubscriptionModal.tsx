@@ -10,6 +10,8 @@ export interface CancelSubscriptionModalProps {
   onCancelAtPeriodEnd?: () => void;
   onCancelNow: () => void;
   isTrialing?: boolean;
+  /** Unpaid B2C checkout: only immediate discard makes sense. */
+  isPendingCheckout?: boolean;
   isCanceling?: boolean;
 }
 
@@ -18,14 +20,23 @@ const CancelSubscriptionModal: React.FC<CancelSubscriptionModalProps> = ({
   onCancelAtPeriodEnd,
   onCancelNow,
   isTrialing = false,
+  isPendingCheckout = false,
   isCanceling = false,
 }) => {
   const textColor = useThemeColor({}, "text");
   const errorColor = useThemeColor({}, "error");
 
-  const message = isTrialing
-    ? "Are you sure you want to cancel your trial? You'll lose access immediately."
-    : "Are you sure you want to cancel your subscription? You can cancel now or at the end of your billing period.";
+  const message = isPendingCheckout
+    ? "Checkout is not finished, so nothing has been charged. You can discard it to choose another plan or use Update payment on this screen to try again."
+    : isTrialing
+      ? "Are you sure you want to cancel your trial? You'll lose access immediately."
+      : "Are you sure you want to cancel your subscription? You can cancel now or at the end of your billing period.";
+
+  const cancelImmediatelyTitle = isTrialing
+    ? "Cancel Trial"
+    : isPendingCheckout
+      ? "Discard checkout"
+      : "Cancel now";
 
   return (
     <View style={styles.container}>
@@ -52,7 +63,7 @@ const CancelSubscriptionModal: React.FC<CancelSubscriptionModalProps> = ({
           />
         )}
         <StyledButton
-          title='Cancel Trial'
+          title={cancelImmediatelyTitle}
           onPress={onCancelNow}
           variant="tonal"
           disabled={isCanceling}

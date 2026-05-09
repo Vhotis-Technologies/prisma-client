@@ -27,7 +27,7 @@ const SubscriptionTierCard: React.FC<SubscriptionTierCardProps> = ({
   const backgroundColor = useThemeColor({}, "background");
   const textColor = useThemeColor({}, "text");
   const borderColor = useThemeColor({}, "borders");
-  const tintColor = useThemeColor({}, "tint");
+  const primaryColor = useThemeColor({}, "primary");
   const successColor = useThemeColor({}, "success");
 
   const currentPrice =
@@ -50,7 +50,7 @@ const SubscriptionTierCard: React.FC<SubscriptionTierCardProps> = ({
         styles.container,
         {
           backgroundColor: backgroundColor,
-          borderColor: isSelected ? tintColor : borderColor,
+          borderColor: isSelected ? primaryColor : borderColor,
           borderWidth: isSelected ? 2 : 1,
         },
       ]}
@@ -60,12 +60,12 @@ const SubscriptionTierCard: React.FC<SubscriptionTierCardProps> = ({
           style={[
             styles.badge,
             {
-              backgroundColor: tintColor + "20",
+              backgroundColor: primaryColor + "20",
             },
           ]}
         >
           <StyledText
-            style={[styles.badgeText, { color: tintColor }]}
+            style={[styles.badgeText, { color: primaryColor }]}
             variant="labelSmall"
             children={tier.badge}
           />
@@ -146,10 +146,10 @@ const SubscriptionTierCard: React.FC<SubscriptionTierCardProps> = ({
             {
               backgroundColor:
                 selectedBillingCycle === "monthly"
-                  ? tintColor + "20"
+                  ? primaryColor + "20"
                   : "transparent",
               borderColor:
-                selectedBillingCycle === "monthly" ? tintColor : borderColor,
+                selectedBillingCycle === "monthly" ? primaryColor : borderColor,
             },
           ]}
         >
@@ -158,7 +158,7 @@ const SubscriptionTierCard: React.FC<SubscriptionTierCardProps> = ({
               styles.toggleText,
               {
                 color:
-                  selectedBillingCycle === "monthly" ? tintColor : textColor,
+                  selectedBillingCycle === "monthly" ? primaryColor : textColor,
                 fontWeight: selectedBillingCycle === "monthly" ? "600" : "400",
               },
             ]}
@@ -173,10 +173,10 @@ const SubscriptionTierCard: React.FC<SubscriptionTierCardProps> = ({
             {
               backgroundColor:
                 selectedBillingCycle === "yearly"
-                  ? tintColor + "20"
+                  ? primaryColor + "20"
                   : "transparent",
               borderColor:
-                selectedBillingCycle === "yearly" ? tintColor : borderColor,
+                selectedBillingCycle === "yearly" ? primaryColor : borderColor,
             },
           ]}
         >
@@ -185,7 +185,7 @@ const SubscriptionTierCard: React.FC<SubscriptionTierCardProps> = ({
               styles.toggleText,
               {
                 color:
-                  selectedBillingCycle === "yearly" ? tintColor : textColor,
+                  selectedBillingCycle === "yearly" ? primaryColor : textColor,
                 fontWeight: selectedBillingCycle === "yearly" ? "600" : "400",
               },
             ]}
@@ -232,8 +232,8 @@ const SubscriptionTierCard: React.FC<SubscriptionTierCardProps> = ({
         style={[
           styles.selectButton,
           {
-            backgroundColor: isSelected ? tintColor : "transparent",
-            borderColor: isSelected ? tintColor : borderColor,
+            backgroundColor: isSelected ? primaryColor : "transparent",
+            borderColor: isSelected ? primaryColor : borderColor,
           },
         ]}
       >

@@ -39,7 +39,7 @@ const SubscriptionCard: React.FC<SubscriptionCardProps> = ({
   const backgroundColor = useThemeColor({}, "background");
   const textColor = useThemeColor({}, "text");
   const borderColor = useThemeColor({}, "borders");
-  const tintColor = useThemeColor({}, "tint");
+  const primaryColor = useThemeColor({}, "primary");
   const successColor = useThemeColor({}, "success");
   const errorColor = useThemeColor({}, "error");
   const warningColor = useThemeColor({}, "warning");
@@ -115,7 +115,7 @@ const SubscriptionCard: React.FC<SubscriptionCardProps> = ({
           <Ionicons
             name="card-outline"
             size={24}
-            color={tintColor}
+            color={primaryColor}
           />
           <View style={styles.headerText}>
             <StyledText
