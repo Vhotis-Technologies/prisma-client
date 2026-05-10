@@ -652,8 +652,8 @@ const BookingScreen = () => {
                                 serverQuote.quick_sparkle.eligible_partner,
                                 serverQuote.quick_sparkle.eligible_subscription,
                               ].filter(Boolean).length >= 2
-                                ? "You have more than one option. Choose how to apply it for this booking."
-                                : "This booking can use your complimentary Quick Sparkle. Confirm the source below."}
+                                ? "You have more than one option. Please click on the source to apply it to this booking."
+                                : "This booking can use your complimentary Quick Sparkle. Please click on the source to apply it to this booking."}
                             </StyledText>
                             {(
                               [

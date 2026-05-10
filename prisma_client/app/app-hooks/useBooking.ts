@@ -38,7 +38,6 @@ import { useSnackbar } from "@/app/contexts/SnackbarContext";
 import dayjs from "dayjs";
 import { formatCurrency } from "@/app/utils/methods";
 import { vehicleBodyStyleRequiresSuvMpvSurcharge } from "@/app/utils/vehicleBodyStyle";
-import { Alert } from "react-native";
 import { router } from "expo-router";
 import { ReturnBookingProps } from "../interfaces/OtherInterfaces";
 import useDashboard from "./useDashboard";
@@ -1663,6 +1662,7 @@ const useBooking = () => {
       loyaltyDiscountIncVat: lines.loyalty_discount_inc_vat,
       promotionDiscountIncVat: lines.promotion_discount_inc_vat,
       partnerReferralDiscountIncVat: lines.partner_referral_discount_inc_vat,
+      subscriptionDiscountIncVat: lines.subscription_discount_inc_vat ?? 0,
       complimentaryStickerSavingsIncVat: compSave,
       totalIncVat: payable.total,
       loyaltyDiscountPercent: user?.loyalty_benefits?.discount,
@@ -1670,6 +1670,10 @@ const useBooking = () => {
         lines.partner_referral_discount_inc_vat > 0.005 &&
         serverQuote.partner_booking_offer?.eligible
           ? serverQuote.partner_booking_offer.percent
+          : undefined,
+      subscriptionDiscountPercent:
+        (lines.subscription_discount_percent ?? 0) > 0.005
+          ? lines.subscription_discount_percent
           : undefined,
     };
   }, [
@@ -2013,6 +2017,8 @@ const useBooking = () => {
         }).unwrap();
         if (cancelled) return;
         setServerQuote(res);
+        console.log("res", res);
+        console.log("res.quick_sparkle", serverQuote);
         const elig: ComplimentarySparkleSource[] = [];
         const qs = res.quick_sparkle;
         if (qs?.eligible_loyalty) elig.push("loyalty");

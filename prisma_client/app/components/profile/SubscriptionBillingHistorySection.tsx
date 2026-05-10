@@ -57,7 +57,7 @@ const SubscriptionBillingHistorySection: React.FC<
   isFleetOwner,
   borderColor,
   textColor,
-  tintColor,
+  primaryColor,
   errorColor,
   mutedColor,
 }) => {

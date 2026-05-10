@@ -15,6 +15,7 @@ import {
 } from "@/app/interfaces/ProfileInterfaces";
 import StyledText from "@/app/components/helpers/StyledText";
 import SquareCheckbox from "@/app/components/helpers/SquareCheckbox";
+import { formatDate } from "@/app/utils/methods";
 
 interface BookingSummaryProps {
   vehicle: MyVehiclesProps;
@@ -113,14 +114,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
           calculatedLoyaltyDiscount -
           calculatedPromotionDiscount);
 
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString("en-GB", {
-      weekday: "long",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
-  };
+
 
   const formatTime = (date: Date) => {
     return date.toLocaleTimeString("en-GB", {
@@ -275,7 +269,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
               variant="bodyMedium"
               style={[styles.dateTimeText, { color: textColor }]}
             >
-              {formatDate(selectedDate)}
+              {formatDate(selectedDate.toISOString())}
             </StyledText>
             <View style={styles.timeRow}>
               <StyledText
@@ -534,6 +528,27 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
               </StyledText>
             </View>
 
+            {srv && srv.subscriptionDiscountIncVat > 0 && (
+              <View style={styles.priceRow}>
+                <StyledText
+                  variant="bodyMedium"
+                  style={[styles.priceLabel, { color: "#EC4899" }]}
+                >
+                  Subscription discount
+                  {srv.subscriptionDiscountPercent != null
+                    ? ` (${srv.subscriptionDiscountPercent}%)`
+                    : ""}
+                  :
+                </StyledText>
+                <StyledText
+                  variant="bodyMedium"
+                  style={[styles.priceValue, { color: "#EC4899" }]}
+                >
+                  −{formatPrice(srv.subscriptionDiscountIncVat)}
+                </StyledText>
+              </View>
+            )}
+
             {srv && srv.complimentaryStickerSavingsIncVat > 0 && (
               <View style={styles.priceRow}>
                 <StyledText
@@ -661,7 +676,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
               <StyledText variant="bodySmall" style={{ color: textColor }}>
                 I agree to the service starting on{" "}
                 <StyledText style={{ fontWeight: "600" }}>
-                  {formatDate(selectedDate)}
+                  {formatDate(selectedDate.toISOString())}
                 </StyledText>{" "}
                 and acknowledge that my right to a full cooling-off period is
                 waived once a specific time slot is{" "}

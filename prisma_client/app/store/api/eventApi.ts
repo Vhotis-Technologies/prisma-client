@@ -32,6 +32,8 @@ export type BookingQuotePricingLines = {
   loyalty_discount_inc_vat: number;
   promotion_discount_inc_vat: number;
   partner_referral_discount_inc_vat: number;
+  subscription_discount_inc_vat: number;
+  subscription_discount_percent: number;
 };
 
 export type PartnerBookingOfferPayload = {

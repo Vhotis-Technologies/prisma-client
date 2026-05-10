@@ -40,10 +40,12 @@ export interface BookingPriceSummaryBreakdown {
   loyaltyDiscountIncVat: number;
   promotionDiscountIncVat: number;
   partnerReferralDiscountIncVat: number;
+  subscriptionDiscountIncVat: number;
   complimentaryStickerSavingsIncVat: number;
   totalIncVat: number;
   loyaltyDiscountPercent?: number;
   partnerReferralDiscountPercent?: number;
+  subscriptionDiscountPercent?: number;
 }
 
 export interface BookingScreenProps {
