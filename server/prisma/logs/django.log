@@ -41141,3 +41141,8 @@ WARNING 2026-05-06 22:07:40,037 log 4743 132043560167104 Unauthorized: /api/v1/a
 WARNING 2026-05-06 22:07:40,038 runserver 4743 132043996395200 HTTP POST /api/v1/authentication/refresh/ 401 [0.04, 172.18.0.13:55690]
 INFO 2026-05-06 22:07:40,216 runserver 4743 132043996395200 HTTP GET /api/v1/dashboard/get_recent_services/ 200 [0.09, 172.18.0.13:55698]
 INFO 2026-05-06 22:07:42,881 runserver 4743 132043996395200 HTTP GET /api/v1/dashboard/get_upcoming_appointments/ 200 [0.08, 172.18.0.13:55714]
+INFO 2026-05-11 00:58:57,588 cli 1 133634962383616 Starting server at tcp:port=8000:interface=0.0.0.0
+INFO 2026-05-11 00:58:57,591 server 1 133634962383616 HTTP/2 support not enabled (install the http2 and tls Twisted extras)
+INFO 2026-05-11 00:58:57,592 server 1 133634962383616 Configuring endpoint tcp:port=8000:interface=0.0.0.0
+INFO 2026-05-11 00:58:57,597 server 1 133634962383616 Listening on TCP address 0.0.0.0:8000
+INFO 2026-05-11 01:10:11,116 server 1 133634962383616 Killed 0 pending application instances

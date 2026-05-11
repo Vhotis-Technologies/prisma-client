@@ -491,7 +491,16 @@ class B2CSubcriptionPlanAdmin(admin.ModelAdmin):
 
 @admin.register(B2CSubcription)
 class B2CSubcriptionAdmin(admin.ModelAdmin):
-    list_display = ('user', 'plan', 'status', 'start_date', 'end_date', 'auto_renew', 'stripe_subscription_id')
+    list_display = (
+        'user',
+        'plan',
+        'status',
+        'start_date',
+        'end_date',
+        'auto_renew',
+        'complimentary_sparkles_used',
+        'stripe_subscription_id',
+    )
     list_filter = ('status', 'auto_renew', 'start_date')
     search_fields = (
         'user__email',
@@ -505,8 +514,8 @@ class B2CSubcriptionAdmin(admin.ModelAdmin):
     date_hierarchy = 'start_date'
     fieldsets = (
         ('Subscription', {'fields': ('user', 'plan', 'status', 'start_date', 'end_date', 'auto_renew')}),
+        ('Complimentary Quick Sparkle ledger', {'fields': ('complimentary_sparkles_used',)}),
         ('Stripe', {'fields': ('stripe_subscription_id',)}),
-        ('Trial', {'fields': ('trial_days', 'trial_start_date'), 'classes': ('collapse',)}),
         ('Cancellation', {'fields': ('cancellation_date', 'cancellation_reason'), 'classes': ('collapse',)}),
         ('Metadata', {'fields': ('id',), 'classes': ('collapse',)}),
     )

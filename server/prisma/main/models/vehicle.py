@@ -270,7 +270,7 @@ class BookedAppointmentImage(models.Model):
     vehicle_event = models.ForeignKey(VehicleEvent, on_delete=models.SET_NULL, null=True, blank=True, related_name='images')
     image_type = models.CharField(max_length=10, choices=IMAGE_TYPE_CHOICES)
     segment = models.CharField(max_length=10, choices=SEGMENT_CHOICES, null=True, blank=True)
-    image_url = models.URLField(max_length=500)
+    image_url = models.URLField(max_length=1000)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

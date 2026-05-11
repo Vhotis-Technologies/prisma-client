@@ -45,6 +45,15 @@ class B2CSubcriptionPlan(models.Model):
                 return {'max_prisma_sparkles': max_sparkles}
         return {'max_prisma_sparkles': 1}
 
+    def get_service_discount_percent(self) -> int:
+        """Percent off paid bookings (VAT-inc stack) for active subscribers — Lite/Pro 5%, Spectrum/Spectacular 7%."""
+        ordered = [('spectacular', 7), ('spectrum', 7), ('lite', 5), ('pro', 5)]
+        tier_slug = self.tier.name.lower()
+        for key, pct in ordered:
+            if key in tier_slug:
+                return pct
+        return 0
+
 
 class B2CSubcription(models.Model):
     STATUS_CHOICES = [
@@ -70,9 +79,23 @@ class B2CSubcription(models.Model):
     cancellation_reason = models.TextField(blank=True, null=True)
     # Last subscription end-date (calendar day) we emailed "benefits ending soon" for — avoids duplicates.
     expiring_notice_sent_for_end_date = models.DateField(null=True, blank=True)
+    # Complimentary Quick Sparkle uses consumed for this subscription row (reset on renewal / plan change).
+    complimentary_sparkles_used = models.PositiveIntegerField(default=0)
 
     def __str__(self) -> str:
         return f"{self.user} — {self.plan} [{self.status}]"
+
+    def save(self, *args, **kwargs):
+        """New subscription row starts with a fresh ledger; mid-cycle tier change resets entitlement."""
+        if self.pk:
+            prior = (
+                type(self).objects.filter(pk=self.pk)
+                .values_list('plan_id', flat=True)
+                .first()
+            )
+            if prior is not None and prior != self.plan_id:
+                self.complimentary_sparkles_used = 0
+        super().save(*args, **kwargs)
 
 
 class B2CSubcriptionBilling(models.Model):

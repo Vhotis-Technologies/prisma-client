@@ -37,6 +37,74 @@ class Command(BaseCommand):
         super().__init__(*args, **kwargs)
         self.notification_service = NotificationService()
 
+    def _sync_before_booking_images(self, booking, before_images):
+        """Persist before images from Redis payload; skip empty URLs and duplicates."""
+        if not before_images:
+            return 0
+        created = 0
+        for img_data in before_images:
+            if not isinstance(img_data, dict):
+                continue
+            url = (img_data.get("image_url") or "").strip()
+            if not url:
+                continue
+            seg = img_data.get("segment")
+            if seg not in ("interior", "exterior"):
+                seg = "exterior"
+            try:
+                if BookedAppointmentImage.objects.filter(
+                    booking=booking, image_type="before", image_url=url
+                ).exists():
+                    continue
+                BookedAppointmentImage.objects.create(
+                    booking=booking,
+                    image_type="before",
+                    image_url=url,
+                    segment=seg,
+                )
+                created += 1
+            except Exception as e:
+                self.stderr.write(f"Error saving before image: {e}")
+        if created:
+            self.stdout.write(
+                f"Synced {created} new before image(s) for {booking.booking_reference}"
+            )
+        return created
+
+    def _sync_after_booking_images(self, booking, after_images):
+        """Persist after images from Redis payload; skip empty URLs and duplicates."""
+        if not after_images:
+            return 0
+        created = 0
+        for img_data in after_images:
+            if not isinstance(img_data, dict):
+                continue
+            url = (img_data.get("image_url") or "").strip()
+            if not url:
+                continue
+            seg = img_data.get("segment")
+            if seg not in ("interior", "exterior"):
+                seg = "exterior"
+            try:
+                if BookedAppointmentImage.objects.filter(
+                    booking=booking, image_type="after", image_url=url
+                ).exists():
+                    continue
+                BookedAppointmentImage.objects.create(
+                    booking=booking,
+                    image_type="after",
+                    image_url=url,
+                    segment=seg,
+                )
+                created += 1
+            except Exception as e:
+                self.stderr.write(f"Error saving after image: {e}")
+        if created:
+            self.stdout.write(
+                f"Synced {created} new after image(s) for {booking.booking_reference}"
+            )
+        return created
+
     def handle(self, *args, **options):
         ensure_consumer_group(STREAM_JOB_EVENTS, CLIENT_GROUP)
         self.stdout.write(self.style.SUCCESS("Subscribed to job_events stream (client_group)"))
@@ -177,50 +245,47 @@ class Command(BaseCommand):
 
             elif event == "job_started":
                 before_images = data.get("before_images", []) if isinstance(data, dict) else []
-                booking.status = "in_progress"
-                booking.save()
-                self.stdout.write(f"Updated booking {booking.booking_reference} to in_progress")
-                for img_data in before_images:
-                    try:
-                        BookedAppointmentImage.objects.create(
-                            booking=booking,
-                            image_type="before",
-                            image_url=img_data["image_url"],
-                            segment=img_data.get("segment", "exterior"),
-                        )
-                    except Exception as e:
-                        self.stderr.write(f"Error saving before image: {e}")
-                send_push_notification.delay(
-                    booking.user.id,
-                    "Service Started! 🚀",
-                    _job_started_message(booking, vehicle_display),
-                    {"type": "appointment_started", "booking_reference": booking.booking_reference, "screen": "booking_details"},
-                )
-                self.create_notification(
-                    booking.user,
-                    "Appointment Started",
-                    "appointment_started",
-                    "success",
-                    "Your appointment has been started! You will be notified when it is completed.",
-                )
+                skip_notify = isinstance(data, dict) and bool(data.get("skip_client_notification"))
+                if not skip_notify:
+                    booking.status = "in_progress"
+                    booking.save()
+                    self.stdout.write(f"Updated booking {booking.booking_reference} to in_progress")
+                else:
+                    self.stdout.write(
+                        f"Before-images sync for {booking.booking_reference} "
+                        f"(skip duplicate start notification; {len(before_images)} image(s) in payload)"
+                    )
+                self._sync_before_booking_images(booking, before_images)
+                if not skip_notify:
+                    send_push_notification.delay(
+                        booking.user.id,
+                        "Service Started! 🚀",
+                        _job_started_message(booking, vehicle_display),
+                        {"type": "appointment_started", "booking_reference": booking.booking_reference, "screen": "booking_details"},
+                    )
+                    self.create_notification(
+                        booking.user,
+                        "Appointment Started",
+                        "appointment_started",
+                        "success",
+                        "Your appointment has been started! You will be notified when it is completed.",
+                    )
 
             elif event == "job_completed":
                 after_images = data.get("after_images", []) if isinstance(data, dict) else []
                 fleet_maintenance_data = data.get("fleet_maintenance") if isinstance(data, dict) else None
-                booking.status = "completed"
-                booking.save()
-                self.stdout.write(f"Updated booking {booking.booking_reference} to completed")
-                for img_data in after_images:
-                    try:
-                        BookedAppointmentImage.objects.create(
-                            booking=booking,
-                            image_type="after",
-                            image_url=img_data["image_url"],
-                            segment=img_data.get("segment", "exterior"),
-                        )
-                    except Exception as e:
-                        self.stderr.write(f"Error saving after image: {e}")
-                if fleet_maintenance_data:
+                skip_notify = isinstance(data, dict) and bool(data.get("skip_client_notification"))
+                if not skip_notify:
+                    booking.status = "completed"
+                    booking.save()
+                    self.stdout.write(f"Updated booking {booking.booking_reference} to completed")
+                else:
+                    self.stdout.write(
+                        f"After-images sync for {booking.booking_reference} "
+                        f"(skip duplicate completion notification; {len(after_images)} image(s) in payload)"
+                    )
+                self._sync_after_booking_images(booking, after_images)
+                if not skip_notify and fleet_maintenance_data:
                     try:
                         from main.models import EventDataManagement
                         EventDataManagement.objects.update_or_create(
@@ -242,19 +307,20 @@ class Command(BaseCommand):
                         )
                     except Exception as e:
                         self.stderr.write(f"Error saving fleet maintenance: {e}")
-                send_push_notification.delay(
-                    booking.user.id,
-                    "Service Completed! ✨",
-                    f"Your valet service has been completed! Thank you for choosing PRISMA VALET.",
-                    {"type": "cleaning_completed", "booking_reference": booking.booking_reference, "screen": "service_history"},
-                )
-                self.create_notification(
-                    booking.user,
-                    "Appointment Completed",
-                    "cleaning_completed",
-                    "success",
-                    "Your appointment has been completed! Thank you for choosing Prisma.",
-                )
+                if not skip_notify:
+                    send_push_notification.delay(
+                        booking.user.id,
+                        "Service Completed! ✨",
+                        f"Your valet service has been completed! Thank you for choosing PRISMA VALET.",
+                        {"type": "cleaning_completed", "booking_reference": booking.booking_reference, "screen": "service_history"},
+                    )
+                    self.create_notification(
+                        booking.user,
+                        "Appointment Completed",
+                        "cleaning_completed",
+                        "success",
+                        "Your appointment has been completed! Thank you for choosing Prisma.",
+                    )
             ack(STREAM_JOB_EVENTS, CLIENT_GROUP, msg_id)
 
         except BookedAppointment.DoesNotExist:
@@ -270,49 +336,46 @@ class Command(BaseCommand):
                             self.stdout.write(f"Created bulk appointment {booking_reference}")
                         if event == "job_started":
                             before_images = data.get("before_images", []) if isinstance(data, dict) else []
-                            booking.status = "in_progress"
-                            booking.save()
-                            self.stdout.write(f"Updated booking {booking.booking_reference} to in_progress")
-                            for img_data in before_images:
-                                try:
-                                    BookedAppointmentImage.objects.create(
-                                        booking=booking,
-                                        image_type="before",
-                                        image_url=img_data["image_url"],
-                                        segment=img_data.get("segment", "exterior"),
-                                    )
-                                except Exception as e:
-                                    self.stderr.write(f"Error saving before image: {e}")
-                            send_push_notification.delay(
-                                booking.user.id,
-                                "Service Started! 🚀",
-                                _job_started_message(booking, vehicle_display),
-                                {"type": "appointment_started", "booking_reference": booking.booking_reference, "screen": "booking_details"},
-                            )
-                            self.create_notification(
-                                booking.user,
-                                "Appointment Started",
-                                "appointment_started",
-                                "success",
-                                "Your appointment has been started! You will be notified when it is completed.",
-                            )
+                            skip_notify = isinstance(data, dict) and bool(data.get("skip_client_notification"))
+                            if not skip_notify:
+                                booking.status = "in_progress"
+                                booking.save()
+                                self.stdout.write(f"Updated booking {booking.booking_reference} to in_progress")
+                            else:
+                                self.stdout.write(
+                                    f"Before-images sync (bulk) for {booking.booking_reference} "
+                                    f"({len(before_images)} image(s) in payload)"
+                                )
+                            self._sync_before_booking_images(booking, before_images)
+                            if not skip_notify:
+                                send_push_notification.delay(
+                                    booking.user.id,
+                                    "Service Started! 🚀",
+                                    _job_started_message(booking, vehicle_display),
+                                    {"type": "appointment_started", "booking_reference": booking.booking_reference, "screen": "booking_details"},
+                                )
+                                self.create_notification(
+                                    booking.user,
+                                    "Appointment Started",
+                                    "appointment_started",
+                                    "success",
+                                    "Your appointment has been started! You will be notified when it is completed.",
+                                )
                         else:
                             after_images = data.get("after_images", []) if isinstance(data, dict) else []
                             fleet_maintenance_data = data.get("fleet_maintenance") if isinstance(data, dict) else None
-                            booking.status = "completed"
-                            booking.save()
-                            self.stdout.write(f"Updated booking {booking.booking_reference} to completed")
-                            for img_data in after_images:
-                                try:
-                                    BookedAppointmentImage.objects.create(
-                                        booking=booking,
-                                        image_type="after",
-                                        image_url=img_data["image_url"],
-                                        segment=img_data.get("segment", "exterior"),
-                                    )
-                                except Exception as e:
-                                    self.stderr.write(f"Error saving after image: {e}")
-                            if fleet_maintenance_data:
+                            skip_notify = isinstance(data, dict) and bool(data.get("skip_client_notification"))
+                            if not skip_notify:
+                                booking.status = "completed"
+                                booking.save()
+                                self.stdout.write(f"Updated booking {booking.booking_reference} to completed")
+                            else:
+                                self.stdout.write(
+                                    f"After-images sync (bulk) for {booking.booking_reference} "
+                                    f"({len(after_images)} image(s) in payload)"
+                                )
+                            self._sync_after_booking_images(booking, after_images)
+                            if not skip_notify and fleet_maintenance_data:
                                 try:
                                     from main.models import EventDataManagement
                                     EventDataManagement.objects.update_or_create(
@@ -334,19 +397,20 @@ class Command(BaseCommand):
                                     )
                                 except Exception as e:
                                     self.stderr.write(f"Error saving fleet maintenance: {e}")
-                            send_push_notification.delay(
-                                booking.user.id,
-                                "Service Completed! ✨",
-                                f"Your valet service has been completed! Thank you for choosing PRISMA VALET.",
-                                {"type": "cleaning_completed", "booking_reference": booking.booking_reference, "screen": "service_history"},
-                            )
-                            self.create_notification(
-                                booking.user,
-                                "Appointment Completed",
-                                "cleaning_completed",
-                                "success",
-                                "Your appointment has been completed! Thank you for choosing Prisma.",
-                            )
+                            if not skip_notify:
+                                send_push_notification.delay(
+                                    booking.user.id,
+                                    "Service Completed! ✨",
+                                    f"Your valet service has been completed! Thank you for choosing PRISMA VALET.",
+                                    {"type": "cleaning_completed", "booking_reference": booking.booking_reference, "screen": "service_history"},
+                                )
+                                self.create_notification(
+                                    booking.user,
+                                    "Appointment Completed",
+                                    "cleaning_completed",
+                                    "success",
+                                    "Your appointment has been completed! Thank you for choosing Prisma.",
+                                )
                         ack(STREAM_JOB_EVENTS, CLIENT_GROUP, msg_id)
                         return
                 else:

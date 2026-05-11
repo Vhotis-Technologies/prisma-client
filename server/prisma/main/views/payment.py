@@ -2224,6 +2224,7 @@ class StripeWebhookView(APIView):
                     subscription.end_date = subscription.end_date + relativedelta(months=1)
                 if subscription_type == 'b2c_subscription':
                     subscription.expiring_notice_sent_for_end_date = None
+                    subscription.complimentary_sparkles_used = 0
 
             else:
                 # For initial payment, get existing billing record

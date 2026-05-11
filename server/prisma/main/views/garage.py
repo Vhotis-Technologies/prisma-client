@@ -15,6 +15,7 @@ from django.core.cache import cache
 from django.core.files.base import ContentFile
 from django.db import transaction
 from django.utils import timezone
+from django_ratelimit.core import is_ratelimited
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -31,6 +32,10 @@ from main.util.media_helper import get_full_media_url
 
 
 LOOKUP_TTL_SECONDS = 900
+
+# Ireland RegCheck / carregistrations.ie abuse prevention (per authenticated user).
+VEHICLE_REGISTRATION_LOOKUP_RATELIMIT_GROUP = 'garage_lookup_vehicle_registration'
+VEHICLE_REGISTRATION_LOOKUP_RATELIMIT_RATE = '1/5m'
 
 
 def lookup_cache_key(token: str) -> str:
@@ -156,6 +161,26 @@ class GarageView(APIView):
                 {'error': 'Use POST', 'code': 'method_not_allowed'},
                 status=status.HTTP_405_METHOD_NOT_ALLOWED,
             )
+
+        if is_ratelimited(
+            request,
+            group=VEHICLE_REGISTRATION_LOOKUP_RATELIMIT_GROUP,
+            key='user',
+            rate=VEHICLE_REGISTRATION_LOOKUP_RATELIMIT_RATE,
+            method='POST',
+            increment=True,
+        ):
+            return Response(
+                {
+                    'error': (
+                        'Registration lookup is limited to once every 5 minutes. '
+                        'Please try again later.'
+                    ),
+                    'code': 'rate_limited',
+                },
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+
         reg = (
             (request.data.get('registration_number') or request.data.get('licence') or '')
             .strip()

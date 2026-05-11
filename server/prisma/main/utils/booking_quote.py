@@ -11,6 +11,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from django.conf import settings
+from django.db import transaction
 from django.utils import timezone
 
 VAT_RATE = Decimal("0.23")
@@ -114,6 +115,25 @@ def _partner_booking_discount_pct_setting() -> Decimal:
         return Decimal("35")
 
 
+def _subscription_booking_discount_pct(user) -> Decimal:
+    """Active B2C tier discount on the sticker stack (Lite/Pro 5%, Spectrum/Spectacular 7%)."""
+    from main.models import B2CSubcription
+
+    sub = (
+        B2CSubcription.objects.filter(user=user, status__in=["active", "past_due"])
+        .select_related("plan", "plan__tier")
+        .order_by("-start_date")
+        .first()
+    )
+    if not sub or not getattr(sub, "plan", None):
+        return Decimal("0")
+    pct = sub.plan.get_service_discount_percent()
+    try:
+        return Decimal(str(int(pct)))
+    except (TypeError, ValueError):
+        return Decimal("0")
+
+
 def compute_price_breakdown_parts(
     user,
     service,
@@ -136,11 +156,15 @@ def compute_price_breakdown_parts(
     total_before_discount = money(sub + suv + express_fee)
     loyalty_pct = _loyalty_discount_pct(user)
     promo_pct = _active_promotion_discount_pct(user)
+    subscription_pct = _subscription_booking_discount_pct(user)
     loyalty_amt = money(total_before_discount * loyalty_pct / Decimal("100"))
     promo_amt = money(total_before_discount * promo_pct / Decimal("100"))
     p_pct = partner_booking_discount_pct if partner_booking_discount_pct > 0 else Decimal("0")
     partner_amt = money(total_before_discount * p_pct / Decimal("100"))
-    total_inc = money(total_before_discount - loyalty_amt - promo_amt - partner_amt)
+    subscription_amt = money(total_before_discount * subscription_pct / Decimal("100"))
+    total_inc = money(
+        total_before_discount - loyalty_amt - promo_amt - partner_amt - subscription_amt
+    )
     sub_ex, vat_amt, total_inc_vat = line_total_inc_vat_to_parts(total_inc)
     return {
         "sub_ex": sub_ex,
@@ -150,15 +174,20 @@ def compute_price_breakdown_parts(
         "loyalty_discount_inc_vat": loyalty_amt,
         "promotion_discount_inc_vat": promo_amt,
         "partner_referral_discount_inc_vat": partner_amt,
+        "subscription_discount_inc_vat": subscription_amt,
+        "subscription_discount_pct": subscription_pct,
     }
 
 
 def pricing_lines_meta(parts: Dict[str, Decimal]) -> Dict[str, float]:
+    sub_pct = parts.get("subscription_discount_pct", Decimal("0"))
     return {
         "sticker_total_inc_vat": float_money(parts["sticker_inc_vat"]),
         "loyalty_discount_inc_vat": float_money(parts["loyalty_discount_inc_vat"]),
         "promotion_discount_inc_vat": float_money(parts["promotion_discount_inc_vat"]),
         "partner_referral_discount_inc_vat": float_money(parts["partner_referral_discount_inc_vat"]),
+        "subscription_discount_inc_vat": float_money(parts.get("subscription_discount_inc_vat", Decimal("0"))),
+        "subscription_discount_percent": float(sub_pct),
     }
 
 
@@ -307,22 +336,6 @@ def _period_dates(sub) -> Tuple[timezone.datetime.date, timezone.datetime.date]:
     return start, end
 
 
-def count_subscription_complimentary_used(user, sub) -> int:
-    """Bookings consuming subscription complimentary sparkle in current subscription window."""
-    from main.models import BookedAppointment, ServiceType
-
-    start, end = _period_dates(sub)
-    qs = BookedAppointment.objects.filter(
-        user=user,
-        applied_free_quick_sparkle=True,
-        complimentary_quick_sparkle_source="subscription",
-        appointment_date__gte=start,
-        appointment_date__lte=end,
-    ).exclude(status="cancelled")
-    qs = qs.filter(service_type__name__icontains="quick sparkle")
-    return qs.count()
-
-
 def get_subscription_quick_sparkle_snapshot(user) -> Dict[str, Any]:
     sub = get_active_b2c_subscription(user)
     if not sub or not getattr(sub, "plan", None):
@@ -336,7 +349,7 @@ def get_subscription_quick_sparkle_snapshot(user) -> Dict[str, Any]:
         }
     limits = sub.plan.get_limits()
     max_spark = int(limits.get("max_prisma_sparkles", 0))
-    used = count_subscription_complimentary_used(user, sub)
+    used = int(getattr(sub, "complimentary_sparkles_used", 0) or 0)
     remaining = max(0, max_spark - used)
     start_d, end_d = _period_dates(sub)
     return {
@@ -632,8 +645,9 @@ def consume_complimentary_quick_sparkle(user, booking_data: dict) -> Tuple[bool,
     """
     Consume one complimentary Quick Sparkle for the claimed source (or legacy loyalty→partner).
     Returns (success, consumed_source_or_error_code).
+    Subscription uses DB ledger ``complimentary_sparkles_used`` on ``B2CSubcription``.
     """
-    from main.models import LoyaltyProgram, ReferralAttribution
+    from main.models import B2CSubcription, LoyaltyProgram, ReferralAttribution
 
     applied = bool(booking_data.get("applied_free_quick_sparkle"))
     if not applied:
@@ -648,14 +662,20 @@ def consume_complimentary_quick_sparkle(user, booking_data: dict) -> Tuple[bool,
         user, booking_data
     )
     if source == "subscription":
-        sub = get_active_b2c_subscription(user)
-        if not sub:
-            return False, "no_subscription"
-        limits = sub.plan.get_limits()
-        max_spark = int(limits.get("max_prisma_sparkles", 0))
-        used = count_subscription_complimentary_used(user, sub)
-        if used >= max_spark:
-            return False, "subscription_cap"
+        with transaction.atomic():
+            sub = get_active_b2c_subscription(user)
+            if not sub:
+                return False, "no_subscription"
+            sub = B2CSubcription.objects.select_for_update().select_related("plan", "plan__tier").get(
+                pk=sub.pk
+            )
+            limits = sub.plan.get_limits()
+            max_spark = int(limits.get("max_prisma_sparkles", 0))
+            used = int(sub.complimentary_sparkles_used or 0)
+            if max_spark <= 0 or used >= max_spark:
+                return False, "subscription_cap"
+            sub.complimentary_sparkles_used = used + 1
+            sub.save(update_fields=["complimentary_sparkles_used"])
         return True, "subscription"
 
     if source == "loyalty":
@@ -703,10 +723,16 @@ def consume_complimentary_quick_sparkle(user, booking_data: dict) -> Tuple[bool,
 
     sub = get_active_b2c_subscription(user)
     if sub:
-        limits = sub.plan.get_limits()
-        max_spark = int(limits.get("max_prisma_sparkles", 0))
-        used = count_subscription_complimentary_used(user, sub)
-        if max_spark > 0 and used < max_spark:
-            return True, "subscription"
+        with transaction.atomic():
+            sub = B2CSubcription.objects.select_for_update().select_related("plan", "plan__tier").get(
+                pk=sub.pk
+            )
+            limits = sub.plan.get_limits()
+            max_spark = int(limits.get("max_prisma_sparkles", 0))
+            used = int(sub.complimentary_sparkles_used or 0)
+            if max_spark > 0 and used < max_spark:
+                sub.complimentary_sparkles_used = used + 1
+                sub.save(update_fields=["complimentary_sparkles_used"])
+                return True, "subscription"
 
     return False, "no_legacy_source"

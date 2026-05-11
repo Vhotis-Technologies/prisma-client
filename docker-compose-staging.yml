@@ -10,6 +10,7 @@ services:
   client_postgres:
     image: postgres:16-alpine
     container_name: client_postgres_staging
+    restart: unless-stopped
     env_file:
       - .env.staging
     volumes:
@@ -27,6 +28,7 @@ services:
   client_staging_redis:
     image: redis:7-alpine
     container_name: client_staging_redis
+    restart: unless-stopped
     env_file:
       - .env.staging
     command: ["redis-server", "--appendonly", "yes"]
@@ -44,6 +46,7 @@ services:
     build:
       context: ./server
       dockerfile: Dockerfile
+    restart: unless-stopped
     ports:
       - "8100:8000"
     volumes:
@@ -72,6 +75,7 @@ services:
       dockerfile: Dockerfile
     container_name: client_staging_celery_worker
     command: celery -A prisma.celery worker --loglevel=info
+    restart: unless-stopped
     volumes:
       - ./server/prisma:/app
     env_file:
@@ -135,7 +139,7 @@ services:
         condition: service_started
       client_postgres:
         condition: service_healthy
-    restart: always
+    restart: unless-stopped
     networks:
       - prisma_shared_net
 
