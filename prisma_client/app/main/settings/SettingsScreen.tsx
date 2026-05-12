@@ -480,6 +480,13 @@ const SettingScreen = () => {
             description="Manage cards and payment methods"
             onPress={() => router.push("/main/settings/ManagePaymentsScreen")}
           />
+          <SettingLink
+            title="Buy a voucher"
+            description="Send credit to family or friends"
+            onPress={() =>
+              router.push("/main/settings/GiftVoucherScreen" as any)
+            }
+          />
         </View>
 
         {/* Logout */}

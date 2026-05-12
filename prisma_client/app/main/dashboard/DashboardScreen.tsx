@@ -38,9 +38,6 @@ const DashboardScreen = () => {
   const backgroundColor = useThemeColor({}, "background");
   const buttonColor = useThemeColor({}, "button");
   const primaryColor = useThemeColor({}, "primary");
-  const borderColor = useThemeColor({}, "borders");
-  const cardColor = useThemeColor({}, "cards");
-  const textColor = useThemeColor({}, "text");
 
   /* Fetch the neccessary hooks */
   const {

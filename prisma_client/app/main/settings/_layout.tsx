@@ -17,6 +17,7 @@ const SettingsLayout = () => {
         <Stack.Screen name="ManagePaymentsScreen" />
         <Stack.Screen name="InvoicesScreen" />
         <Stack.Screen name="InvoiceDetailScreen" />
+        <Stack.Screen name="GiftVoucherScreen" />
         <Stack.Screen name="ProfileUpdateScreen" />
         <Stack.Screen name="SubscriptionPlanScreen" />
       </Stack>

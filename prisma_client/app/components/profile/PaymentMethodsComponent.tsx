@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, StyleSheet, ScrollView, Alert } from "react-native";
+import { View, StyleSheet, Alert } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useThemeColor } from "@/hooks/useThemeColor";
 import StyledText from "../helpers/StyledText";
@@ -140,14 +140,7 @@ const PaymentMethodsComponent: React.FC<PaymentMethodsComponentProps> = () => {
     }
 
     return (
-      <ScrollView
-        style={styles.scrollView}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-        nestedScrollEnabled={true}
-        bounces={false}
-        decelerationRate="fast"
-      >
+      <View style={styles.listContainer}>
         {safePaymentMethods.map((card: PaymentMethod) => (
           <SavedCardItem
             key={card.id}
@@ -156,7 +149,7 @@ const PaymentMethodsComponent: React.FC<PaymentMethodsComponentProps> = () => {
             isDeleting={deletingCardId === card.id}
           />
         ))}
-      </ScrollView>
+      </View>
     );
   };
 
@@ -195,10 +188,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5,
     paddingTop: 5,
   },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
+  listContainer: {
+    width: "100%",
     paddingBottom: 20,
   },
   centerContainer: {

@@ -3,16 +3,15 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Text,
   View,
   Animated,
   Dimensions,
 } from "react-native";
-import React, { useState, useEffect, useRef } from "react";
+import React, { useEffect, useRef } from "react";
 import StyledText from "../components/helpers/StyledText";
 import { useThemeColor } from "@/hooks/useThemeColor";
 
-const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
+const { height: screenHeight } = Dimensions.get("window");
 
 interface ModalServicesProps {
   visible: boolean;
@@ -48,7 +47,6 @@ const ModalServices = ({
   const slideAnim = useRef(new Animated.Value(screenHeight)).current;
   const scaleAnim = useRef(new Animated.Value(0.8)).current;
 
-  const bgColor = backgroundColor || themeBackground;
   const cardBgColor = modalType === "fullscreen" ? themeBackground : themeCard;
 
   useEffect(() => {
@@ -145,9 +143,8 @@ const ModalServices = ({
               contentContainerStyle={styles.fullscreenScrollContent}
               bounces={true}
               alwaysBounceVertical={false}
-              scrollEnabled={true}
-              nestedScrollEnabled={true}
               keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
             >
               {component}
             </ScrollView>
@@ -198,6 +195,8 @@ const ModalServices = ({
               style={styles.sheetContent}
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.sheetContentContainer}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
             >
               {component}
             </ScrollView>
@@ -246,6 +245,8 @@ const ModalServices = ({
               showsVerticalScrollIndicator={true}
               contentContainerStyle={styles.centerContentContainer}
               bounces={true}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
             >
               {component}
             </ScrollView>
@@ -332,14 +333,6 @@ const styles = StyleSheet.create({
   sheetContainer: {
     width: "100%",
     maxHeight: "90%",
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 5,
   },
   sheetHandle: {
     width: 40,
@@ -372,14 +365,6 @@ const styles = StyleSheet.create({
   centerContainer: {
     width: "90%",
     maxWidth: 400,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 15,
   },
   centerHeader: {
     flexDirection: "row",

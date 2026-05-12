@@ -1,5 +1,13 @@
 import React, { useState, useEffect } from "react";
-import { View, StyleSheet, TouchableOpacity, Animated } from "react-native";
+import {
+  View,
+  StyleSheet,
+  TouchableOpacity,
+  Animated,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import StyledText from "../helpers/StyledText";
 import StyledButton from "../helpers/StyledButton";
@@ -7,18 +15,21 @@ import { useThemeColor } from "@/hooks/useThemeColor";
 import { useSubmitReviewMutation } from "@/app/store/api/dashboardApi";
 import useDashboard from "@/app/app-hooks/useDashboard";
 import { RecentServicesProps } from "@/app/interfaces/DashboardInterfaces";
-import { useAppSelector, RootState } from "@/app/store/main_store";
+import StyledTextInput from "../helpers/StyledTextInput";
 
 interface ReviewComponentProps {
   bookingData?: RecentServicesProps;
   onReviewSubmitted?: () => void;
 }
 
+const MAX_COMMENT_LEN = 1000; 
+
 const ReviewComponent: React.FC<ReviewComponentProps> = ({
   bookingData,
   onReviewSubmitted,
 }) => {
   const [rating, setRating] = useState(0);
+  const [comment, setComment] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentStep, setCurrentStep] = useState(0); // 0: rating, 1: confirmation
 
@@ -34,7 +45,6 @@ const ReviewComponent: React.FC<ReviewComponentProps> = ({
 
   const { recentService, refetchRecentServices } = useDashboard();
   const [submitReview] = useSubmitReviewMutation();
-  const user = useAppSelector((state: RootState) => state.auth.user);
 
   // Use bookingData if provided, otherwise fall back to recentService
   const currentBooking = bookingData || recentService;
@@ -63,9 +73,11 @@ const ReviewComponent: React.FC<ReviewComponentProps> = ({
 
     setIsSubmitting(true);
     try {
+      const trimmed = comment.trim();
       await submitReview({
         booking_reference: currentBooking.booking_reference,
         rating,
+        ...(trimmed ? { comment: trimmed.slice(0, MAX_COMMENT_LEN) } : {}),
       }).unwrap();
 
       setCurrentStep(1);
@@ -82,6 +94,7 @@ const ReviewComponent: React.FC<ReviewComponentProps> = ({
 
       setTimeout(() => {
         setRating(0);
+        setComment("");
         setCurrentStep(0);
       }, 2000);
     } catch (error: any) {
@@ -103,7 +116,7 @@ const ReviewComponent: React.FC<ReviewComponentProps> = ({
           >
             <Ionicons
               name={star <= rating ? "star" : "star-outline"}
-              size={48}
+              size={30}
               color={star <= rating ? "#FFD700" : "#E0E0E0"}
               style={[styles.star, star <= rating && styles.starSelected]}
             />
@@ -133,16 +146,24 @@ const ReviewComponent: React.FC<ReviewComponentProps> = ({
   };
 
   const renderRatingStep = () => (
-    <Animated.View
-      style={[
-        styles.stepContainer,
-        {
-          opacity: fadeAnim,
-          transform: [{ scale: scaleAnim }],
-        },
-      ]}
+    <KeyboardAvoidingView
+      style={styles.keyboardAvoid}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={80}
     >
-      <View style={styles.header}>
+      <View
+        style={styles.scrollInner}
+      >
+        <Animated.View
+          style={[
+            styles.stepInner,
+            {
+              opacity: fadeAnim,
+              transform: [{ scale: scaleAnim }],
+            },
+          ]}
+        >
+          <View style={styles.header}>
         <View
           style={[
             styles.iconContainer,
@@ -257,16 +278,33 @@ const ReviewComponent: React.FC<ReviewComponentProps> = ({
         )}
       </View>
 
-      {rating > 0 && (
-        <StyledButton
-          title="Submit review"
-          onPress={handleSubmitReview}
-          variant="tonal"
-          isLoading={isSubmitting}
-          style={styles.submitButton}
-        />
-      )}
-    </Animated.View>
+        {rating > 0 ? (
+          <>
+            <View style={styles.commentBlock}>
+              <StyledTextInput
+                label="Add a comment (optional)"
+                placeholder="Tell us what stood out…"
+                placeholderTextColor={`${textColor}99`}
+                info={`${comment.length}/${MAX_COMMENT_LEN}`}
+                multiline
+                maxLength={MAX_COMMENT_LEN}
+                value={comment}
+                onChangeText={setComment}
+                textAlignVertical="top"
+              />
+            </View>
+            <StyledButton
+              title="Submit review"
+              onPress={handleSubmitReview}
+              variant="tonal"
+              isLoading={isSubmitting}
+              style={styles.submitButton}
+            />
+          </>
+        ) : null}
+        </Animated.View>
+      </View>
+    </KeyboardAvoidingView>
   );
 
   const renderConfirmationStep = () => (
@@ -316,10 +354,39 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 20,
   },
+  keyboardAvoid: {
+    flex: 1,
+    width: "100%",
+  },
+  scrollInner: {
+    width: "100%",
+  },
+  stepInner: {
+    alignItems: "center",
+    width: "100%",
+  },
   stepContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+  },
+  commentBlock: {
+    width: "100%",
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  commentLabel: {
+    marginBottom: 8,
+    fontWeight: "600",
+  },
+  commentInput: {
+    width: "100%",
+    minHeight: 100,
+    maxHeight: 180,
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 15,
   },
   header: {
     alignItems: "center",
@@ -348,14 +415,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1.5,
     marginBottom: 32,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
   },
   serviceInfo: {
     width: "100%",
@@ -394,7 +453,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   starButton: {
-    padding: 8,
+    padding: 5,
   },
   star: {
     marginHorizontal: 4,
@@ -404,6 +463,7 @@ const styles = StyleSheet.create({
   },
   ratingTextContainer: {
     marginTop: 8,
+    
   },
   ratingText: {
     fontWeight: "600",

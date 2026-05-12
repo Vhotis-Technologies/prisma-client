@@ -1,12 +1,5 @@
 import React from "react";
-import {
-  Modal,
-  View,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Dimensions,
-} from "react-native";
+import { View, StyleSheet, TouchableOpacity } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useThemeColor } from "@/hooks/useThemeColor";
 import { AddOnsProps } from "@/app/interfaces/BookingInterfaces";
@@ -14,8 +7,6 @@ import StyledText from "@/app/components/helpers/StyledText";
 import StyledButton from "@/app/components/helpers/StyledButton";
 import AddonCard from "./AddonCard";
 import { formatDuration, formatCurrency } from "@/app/utils/methods";
-
-const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
 
 interface AddonSelectionModalProps {
   onClose: () => void;
@@ -68,10 +59,7 @@ const AddonSelection: React.FC<AddonSelectionModalProps> = ({
         </StyledText>
 
         {/* Add-ons List */}
-        <ScrollView
-          style={styles.addonsContainer}
-          showsVerticalScrollIndicator={false}
-        >
+        <View style={styles.addonsContainer}>
           {addons?.map((addon) => (
             <AddonCard
               key={addon.id}
@@ -81,7 +69,7 @@ const AddonSelection: React.FC<AddonSelectionModalProps> = ({
               formatPrice={formatPrice}
             />
           ))}
-        </ScrollView>
+        </View>
 
         {/* Summary */}
         <View
@@ -183,7 +171,7 @@ const styles = StyleSheet.create({
     opacity: 0.8,
   },
   addonsContainer: {
-    flex: 1,
+    width: "100%",
   },
   summaryContainer: {
     marginHorizontal: 5,

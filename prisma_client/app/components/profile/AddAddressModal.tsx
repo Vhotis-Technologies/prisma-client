@@ -3,7 +3,6 @@ import {
   View,
   StyleSheet,
   TouchableOpacity,
-  ScrollView,
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
@@ -47,10 +46,7 @@ const AddAddressModal: React.FC<AddAddressModalProps> = ({ onClose, onSave }) =>
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.container}
       >
-        <ScrollView
-          style={styles.content}
-          showsVerticalScrollIndicator={false}
-        >
+        <View style={styles.content}>
           {/* Google Places Address Search */}
           {!useManualEntry && (
             <View style={styles.section}>
@@ -151,7 +147,7 @@ const AddAddressModal: React.FC<AddAddressModalProps> = ({ onClose, onSave }) =>
               </View>
             </>
           )}
-        </ScrollView>
+        </View>
 
         {/* Action Buttons */}
         <View style={styles.footer}>

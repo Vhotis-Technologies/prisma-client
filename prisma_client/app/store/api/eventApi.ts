@@ -308,6 +308,7 @@ const createBookingApi = createApi({
     applyWinnerVoucher: builder.mutation<
       {
         valid: boolean;
+        voucher_type?: string;
         voucher_id: string;
         credit_amount: number;
         discount_applied: number;
@@ -323,6 +324,59 @@ const createBookingApi = createApi({
         data: {
           code: data.code,
           pre_voucher_total_amount: data.pre_voucher_total_amount,
+        },
+      }),
+    }),
+
+    /** Validate paid gift voucher code (recipient account). */
+    applyGiftVoucher: builder.mutation<
+      {
+        valid: boolean;
+        voucher_type: string;
+        voucher_id: string;
+        credit_amount: number;
+        discount_applied: number;
+        pre_voucher_total: number;
+        amount_due: number;
+        amount_due_cents: number;
+      },
+      { code: string; pre_voucher_total_amount: number }
+    >({
+      query: (data) => ({
+        url: "/api/v1/payment/apply_gift_voucher/",
+        method: "POST",
+        data: {
+          code: data.code,
+          pre_voucher_total_amount: data.pre_voucher_total_amount,
+        },
+      }),
+    }),
+
+    /**
+     * Stripe sheet payload to purchase a gift voucher for recipient_email.
+     * Webhook fulfills code + emails recipient.
+     */
+    createGiftVoucherPaymentSheet: builder.mutation<
+      PaymentSheetResponse & {
+        paymentIntentId: string;
+        giftVoucherId: string;
+        publishableKey?: string;
+        merchantCountryCode?: string;
+        currency?: string;
+      },
+      {
+        recipient_email: string;
+        credit_amount: number | string;
+        validity_days: number;
+      }
+    >({
+      query: (body) => ({
+        url: "/api/v1/payment/create_gift_voucher_payment_sheet/",
+        method: "POST",
+        data: {
+          recipient_email: body.recipient_email,
+          credit_amount: body.credit_amount,
+          validity_days: body.validity_days,
         },
       }),
     }),
@@ -512,6 +566,8 @@ export const {
   useConfirmPaymentIntentMutation,
   useCreateBulkOrderInvoiceLaterMutation,
   useApplyWinnerVoucherMutation,
+  useApplyGiftVoucherMutation,
+  useCreateGiftVoucherPaymentSheetMutation,
   useLazyGetBulkInvoiceCheckoutQuery,
 } = createBookingApi;
 export default createBookingApi;

@@ -4,6 +4,7 @@ import {
   useFetchPaymentSheetDetailsMutation,
   useConfirmPaymentIntentMutation,
   useCreateRescheduleFeePaymentSheetMutation,
+  useCreateGiftVoucherPaymentSheetMutation,
 } from "@/app/store/api/eventApi";
 import { useAlertContext } from "@/app/contexts/AlertContext";
 import { PaymentSheetResponse } from "@/app/interfaces/BookingInterfaces";
@@ -34,6 +35,8 @@ const usePayment = () => {
   const [confirmPaymentIntentMutation] = useConfirmPaymentIntentMutation();
   const [createRescheduleFeePaymentSheet] =
     useCreateRescheduleFeePaymentSheetMutation();
+  const [createGiftVoucherPaymentSheet] =
+    useCreateGiftVoucherPaymentSheetMutation();
   const { setAlertConfig, setIsVisible } = useAlertContext();
   const { showSnackbarWithConfig } = useSnackbar();
   const { addresses } = useAddresses();
@@ -392,6 +395,96 @@ const usePayment = () => {
   );
 
   /**
+   * Purchase a gift voucher. Stripe webhook fulfills the voucher and emails the recipient.
+   */
+  const openGiftVoucherPaymentSheet = useCallback(
+    async (
+      recipientEmail: string,
+      creditAmount: number,
+      validityDays: number,
+    ): Promise<{ success: boolean; paymentIntentId?: string }> => {
+      const address = addresses[0];
+      const country = (address?.country ?? "").trim();
+      const isUK =
+        country === "United Kingdom" ||
+        country === "UK" ||
+        country === "Great Britain";
+      const countryCode = isUK ? "GB" : "IE";
+
+      try {
+        const response = await createGiftVoucherPaymentSheet({
+          recipient_email: recipientEmail.trim(),
+          credit_amount: creditAmount,
+          validity_days: validityDays,
+        }).unwrap();
+
+        const { paymentIntent, paymentIntentId, ephemeralKey, customer } =
+          response;
+        const cur = (response.currency || (isUK ? "gbp" : "eur")).toLowerCase();
+        const currencyDisplay = cur === "gbp" ? "GBP" : "EUR";
+
+        const { error } = await initPaymentSheet({
+          paymentIntentClientSecret: paymentIntent,
+          merchantDisplayName: "Prisma Car Care",
+          customerEphemeralKeySecret: ephemeralKey,
+          customerId: customer,
+          returnURL: "prismaclient://payment-success",
+          applePay: {
+            merchantCountryCode: countryCode,
+          },
+          googlePay: {
+            merchantCountryCode: countryCode,
+            testEnv: APP_ENV !== "production",
+            currencyCode: currencyDisplay,
+          },
+          allowsDelayedPaymentMethods: true,
+        });
+
+        if (error) {
+          throw error;
+        }
+
+        const { error: presentError } = await presentPaymentSheet();
+        if (presentError) {
+          if (presentError.code === "Canceled") {
+            return { success: false };
+          }
+          showSnackbarWithConfig({
+            message: presentError.message || "Payment failed",
+            type: "error",
+            duration: 3000,
+          });
+          return { success: false };
+        }
+
+        return { success: true, paymentIntentId };
+      } catch (error: unknown) {
+        const err = error as {
+          data?: { error?: string; message?: string };
+          message?: string;
+        };
+        const msg =
+          err?.data?.error ||
+          err?.message ||
+          "Could not start gift voucher payment.";
+        showSnackbarWithConfig({
+          message: msg,
+          type: "error",
+          duration: 3000,
+        });
+        return { success: false };
+      }
+    },
+    [
+      addresses,
+      createGiftVoucherPaymentSheet,
+      initPaymentSheet,
+      presentPaymentSheet,
+      showSnackbarWithConfig,
+    ],
+  );
+
+  /**
    * Confirms if a payment intent has been processed via webhook
    *
    * @param paymentIntentId - The Stripe payment intent ID
@@ -488,7 +581,7 @@ const usePayment = () => {
     initializePaymentSheet,
     openPaymentSheet,
     openRescheduleFeePaymentSheet,
-
+    openGiftVoucherPaymentSheet,
     // Payment confirmation methods
     confirmPaymentIntent,
     waitForPaymentConfirmation,

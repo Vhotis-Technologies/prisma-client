@@ -4,7 +4,6 @@ import {
   ActivityIndicator,
   Image,
   TouchableOpacity,
-  ScrollView,
 } from "react-native";
 import React, { useState, useEffect } from "react";
 import StyledTextInput from "@/app/components/helpers/StyledTextInput";
@@ -211,9 +210,8 @@ const AddNewVehicleScreen = ({
   /* Displays the main component of the Add New Vehicle screen. */
   return (
     <View style={{ flex: 1 }}>
-      <ScrollView
+      <View
         style={[styles.mainContainer]}
-        contentContainerStyle={styles.scrollContent}
       >
         <View style={[styles.card]}>
           {wizardStep === "lookup" && (
@@ -467,7 +465,7 @@ const AddNewVehicleScreen = ({
             )}
           </View>
         ) : null}
-      </ScrollView>
+      </View>
 
       <ModalServices
         visible={isImageModalVisible}
@@ -580,12 +578,7 @@ const AddNewVehicleScreen = ({
 export default AddNewVehicleScreen;
 
 const styles = StyleSheet.create({
-  mainContainer: { flex: 1 },
-  scrollContent: {
-    flexGrow: 1,
-    padding: 10,
-    paddingBottom: 32,
-  },
+  mainContainer: { flex: 1, padding: 10, paddingBottom: 32 },
   card: { margin: 5 },
   formSection: { gap: 6},
   fieldError: { marginTop: -4, marginBottom: 4 },

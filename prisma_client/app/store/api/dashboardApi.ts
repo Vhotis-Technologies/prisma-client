@@ -72,16 +72,18 @@ export const dashboardApi = createApi({
     }),
 
     submitReview: builder.mutation<
-      any,
+      { message?: string; booking_reference?: string },
       {
         booking_reference: string;
         rating: number;
+        /** Optional customer comment (server max 2000 chars). */
+        comment?: string;
       }
     >({
       query: (data) => ({
         url: "/api/v1/dashboard/submit_review/",
         method: "PATCH",
-        data: data,
+        data,
       }),
     }),
 
