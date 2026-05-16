@@ -62,3 +62,31 @@ export interface UserStatsResponse {
   services_this_month: number;
   services_this_year: number;
 }
+
+export type LoyaltyTier = "bronze" | "silver" | "gold" | "platinum";
+
+export interface LoyaltyProgressSnapshot {
+  is_b2c: boolean;
+  current_tier: LoyaltyTier | null;
+  completed_bookings: number;
+  next_tier: LoyaltyTier | null;
+  current_threshold: number;
+  next_threshold: number | null;
+  washes_to_next: number;
+  tier_thresholds: Record<LoyaltyTier, number>;
+  benefits: { discount: number; free_service: string[] };
+}
+
+export interface SubscriptionComplimentarySnapshot {
+  eligible_subscription: boolean;
+  remaining_subscription: number;
+  max_subscription: number;
+  period_start: string | null;
+  period_end: string | null;
+  period_label: string;
+}
+
+export interface PerksSummaryResponse {
+  loyalty: LoyaltyProgressSnapshot;
+  subscription_complimentary: SubscriptionComplimentarySnapshot;
+}

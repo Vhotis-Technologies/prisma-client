@@ -2,7 +2,7 @@
 Dashboard API for the client app: upcoming appointments, recent services, stats, reviews, detailer location.
 
 Actions: get_upcoming_appointments, cancel_appointment, get_recent_services, get_user_stats,
-submit_review, get_detailer_location. Branch admins see appointments for their branch vehicles.
+submit_review, get_detailer_location, get_perks_summary. Branch admins see appointments for their branch vehicles.
 """
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
@@ -13,6 +13,10 @@ from django.conf import settings
 from main.util.media_helper import get_full_media_url
 from django.utils import timezone
 from main.tasks import publish_review_to_detailer
+from main.utils.booking_quote import (
+    get_loyalty_progress_snapshot,
+    get_subscription_quick_sparkle_snapshot,
+)
 from main.utils.redis_geo import get_detailer_location as get_detailer_location_from_redis
 
 
@@ -53,6 +57,7 @@ class DashboardView(APIView):
         'get_user_stats': '_get_user_stats',
         'submit_review': 'submit_review',
         'get_detailer_location': '_get_detailer_location',
+        'get_perks_summary': '_get_perks_summary',
     }
 
     def get(self, request, *args, **kwargs):
@@ -682,31 +687,62 @@ class DashboardView(APIView):
 
         except Exception as e:
             return Response({'error': f'Failed to fetch user stats: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
+
+
+    def _get_perks_summary(self, request):
+        """
+        Read-only B2C perks payload: loyalty progress (tier, completed bookings, next tier,
+        thresholds, benefits) and complimentary subscription Quick Sparkle allowance (remaining,
+        max, period). Returns ``loyalty.is_b2c: False`` for fleet/branch/partner users so the
+        client can hide the loyalty card.
+        """
+        try:
+            payload = {
+                'loyalty': get_loyalty_progress_snapshot(request.user),
+                'subscription_complimentary': get_subscription_quick_sparkle_snapshot(request.user),
+            }
+            return Response(payload, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response(
+                {'error': f'Failed to fetch perks summary: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
 
     def submit_review(self, request):
         """
-        Submit a review for a completed booking. Expects request.data: booking_reference, rating.
-        Updates BookedAppointment.is_reviewed and review_rating; publishes to detailer via publish_review_to_detailer.
+        Submit a review for a completed booking. Expects request.data: booking_reference, rating;
+        optional comment (max 1000 chars).
+        Updates BookedAppointment review fields; publishes to detailer via publish_review_to_detailer.
         """
         try:
-            
+            MAX_REVIEW_COMMENT_LEN = 1000
+
             booking_reference = request.data.get('booking_reference')
             rating = request.data.get('rating')
+            comment_raw = request.data.get('comment')
+            comment = None
+            if comment_raw is not None and str(comment_raw).strip():
+                comment = str(comment_raw).strip()
+                if len(comment) > MAX_REVIEW_COMMENT_LEN:
+                    return Response(
+                        {'error': f'Comment must be at most {MAX_REVIEW_COMMENT_LEN} characters'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
 
-
-            if not booking_reference or not rating:
+            try:
+                rating_int = int(rating)
+            except (TypeError, ValueError):
+                rating_int = None
+            if not booking_reference or rating_int is None:
                 return Response(
-                    {'error': 'Booking reference and rating are required'}, 
-                    status=status.HTTP_400_BAD_REQUEST
+                    {'error': 'Booking reference and rating are required'},
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
-
-            # Validate rating
-            if not isinstance(rating, int) or rating < 1 or rating > 5:
+            if rating_int < 1 or rating_int > 5:
                 return Response(
-                    {'error': 'Rating must be an integer between 1 and 5'}, 
-                    status=status.HTTP_400_BAD_REQUEST
+                    {'error': 'Rating must be an integer between 1 and 5'},
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
 
             # Get the booking (with granular checks for debugging)
@@ -734,12 +770,13 @@ class DashboardView(APIView):
 
             # Update the booking with review data
             booking.is_reviewed = True
-            booking.review_rating = rating
+            booking.review_rating = rating_int
+            booking.review_comment = comment
             booking.review_submitted_at = timezone.now()
             booking.save()
 
             # Publish to Redis for detailer notification
-            publish_review_to_detailer.delay(booking_reference, rating)
+            publish_review_to_detailer.delay(booking_reference, rating_int, comment)
             
             return Response({
                 'message': 'Review submitted successfully',

@@ -51,6 +51,10 @@ from main.util.vehicle_transfer_actions import (
     apply_vehicle_transfer_approval,
     apply_vehicle_transfer_rejection,
 )
+from main.utils.booking_quote import (
+    get_loyalty_progress_snapshot,
+    get_subscription_quick_sparkle_snapshot,
+)
 from main.views.support.support_permission_access import SupportPermissionAccess
 
 logger = logging.getLogger(__name__)
@@ -469,6 +473,8 @@ def _serialize_b2c_detail(user: User) -> dict:
         "cancelled_bookings": cancelled,
         "preferred_services": [],
         "notes": "",
+        "loyalty": get_loyalty_progress_snapshot(user),
+        "subscription_complimentary": get_subscription_quick_sparkle_snapshot(user),
     }
 
 

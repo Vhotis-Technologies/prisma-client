@@ -1,12 +1,14 @@
 """
 Import all signal modules so their @receiver handlers are registered with Django.
 
-Submodules: vehicle (booking completion, loyalty, notifications), user (referral rewards),
-partner (commission on booking, reverse on refund), fleet (trial activation, branch admin flag).
+Submodules: vehicle_signal (booking completion, loyalty, notifications),
+user_signal (referral rewards), partner_signal (commission on booking),
+fleet_signal (trial activation, branch admin flag), winner_voucher_signal,
+gift_voucher_signal.
 """
-# Import all signal modules to register handlers
-from . import vehicle
-from . import user
-from . import partner
-from . import fleet
-from . import winner_voucher
+from . import fleet_signal
+from . import gift_voucher_signal
+from . import partner_signal
+from . import user_signal
+from . import vehicle_signal
+from . import winner_voucher_signal

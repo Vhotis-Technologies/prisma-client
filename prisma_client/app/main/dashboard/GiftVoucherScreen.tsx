@@ -32,6 +32,7 @@ export default function GiftVoucherScreen() {
   const [validityDays, setValidityDays] = useState(45);
   const [busy, setBusy] = useState(false);
 
+  /* Increment or decrement the validity days by the given delta. */
   const bumpDays = useCallback((delta: number) => {
     setValidityDays((d) => Math.min(60, Math.max(30, d + delta)));
   }, []);
@@ -121,6 +122,7 @@ export default function GiftVoucherScreen() {
         <View style={styles.stepRow}>
           <Pressable
             onPress={() => bumpDays(-1)}
+            onLongPress={() => bumpDays(-5)}
             disabled={busy || validityDays <= 30}
             style={[styles.stepBtn, { borderColor }]}
           >
@@ -131,6 +133,7 @@ export default function GiftVoucherScreen() {
           </StyledText>
           <Pressable
             onPress={() => bumpDays(1)}
+            onLongPress={() => bumpDays(5)}
             disabled={busy || validityDays >= 60}
             style={[styles.stepBtn, { borderColor }]}
           >

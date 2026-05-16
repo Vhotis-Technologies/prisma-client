@@ -4,6 +4,7 @@
 import { createApi } from "@reduxjs/toolkit/query/react";
 import axiosBaseQuery from "@/app/store/baseQuery";
 import UpcomingAppointmentProps, {
+  PerksSummaryResponse,
   RecentServicesProps,
   UserStatsResponse,
 } from "@/app/interfaces/DashboardInterfaces";
@@ -101,6 +102,17 @@ export const dashboardApi = createApi({
         params: { booking_reference: bookingReference },
       }),
     }),
+
+    /**
+     * Loyalty progress + complimentary subscription wash allowance for the authenticated user.
+     * Server returns `loyalty.is_b2c: false` for fleet/branch/partner users so the UI can hide.
+     */
+    fetchPerksSummary: builder.query<PerksSummaryResponse, void>({
+      query: () => ({
+        url: "/api/v1/dashboard/get_perks_summary/",
+        method: "GET",
+      }),
+    }),
   }),
 });
 
@@ -112,5 +124,6 @@ export const {
   useSubmitReviewMutation,
   useFetchDetailerLocationQuery,
   useLazyFetchDetailerLocationQuery,
+  useFetchPerksSummaryQuery,
 } = dashboardApi;
 export default dashboardApi;

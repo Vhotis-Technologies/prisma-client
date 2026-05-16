@@ -9,11 +9,11 @@ from django.conf import settings
 from django.template.loader import render_to_string
 from django.utils import timezone
 
-from main.models import WinnerVoucher
+from main.models import GiftVoucher, WinnerVoucher
 from main.util.graph_mail import send_mail as graph_send_mail
 
 
-def _winner_voucher_validity_context(voucher: WinnerVoucher) -> dict:
+def _voucher_email_window_context(voucher) -> dict:
     """Build display fields for valid-from, expiry, and approximate days in the use window."""
     now = timezone.now()
     vf = voucher.valid_from
@@ -53,7 +53,7 @@ def send_winner_voucher_email(voucher_id: str):
         return f'No assigned email for voucher {voucher_id}'
 
     credit = voucher.credit_amount.quantize(Decimal('0.01'))
-    validity = _winner_voucher_validity_context(voucher)
+    validity = _voucher_email_window_context(voucher)
 
     try:
         html_message = render_to_string(
@@ -74,3 +74,60 @@ def send_winner_voucher_email(voucher_id: str):
         return f'Winner voucher email sent to {recipient}'
     except Exception as e:
         return f'Failed to send winner voucher email: {e!s}'
+
+
+@shared_task
+def send_gift_voucher_email(voucher_id: str):
+    """
+    Email recipient after Stripe payment confirms. Idempotent callers may invoke multiple times:
+    skips if voucher missing, unpaid, redeemed, inactive, or already emailed.
+    """
+    try:
+        voucher = GiftVoucher.objects.select_related("purchased_by").get(pk=voucher_id)
+    except GiftVoucher.DoesNotExist:
+        return f"Gift voucher not found: {voucher_id}"
+
+    if voucher.email_sent_at:
+        return f"Gift voucher email already sent: {voucher_id}"
+    if not voucher.is_paid():
+        return f"Skip email for unpaid gift voucher {voucher_id}"
+    if not voucher.is_active or voucher.redeemed_at:
+        return f"Skip gift email {voucher_id} (inactive or redeemed)"
+
+    recipient = (voucher.assigned_email or "").strip()
+    if not recipient:
+        return f"No assigned email for gift voucher {voucher_id}"
+
+    credit = voucher.credit_amount.quantize(Decimal("0.01"))
+    validity = _voucher_email_window_context(voucher)
+    purchaser = voucher.purchased_by
+    purchaser_display = ""
+    if purchaser:
+        purchaser_display = (getattr(purchaser, "name", "") or "").strip() or (
+            purchaser.email or ""
+        )
+
+    try:
+        html_message = render_to_string(
+            "gift_voucher_email.html",
+            {
+                "voucher_code": voucher.code,
+                "credit_amount": str(credit),
+                "valid_from_display": validity["valid_from_display"],
+                "expires_at_display": validity["expires_at_display"],
+                "days_to_use": validity["days_to_use"],
+                "purchaser_display": purchaser_display,
+                "validity_days": voucher.validity_days,
+                "app_store_url": settings.APP_STORE_URL,
+                "play_store_url": settings.PLAY_STORE_URL,
+                "current_year": datetime.now().year,
+            },
+        )
+        subject = f"You received a Prisma Car Care gift — {voucher.code}"
+        graph_send_mail(subject, html_message, recipient)
+        GiftVoucher.objects.filter(pk=voucher.pk, email_sent_at__isnull=True).update(
+            email_sent_at=timezone.now()
+        )
+        return f"Gift voucher email sent to {recipient}"
+    except Exception as e:
+        return f"Failed to send gift voucher email: {str(e)}"

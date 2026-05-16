@@ -187,6 +187,7 @@ class BookedAppointment(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     is_reviewed = models.BooleanField(default=False)
     review_rating = models.IntegerField(null=True, blank=True)
+    review_comment = models.TextField(null=True, blank=True)
     review_submitted_at = models.DateTimeField(null=True, blank=True)
     assigned_detailers = models.JSONField(default=list, blank=True)  # list of {"id", "name", "rating", "phone", "image"} from job_acceptance (express = 2)
     service_reminder_push_sent_at = models.DateTimeField(null=True, blank=True)
@@ -358,6 +359,7 @@ class PaymentTransaction(models.Model):
         ('fleet_subscription', 'Fleet Subscription'),
         ('b2c_subscription', 'B2C Subscription'),
         ('reschedule_fee', 'Reschedule Fee'),
+        ('gift_voucher', 'Gift Voucher Purchase'),
     ]
     STATUS_CHOICES = [
         ('succeeded', 'Succeeded'),

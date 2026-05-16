@@ -14,6 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import OngoingServiceCard from "@/app/components/dashboard/OngoingServiceCard";
 import RecentServicesSection from "@/app/components/dashboard/RecentServicesSection";
 import StatsSection from "@/app/components/dashboard/StatsSection";
+import LoyaltyCard from "@/app/components/dashboard/LoyaltyCard";
 import StyledText from "@/app/components/helpers/StyledText";
 import useDashboard from "@/app/app-hooks/useDashboard";
 import AllowNotificationModal from "@/app/components/notification/AllowNotificationModal";
@@ -25,6 +26,7 @@ import ReferralSection from "@/app/components/dashboard/ReferralSection";
 import FleetDashboardScreen from "./FleetDashboardScreen";
 import BranchAdminDashboardScreen from "./BranchAdminDashboardScreen";
 import DealershipPartnerDashboardScreen from "@/app/main/dashboard/DealershipPartnerDashboardScreen";
+import { useFetchPerksSummaryQuery } from "@/app/store/api/dashboardApi";
 
 const DashboardScreen = () => {
   /* Get the user from Redux store */
@@ -50,6 +52,19 @@ const DashboardScreen = () => {
   } = useDashboard();
 
   const { permissionStatus, isLoading: permissionsLoading } = usePermissions();
+
+  // Fetch loyalty + complimentary perks for the regular B2C dashboard.
+  // Skip when this user is routed to a fleet/branch/partner dashboard so we don't
+  // fetch data that won't be rendered (server also returns is_b2c:false in that case).
+  const skipPerksFetch =
+    !user ||
+    user.is_fleet_owner === true ||
+    user.is_branch_admin === true ||
+    user.is_dealership === true ||
+    !!user.partner_referral_code;
+  const { data: perksSummary } = useFetchPerksSummaryQuery(undefined, {
+    skip: skipPerksFetch,
+  });
 
   // Show notification modal when dashboard loads, but only if notifications are not already granted
   // and we haven't asked for permissions yet in this session
@@ -150,6 +165,7 @@ const DashboardScreen = () => {
           onUnratedPress={handleUnratedPress}
         />
         <StatsSection stats={stats} />
+        <LoyaltyCard loyalty={perksSummary?.loyalty} />
         <ReferralSection referral={user?.referral_code || ""} />
       </ScrollView>
 

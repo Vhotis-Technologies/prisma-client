@@ -134,7 +134,6 @@ jobs:
             sleep 15
 
             echo "Running Django migrations..."
-            docker compose exec -T client_server python manage.py makemigrations
             docker compose exec -T client_server python manage.py migrate
 
             docker system prune -f
@@ -180,7 +179,6 @@ jobs:
             sleep 15
 
             echo "Running Django migrations (staging)..."
-            docker compose -f docker-compose-staging.yml exec -T client_staging_server python manage.py makemigrations
             docker compose -f docker-compose-staging.yml exec -T client_staging_server python manage.py migrate
 
             docker system prune -f

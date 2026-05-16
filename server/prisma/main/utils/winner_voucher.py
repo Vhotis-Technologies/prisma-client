@@ -89,7 +89,9 @@ def amount_due_cents(pre_total: Decimal, discount: Decimal) -> int:
 def parse_pre_voucher_total(booking_data: dict) -> Decimal:
     raw = booking_data.get("pre_voucher_total_amount")
     if raw is None:
-        raise ValueError("pre_voucher_total_amount is required when using a winner voucher")
+        raise ValueError(
+            "pre_voucher_total_amount is required when using a voucher for payment"
+        )
     return Decimal(str(raw))
 
 
@@ -101,6 +103,8 @@ def validate_winner_voucher_for_payment(user, booking_data: dict, amount_cents: 
     vid = booking_data.get("winner_voucher_id")
     if not vid:
         return None
+    if booking_data.get("gift_voucher_id"):
+        raise ValueError("Use only one of winner voucher or gift voucher per booking")
     try:
         voucher = WinnerVoucher.objects.get(pk=vid)
     except WinnerVoucher.DoesNotExist as exc:

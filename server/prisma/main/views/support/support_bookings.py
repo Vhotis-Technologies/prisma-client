@@ -366,6 +366,18 @@ def _serialize_booking_detail(booking: BookedAppointment) -> dict:
         "addons": addons,
         "special_instructions": (booking.special_instructions or "").strip(),
         "total_amount": float(booking.total_amount or 0),
+        "is_reviewed": bool(booking.is_reviewed),
+        "review_rating": booking.review_rating if booking.is_reviewed else None,
+        "review_comment": (
+            (booking.review_comment or "").strip() or None
+            if booking.is_reviewed
+            else None
+        ),
+        "review_submitted_at": (
+            booking.review_submitted_at.isoformat()
+            if booking.is_reviewed and booking.review_submitted_at
+            else None
+        ),
     }
     if has_images:
         payload["booking_images"] = _booking_images(booking)

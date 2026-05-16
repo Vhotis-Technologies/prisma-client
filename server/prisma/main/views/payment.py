@@ -24,6 +24,7 @@ from django.db import transaction
 from django.db.models import Q
 from rest_framework.views import APIView
 from main.models import (
+    GiftVoucher,
     User, BookedAppointment, PaymentTransaction, RefundRecord, Address, PendingBooking, BulkOrder,
     Vehicle, ValetType, ServiceType, AddOns, LoyaltyProgram, Branch, ReferralAttribution, WinnerVoucher,
     Fleet,
@@ -35,6 +36,16 @@ from main.utils.booking_quote import (
     consume_complimentary_quick_sparkle,
     is_quick_sparkle_service_name,
 )
+from main.utils.gift_voucher import (
+    compute_gift_discount,
+    gift_voucher_eligible_for_checkout,
+    gift_voucher_validity_issue,
+    gift_voucher_validity_user_message,
+    redeem_gift_voucher_for_booking,
+    validate_gift_voucher_for_payment,
+)
+
+
 from main.utils.winner_voucher import (
     normalize_winner_code,
     voucher_eligible_for_checkout,
@@ -48,9 +59,10 @@ from main.utils.winner_voucher import (
 
 from main.utils.bulk_appointments import create_bulk_appointments
 import json
+import re
 import time
 import uuid
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 import logging
 
 # Initialize Stripe with your secret key
@@ -737,6 +749,8 @@ class PaymentView(APIView):
         'check_payment_status': 'check_payment_status',
         'confirm_payment_intent': 'confirm_payment_intent',
         'apply_winner_voucher': 'apply_winner_voucher',
+        'apply_gift_voucher': 'apply_gift_voucher',
+        'create_gift_voucher_payment_sheet': 'create_gift_voucher_payment_sheet',
         'get_bulk_invoice_checkout': 'get_bulk_invoice_checkout',
     }
 
@@ -789,6 +803,49 @@ class PaymentView(APIView):
         cents = amount_due_cents(pre, discount)
         return Response({
             'valid': True,
+            'voucher_type': 'winner',
+            'voucher_id': str(voucher.id),
+            'credit_amount': float(voucher.credit_amount),
+            'discount_applied': float(discount),
+            'pre_voucher_total': float(pre),
+            'amount_due': float(due),
+            'amount_due_cents': cents,
+        }, status=status.HTTP_200_OK)
+
+    def apply_gift_voucher(self, request):
+        """Validate a paid gift voucher code for the current user; returns amounts for checkout."""
+        code = request.data.get('code')
+        pre_raw = request.data.get('pre_voucher_total_amount')
+        if not code or pre_raw is None:
+            return Response(
+                {'error': 'code and pre_voucher_total_amount are required'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        user = request.user
+        try:
+            voucher = GiftVoucher.objects.get(code=normalize_winner_code(code))
+        except GiftVoucher.DoesNotExist:
+            return Response({'error': 'Invalid code'}, status=status.HTTP_400_BAD_REQUEST)
+        validity_issue = gift_voucher_validity_issue(voucher)
+        if validity_issue:
+            return Response(
+                {'error': gift_voucher_validity_user_message(validity_issue)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not gift_voucher_eligible_for_checkout(voucher, user):
+            return Response(
+                {'error': 'This code cannot be used with your account'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        pre = Decimal(str(pre_raw))
+        discount = compute_gift_discount(voucher, pre)
+        due = pre - discount
+        if due < 0:
+            due = Decimal('0')
+        cents = amount_due_cents(pre, discount)
+        return Response({
+            'valid': True,
+            'voucher_type': 'gift',
             'voucher_id': str(voucher.id),
             'credit_amount': float(voucher.credit_amount),
             'discount_applied': float(discount),
@@ -948,6 +1005,44 @@ class PaymentView(APIView):
                         'appointment_id': str(booking.id),
                     }, status=status.HTTP_200_OK)
 
+                gift_vid = booking_data.get('gift_voucher_id')
+                if gift_vid:
+                    try:
+                        validate_gift_voucher_for_payment(user, booking_data, 0)
+                    except ValueError as e:
+                        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+                    expires_at = timezone.now() + timedelta(hours=24)
+                    pending_booking = PendingBooking.objects.create(
+                        booking_reference=booking_reference,
+                        user=user,
+                        booking_data=booking_data,
+                        detailer_booking_data=detailer_booking_data or build_detailer_payload_from_booking_data(booking_data, user, booking_reference),
+                        payment_status='succeeded',
+                        expires_at=expires_at
+                    )
+                    success, result = try_create_booking_on_detailer(pending_booking)
+                    if not success:
+                        pending_booking.delete()
+                        return Response({
+                            'error': 'This time slot is no longer available. Please choose another.',
+                            'detail': result,
+                        }, status=status.HTTP_400_BAD_REQUEST)
+                    with transaction.atomic():
+                        booking = create_booking_from_pending(pending_booking)
+                        redeem_gift_voucher_for_booking(str(gift_vid), user, booking)
+                    if result and isinstance(result, list):
+                        try:
+                            assign_detailers_to_booking(booking, result)
+                        except Exception:
+                            pass
+                    pending_booking.delete()
+                    return Response({
+                        'free_booking': True,
+                        'booking_reference': booking_reference,
+                        'success': True,
+                        'appointment_id': str(booking.id),
+                    }, status=status.HTTP_200_OK)
+
                 applied_free = booking_data.get('applied_free_quick_sparkle', False)
                 total_amount_chk = booking_data.get('total_amount', 0)
                 if applied_free and (total_amount_chk == 0 or total_amount_chk == 0.0):
@@ -1040,6 +1135,7 @@ class PaymentView(APIView):
                 if err_fin:
                     return Response({'error': err_fin}, status=status.HTTP_400_BAD_REQUEST)
                 validate_winner_voucher_for_payment(user, booking_data, int(amount))
+                validate_gift_voucher_for_payment(user, booking_data, int(amount))
             except ValueError as e:
                 return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -1138,6 +1234,135 @@ class PaymentView(APIView):
             return Response(
                 {'error': str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    def create_gift_voucher_payment_sheet(self, request):
+        """
+        Create Stripe PaymentIntent for purchasing a gift voucher for recipient_email.
+        Webhook fulfills code, validity window, PaymentTransaction, and recipient email.
+        """
+        email_re = re.compile(r'^[^\s@]+@[^\s@]+\.[^\s@]+$')
+        try:
+            email_raw = (
+                request.data.get('recipient_email') or request.data.get('assigned_email') or ''
+            ).strip()
+            credit_raw = request.data.get('credit_amount')
+            validity_days_raw = request.data.get('validity_days')
+            if not email_raw or not email_re.match(email_raw):
+                return Response(
+                    {'error': 'valid recipient_email is required'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            try:
+                credit = Decimal(str(credit_raw))
+            except (InvalidOperation, TypeError, ValueError):
+                credit = Decimal('-1')
+            if credit <= 0:
+                return Response(
+                    {'error': 'credit_amount must be a positive decimal'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            amount_cents = int(
+                (credit * Decimal('100')).quantize(Decimal('1'), rounding=ROUND_HALF_UP)
+            )
+            min_cents = 50  # Stripe practical minimum for card payments
+            if amount_cents < min_cents:
+                return Response(
+                    {'error': f'Minimum gift amount is {min_cents / 100:.2f}'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            try:
+                v_int = int(validity_days_raw)
+            except (TypeError, ValueError):
+                return Response(
+                    {'error': 'validity_days must be an integer between 30 and 60'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if v_int < 30 or v_int > 60:
+                return Response(
+                    {'error': 'validity_days must be between 30 and 60 inclusive'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            user = User.objects.get(id=request.user.id)
+            try:
+                addr = Address.objects.filter(user=user).first()
+                country = addr.country if addr else 'Ireland'
+            except Exception:
+                country = 'Ireland'
+            if country == 'United Kingdom':
+                currency = 'gbp'
+                merchant_country_code = 'GB'
+            else:
+                currency = 'eur'
+                merchant_country_code = 'IE'
+
+            voucher = GiftVoucher.objects.create(
+                assigned_email=email_raw,
+                purchased_by=user,
+                credit_amount=credit,
+                validity_days=v_int,
+                purchase_currency=currency,
+            )
+
+            if hasattr(user, 'stripe_customer_id') and user.stripe_customer_id:
+                customer = stripe.Customer.retrieve(user.stripe_customer_id)
+            else:
+                customer = stripe.Customer.create(
+                    email=user.email,
+                    name=user.name,
+                    metadata={'user_id': str(user.id)},
+                )
+                if hasattr(user, 'stripe_customer_id'):
+                    user.stripe_customer_id = customer.id
+                    user.save()
+
+            try:
+                payment_intent = stripe.PaymentIntent.create(
+                    amount=amount_cents,
+                    currency=currency,
+                    customer=customer.id,
+                    receipt_email=user.email,
+                    automatic_payment_methods={'enabled': True},
+                    setup_future_usage='off_session',
+                    metadata={
+                        'type': 'gift_voucher',
+                        'gift_voucher_id': str(voucher.id),
+                        'user_id': str(user.id),
+                    },
+                    description=f'Gift voucher for {email_raw}',
+                )
+            except stripe.error.StripeError:
+                voucher.delete()
+                raise
+
+            voucher.stripe_payment_intent_id = payment_intent.id
+            voucher.save(update_fields=['stripe_payment_intent_id', 'updated_at'])
+
+            ephemeral_key = stripe.EphemeralKey.create(
+                customer=customer.id,
+                stripe_version='2022-11-15',
+            )
+
+            return Response({
+                'paymentIntent': payment_intent.client_secret,
+                'paymentIntentId': payment_intent.id,
+                'ephemeralKey': ephemeral_key.secret,
+                'customer': customer.id,
+                'giftVoucherId': str(voucher.id),
+                'publishableKey': getattr(settings, 'STRIPE_PUBLISHABLE_KEY', '') or '',
+                'merchantCountryCode': merchant_country_code,
+                'currency': currency,
+            }, status=status.HTTP_200_OK)
+
+        except stripe.error.StripeError as e:
+            return Response({'error': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
     def create_reschedule_fee_payment_sheet(self, request):
@@ -1645,6 +1870,9 @@ class StripeWebhookView(APIView):
                     if metadata.get('type') == 'b2c_subscription':
                         return self._handle_b2c_subscription_payment_intent(payment_intent, metadata)
 
+                    if metadata.get('type') == 'gift_voucher':
+                        return self._handle_gift_voucher_payment_intent(payment_intent, metadata)
+
                     if metadata.get('type') == 'reschedule_fee':
                         return self._handle_reschedule_fee_payment_intent(payment_intent, metadata)
                     
@@ -1781,8 +2009,11 @@ class StripeWebhookView(APIView):
 
                     if not is_bulk and booking:
                         wv = pending_booking.booking_data.get('winner_voucher_id')
+                        gv_id = pending_booking.booking_data.get('gift_voucher_id')
                         if wv:
                             redeem_winner_voucher_for_booking(str(wv), pending_booking.user, booking)
+                        if gv_id:
+                            redeem_gift_voucher_for_booking(str(gv_id), pending_booking.user, booking)
 
                     payment_intent_id = payment_intent.get('id')
                     existing_transaction = PaymentTransaction.objects.filter(
@@ -2537,6 +2768,146 @@ class StripeWebhookView(APIView):
                     pass
             return Response({'status': 'b2c subscription payment recorded'}, status=status.HTTP_200_OK)
         except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def _handle_gift_voucher_payment_intent(self, payment_intent, metadata):
+        """Fulfill gift voucher: code, dates, PaymentTransaction, link user, queue recipient email."""
+        from main.models.voucher import generate_gift_voucher_code_candidate
+        from main.tasks.emails.voucher_email import send_gift_voucher_email
+        from main.utils.gift_voucher import try_link_gift_voucher_existing_user
+
+        try:
+            payment_intent_id = payment_intent.get('id')
+            gv_id = metadata.get('gift_voucher_id')
+            user_id = metadata.get('user_id')
+            if not payment_intent_id or not gv_id or not user_id:
+                return Response(
+                    {'error': 'Missing gift voucher metadata'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            fulfilled = GiftVoucher.objects.filter(
+                stripe_payment_intent_id=payment_intent_id,
+                code__isnull=False,
+                payment_transaction_id__isnull=False,
+            ).first()
+            if fulfilled:
+                return Response(
+                    {'status': 'gift voucher already fulfilled'},
+                    status=status.HTTP_200_OK,
+                )
+
+            paid_at = timezone.now()
+
+            with transaction.atomic():
+                voucher = GiftVoucher.objects.select_for_update().get(pk=gv_id)
+                if voucher.code and voucher.payment_transaction_id:
+                    return Response(
+                        {'status': 'gift voucher already fulfilled'},
+                        status=status.HTTP_200_OK,
+                    )
+                if str(voucher.purchased_by_id) != str(user_id):
+                    return Response(
+                        {'error': 'Purchaser mismatch'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                expected_pi = voucher.stripe_payment_intent_id
+                if expected_pi and expected_pi != payment_intent_id:
+                    return Response(
+                        {'error': 'Payment intent mismatch'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                pi_amount = int(payment_intent.get('amount') or 0)
+                expected_cents = int(
+                    (voucher.credit_amount * Decimal('100')).quantize(
+                        Decimal('1'), rounding=ROUND_HALF_UP
+                    )
+                )
+                if pi_amount != expected_cents:
+                    logger.warning(
+                        'gift_voucher PI amount mismatch: got %s expected %s',
+                        pi_amount,
+                        expected_cents,
+                    )
+                    return Response(
+                        {'error': 'Invalid payment amount'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                pi_cur = (payment_intent.get('currency') or 'eur').lower()
+                if pi_cur != (voucher.purchase_currency or 'eur').lower():
+                    return Response(
+                        {'error': 'Currency mismatch'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                code_ok = None
+                for _ in range(64):
+                    cand = generate_gift_voucher_code_candidate()
+                    rows = GiftVoucher.objects.filter(pk=voucher.pk, code__isnull=True).update(
+                        code=cand
+                    )
+                    if rows:
+                        code_ok = cand
+                        break
+                if not code_ok:
+                    return Response(
+                        {'error': 'Could not assign gift code'},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    )
+
+                voucher.refresh_from_db()
+                exp = paid_at + timedelta(days=voucher.validity_days)
+                GiftVoucher.objects.filter(pk=voucher.pk).update(
+                    valid_from=paid_at,
+                    expires_at=exp,
+                )
+                voucher.refresh_from_db()
+
+                payment_method_details = payment_intent.get('payment_method_details', {}) or {}
+                card_details = payment_method_details.get('card', {})
+                txn = PaymentTransaction.objects.create(
+                    booking=None,
+                    bulk_order=None,
+                    user=voucher.purchased_by,
+                    booking_reference=None,
+                    stripe_payment_intent_id=payment_intent_id,
+                    transaction_type='gift_voucher',
+                    amount=Decimal(payment_intent.get('amount', 0)) / 100,
+                    currency=payment_intent.get('currency', 'eur'),
+                    last_4_digits=card_details.get('last4'),
+                    card_brand=card_details.get('brand'),
+                    status='succeeded',
+                )
+                voucher.payment_transaction = txn
+                voucher.save(update_fields=['payment_transaction', 'updated_at'])
+
+            voucher = GiftVoucher.objects.select_related('purchased_by').get(pk=gv_id)
+            try_link_gift_voucher_existing_user(voucher)
+            voucher.refresh_from_db()
+            if voucher.assigned_user_id:
+                try:
+                    from main.tasks.notifications.push import send_push_notification
+
+                    send_push_notification.delay(
+                        voucher.assigned_user_id,
+                        "You've received a gift voucher",
+                        'Open the app to use your voucher credit.',
+                        'gift_voucher',
+                    )
+                except Exception as exc:
+                    logger.warning('gift voucher push failed: %s', exc)
+
+            send_gift_voucher_email.delay(str(voucher.pk))
+            return Response(
+                {'status': 'gift voucher fulfilled'},
+                status=status.HTTP_200_OK,
+            )
+        except GiftVoucher.DoesNotExist:
+            return Response({'error': 'Gift voucher not found'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.exception('gift voucher webhook')
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def _handle_reschedule_fee_payment_intent(self, payment_intent, metadata):

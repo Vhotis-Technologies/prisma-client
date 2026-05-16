@@ -29,6 +29,7 @@ from main.views.support.support_customers import SupportCustomersView
 from main.views.support.support_activities import SupportActivitiesView
 from main.views.support.support_tickets import SupportTicketsView
 from main.views.support.support_vouchers import SupportVouchersView
+from main.views.support.support_gift_vouchers import SupportGiftVouchersView
 from main.views.support.support_accounting import SupportAccountingView
 
 
@@ -85,6 +86,7 @@ urlpatterns = [
     path('support/activities/<action>/', SupportActivitiesView.as_view(), name='support_activities'),
     path('support/tickets/<action>/', SupportTicketsView.as_view(), name='support_tickets'),
     path('support/vouchers/<action>/', SupportVouchersView.as_view(), name='support_vouchers'),
+    path('support/gift-vouchers/<action>/', SupportGiftVouchersView.as_view(), name='support_gift_vouchers'),
     path('support/accounting/<action>/', SupportAccountingView.as_view(), name='support_accounting'),
 ]
 

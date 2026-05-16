@@ -11,7 +11,7 @@ from django.core.exceptions import ValidationError
 from django import forms
 from django.db import models
 from django.utils import timezone
-from .models import User, Vehicle, VehicleOwnership, VehicleEvent, Fleet, FleetMember, FleetVehicle, VehicleTransfer, ServiceType, ValetType, DetailerProfile, BookedAppointment, Address, AddOns, Notification, LoyaltyProgram, Promotions, PaymentTransaction, RefundRecord, TermsAndConditions, PrivacyPolicy, Referral, Branch, SubscriptionTier, SubscriptionPlan, FleetSubscription, SubscriptionBilling, EventDataManagement, BookedAppointmentImage, Partner, PartnerBankAccount, PartnerPayoutRequest, ReferralAttribution, CommissionEarning, CommissionPayout, PartnerMetricsCache, CommissionAdminLog, PendingBooking, BulkOrder, WinnerVoucher, B2CSubcriptionTier, B2CSubcriptionPlan, B2CSubcription, B2CSubcriptionBilling
+from .models import User, Vehicle, VehicleOwnership, VehicleEvent, Fleet, FleetMember, FleetVehicle, VehicleTransfer, ServiceType, ValetType, DetailerProfile, BookedAppointment, Address, AddOns, Notification, LoyaltyProgram, Promotions, PaymentTransaction, RefundRecord, TermsAndConditions, PrivacyPolicy, Referral, Branch, SubscriptionTier, SubscriptionPlan, FleetSubscription, SubscriptionBilling, EventDataManagement, BookedAppointmentImage, Partner, PartnerBankAccount, PartnerPayoutRequest, ReferralAttribution, CommissionEarning, CommissionPayout, PartnerMetricsCache, CommissionAdminLog, PendingBooking, BulkOrder, WinnerVoucher, GiftVoucher, B2CSubcriptionTier, B2CSubcriptionPlan, B2CSubcription, B2CSubcriptionBilling
 
 
 
@@ -764,3 +764,26 @@ class WinnerVoucherAdmin(admin.ModelAdmin):
     search_fields = ('code', 'assigned_email', 'assigned_user__email')
     readonly_fields = ('id', 'created_at', 'updated_at')
     raw_id_fields = ('assigned_user', 'consumed_booking')
+
+
+@admin.register(GiftVoucher)
+class GiftVoucherAdmin(admin.ModelAdmin):
+    list_display = (
+        'code',
+        'assigned_email',
+        'assigned_user',
+        'purchased_by',
+        'credit_amount',
+        'validity_days',
+        'purchase_currency',
+        'valid_from',
+        'expires_at',
+        'redeemed_at',
+        'email_sent_at',
+        'is_active',
+        'created_at',
+    )
+    list_filter = ('is_active', 'redeemed_at', 'purchase_currency', 'email_sent_at')
+    search_fields = ('code', 'assigned_email', 'purchased_by__email')
+    readonly_fields = ('id', 'created_at', 'updated_at', 'email_sent_at')
+    raw_id_fields = ('assigned_user', 'consumed_booking', 'purchased_by', 'payment_transaction')

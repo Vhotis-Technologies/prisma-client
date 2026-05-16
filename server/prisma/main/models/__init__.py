@@ -54,7 +54,7 @@ from .partner import (
     CommissionAdminLog,
 )
 from .ticket import Ticket, TicketUpdate
-from .voucher import WinnerVoucher
+from .voucher import GiftVoucher, WinnerVoucher
 from .b2c import B2CSubcriptionTier, B2CSubcriptionPlan, B2CSubcription, B2CSubcriptionBilling
 
 __all__ = [
@@ -70,6 +70,7 @@ __all__ = [
     'PartnerMetricsCache', 'CommissionAdminLog',
     'Ticket', 'TicketUpdate',
     'WinnerVoucher',
+    'GiftVoucher',
     'B2CSubcriptionTier',
     'B2CSubcriptionPlan',
     'B2CSubcription',

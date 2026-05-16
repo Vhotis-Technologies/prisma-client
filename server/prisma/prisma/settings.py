@@ -387,6 +387,7 @@ ASGI_APPLICATION = 'prisma.asgi.application'
 # Stripe Configuration
 STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY')
 STRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET')
+
 # Late reschedule fee (minor units / “cents”, same as Stripe PaymentIntent.amount)
 RESCHEDULE_FEE_CENTS = int(os.getenv('RESCHEDULE_FEE_CENTS', '1000'))
 

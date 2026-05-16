@@ -18,6 +18,7 @@ import { useFleetSubscription } from "@/app/hooks/useFleetSubscription";
 import { useB2cSubscriptions } from "@/app/hooks/useB2cSubscriptions";
 import { useAppSelector, RootState } from "@/app/store/main_store";
 import { SubscriptionTierProps } from "@/app/interfaces/SubscriptionInterfaces";
+import { useFetchPerksSummaryQuery } from "@/app/store/api/dashboardApi";
 
 const SubscriptionPlanScreen = () => {
   const backgroundColor = useThemeColor({}, "background");
@@ -30,6 +31,32 @@ const SubscriptionPlanScreen = () => {
   const isFleetOwner = useAppSelector(
     (state: RootState) => state.auth.user?.is_fleet_owner === true,
   );
+
+  // Complimentary subscription washes are a B2C-only perk; skip the fetch for fleet owners.
+  const { data: perksSummary } = useFetchPerksSummaryQuery(undefined, {
+    skip: isFleetOwner,
+  });
+  const complimentary = perksSummary?.subscription_complimentary;
+  const showComplimentary =
+    !isFleetOwner && !!complimentary && complimentary.max_subscription > 0;
+  const complimentaryMax = complimentary?.max_subscription ?? 0;
+  const complimentaryRemaining = Math.max(
+    0,
+    Math.min(complimentaryMax, complimentary?.remaining_subscription ?? 0),
+  );
+  const complimentaryUsedPct =
+    complimentaryMax > 0
+      ? Math.max(
+          0,
+          Math.min(
+            1,
+            (complimentaryMax - complimentaryRemaining) / complimentaryMax,
+          ),
+        )
+      : 0;
+  const complimentaryResetDate = complimentary?.period_end
+    ? new Date(complimentary.period_end)
+    : null;
 
   const fleetHook = useFleetSubscription();
   const b2cHook = useB2cSubscriptions();
@@ -252,6 +279,48 @@ const SubscriptionPlanScreen = () => {
                     }
                   />
                 </View>
+
+                {showComplimentary && (
+                  <View style={styles.complimentaryBlock}>
+                    <View style={styles.managementRow}>
+                      <StyledText
+                        style={[styles.managementLabel, { color: textColor }]}
+                        variant="bodyMedium"
+                        children="Complimentary washes left:"
+                      />
+                      <StyledText
+                        style={[styles.managementValue, { color: textColor }]}
+                        variant="bodyMedium"
+                        children={`${complimentaryRemaining} / ${complimentaryMax}`}
+                      />
+                    </View>
+                    <View
+                      style={[
+                        styles.complimentaryTrack,
+                        { backgroundColor: borderColor },
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.complimentaryFill,
+                          {
+                            backgroundColor: primaryColor,
+                            width: `${Math.round(complimentaryUsedPct * 100)}%`,
+                          },
+                        ]}
+                      />
+                    </View>
+                    <StyledText
+                      style={[styles.complimentaryHint, { color: textColor }]}
+                      variant="bodySmall"
+                      children={
+                        complimentaryResetDate
+                          ? `Resets on ${complimentaryResetDate.toLocaleDateString()}`
+                          : "Resets with the next billing period"
+                      }
+                    />
+                  </View>
+                )}
               </View>
 
               <View style={styles.managementActions}>
@@ -589,6 +658,25 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 12,
     marginTop: 8,
+  },
+  complimentaryBlock: {
+    gap: 6,
+    marginTop: 4,
+  },
+  complimentaryTrack: {
+    height: 8,
+    borderRadius: 999,
+    overflow: "hidden",
+    opacity: 0.4,
+  },
+  complimentaryFill: {
+    height: "100%",
+    borderRadius: 999,
+    opacity: 1,
+  },
+  complimentaryHint: {
+    fontSize: 12,
+    opacity: 0.7,
   },
   managementButton: {
     flex: 1,

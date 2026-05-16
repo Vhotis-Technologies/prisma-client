@@ -59,13 +59,16 @@ def publish_booking_rescheduled(booking_reference, new_date, new_time, total_cos
 
 
 @shared_task
-def publish_review_to_detailer(booking_reference, rating):
-    """Publish review data to Redis stream for detailer app."""
+def publish_review_to_detailer(booking_reference, rating, comment=None):
+    """Publish review data to Redis stream for detailer app (optional customer comment)."""
     try:
-        payload = json.dumps({
+        body = {
             'booking_reference': booking_reference,
             'rating': rating,
-        })
+        }
+        if comment:
+            body['comment'] = comment
+        payload = json.dumps(body)
         msg_id = stream_add(STREAM_JOB_EVENTS, {'event': 'review_received', 'payload': payload})
         return f"Review published to detailer: {msg_id}"
     except Exception as e:

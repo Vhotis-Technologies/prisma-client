@@ -19,6 +19,16 @@ VAT_RATE = Decimal("0.23")
 CANONICAL_QUICK_SPARKLE_LABEL = "Prisma Quick Sparkle"
 COMPLIMENTARY_SOURCES = frozenset({"loyalty", "subscription", "partner"})
 
+# Loyalty tier promotion thresholds based on completed (non Quick Sparkle) bookings.
+# Keep in sync with main.signals.vehicle_signal.handle_booking_completion.
+LOYALTY_TIER_THRESHOLDS: Dict[str, int] = {
+    "bronze": 0,
+    "silver": 10,
+    "gold": 25,
+    "platinum": 40,
+}
+LOYALTY_TIER_ORDER: Tuple[str, ...] = ("bronze", "silver", "gold", "platinum")
+
 
 def is_quick_sparkle_service_name(name: Optional[str]) -> bool:
     """
@@ -328,6 +338,75 @@ def get_active_b2c_subscription(user):
         .order_by("-start_date")
         .first()
     )
+
+
+def get_loyalty_progress_snapshot(user) -> Dict[str, Any]:
+    """
+    Read-only snapshot of B2C loyalty progress: current tier, completed count,
+    next tier + thresholds and benefits. Returns ``is_b2c: False`` for fleet
+    owners / branch admins / partners so callers can hide loyalty UI.
+    """
+    from main.models import LoyaltyProgram
+
+    empty = {
+        "is_b2c": False,
+        "current_tier": None,
+        "completed_bookings": 0,
+        "next_tier": None,
+        "current_threshold": 0,
+        "next_threshold": None,
+        "washes_to_next": 0,
+        "tier_thresholds": dict(LOYALTY_TIER_THRESHOLDS),
+        "benefits": {"discount": 0, "free_service": []},
+    }
+
+    if not user or not user.is_b2c_user():
+        return empty
+
+    try:
+        loyalty = LoyaltyProgram.objects.get(user=user)
+    except LoyaltyProgram.DoesNotExist:
+        # Don't write during a read snapshot; surface a Bronze/0 default. New
+        # B2C accounts have a row created at signup (User.save), older rows
+        # are backfilled lazily by the loyalty signal on first completed booking.
+        return {
+            **empty,
+            "is_b2c": True,
+            "current_tier": "bronze",
+            "current_threshold": int(LOYALTY_TIER_THRESHOLDS["bronze"]),
+            "next_tier": LOYALTY_TIER_ORDER[1],
+            "next_threshold": int(LOYALTY_TIER_THRESHOLDS[LOYALTY_TIER_ORDER[1]]),
+            "washes_to_next": int(LOYALTY_TIER_THRESHOLDS[LOYALTY_TIER_ORDER[1]]),
+        }
+
+    current_tier = (loyalty.current_tier or "bronze").lower()
+    if current_tier not in LOYALTY_TIER_THRESHOLDS:
+        current_tier = "bronze"
+
+    completed = int(loyalty.completed_bookings or 0)
+    current_threshold = int(LOYALTY_TIER_THRESHOLDS[current_tier])
+
+    idx = LOYALTY_TIER_ORDER.index(current_tier)
+    if idx < len(LOYALTY_TIER_ORDER) - 1:
+        next_tier = LOYALTY_TIER_ORDER[idx + 1]
+        next_threshold = int(LOYALTY_TIER_THRESHOLDS[next_tier])
+        washes_to_next = max(0, next_threshold - completed)
+    else:
+        next_tier = None
+        next_threshold = None
+        washes_to_next = 0
+
+    return {
+        "is_b2c": True,
+        "current_tier": current_tier,
+        "completed_bookings": completed,
+        "next_tier": next_tier,
+        "current_threshold": current_threshold,
+        "next_threshold": next_threshold,
+        "washes_to_next": washes_to_next,
+        "tier_thresholds": dict(LOYALTY_TIER_THRESHOLDS),
+        "benefits": loyalty.get_tier_benefits(),
+    }
 
 
 def _period_dates(sub) -> Tuple[timezone.datetime.date, timezone.datetime.date]:

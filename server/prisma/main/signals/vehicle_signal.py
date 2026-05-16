@@ -83,11 +83,11 @@ def handle_booking_completion(sender, instance, created, **kwargs):
         if recent_washes >= 3 and not existing_promotion and user.is_b2c_user():
             Promotions.objects.create(
                 title=f"Activity Bonus - {user.name}",
-                description=f"Congratulations! You have completed 3 washes in 30 days. You have earned a 5% discount on your next wash!",
-                discount_percentage=5,
+                description=f"Congratulations! You have completed 3 washes in 30 days. You have earned a 10% discount on your next wash!",
+                discount_percentage=10,
                 valid_until=(now + timedelta(days=30)).date(),
                 is_active=True,
-                terms_conditions="Valid for 30 days from earning. Cannot be combined with other offers.",
+                terms_conditions="Valid for 30 days from earning date. Cannot be combined with other offers.",
                 user=user
             )
             if user.allow_email_notifications:
