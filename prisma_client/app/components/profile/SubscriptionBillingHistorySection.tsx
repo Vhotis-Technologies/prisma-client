@@ -1,5 +1,10 @@
 import React, { useMemo } from "react";
-import { View, StyleSheet, ActivityIndicator } from "react-native";
+import {
+  View,
+  StyleSheet,
+  ActivityIndicator,
+  ScrollView,
+} from "react-native";
 import StyledText from "@/app/components/helpers/StyledText";
 import { useGetSubscriptionBillingHistoryQuery } from "@/app/store/api/subscriptionApi";
 import { useGetB2cBillingHistoryQuery } from "@/app/store/api/b2cSubscriptionApi";
@@ -96,57 +101,65 @@ const SubscriptionBillingHistorySection: React.FC<
           No subscription charges yet.
         </StyledText>
       ) : null}
-      {!isError &&
-        rows.map((rec) => {
-          const amt = Number(rec.amount ?? 0);
-          const dt = rec.billing_date
-            ? new Date(rec.billing_date).toLocaleDateString(undefined, {
-                year: "numeric",
-                month: "short",
-                day: "numeric",
-              })
-            : "—";
-          const st = rec.status ?? "";
-          const paid = st === "paid";
-          const failed = st === "failed";
-          const statusTone = paid
-            ? primaryColor
-            : failed
-              ? errorColor
-              : mutedColor;
-          return (
-            <View
-              key={String(rec.id)}
-              style={[styles.row, { borderTopColor: borderColor }]}
-            >
-              <View style={styles.rowMain}>
-                <StyledText
-                  variant="bodyMedium"
-                  style={{ color: textColor }}
-                  numberOfLines={1}
-                >
-                  {planSubtitle(rec)}
-                </StyledText>
-                <StyledText
-                  variant="bodySmall"
-                  style={{ color: mutedColor }}
-                  numberOfLines={1}
-                >
-                  {dt}
-                </StyledText>
+      {!isError && rows.length > 0 ? (
+        <ScrollView
+          style={styles.listScroll}
+          contentContainerStyle={styles.listContent}
+          nestedScrollEnabled
+          showsVerticalScrollIndicator
+        >
+          {rows.map((rec) => {
+            const amt = Number(rec.amount ?? 0);
+            const dt = rec.billing_date
+              ? new Date(rec.billing_date).toLocaleDateString(undefined, {
+                  year: "numeric",
+                  month: "short",
+                  day: "numeric",
+                })
+              : "—";
+            const st = rec.status ?? "";
+            const paid = st === "paid";
+            const failed = st === "failed";
+            const statusTone = paid
+              ? primaryColor
+              : failed
+                ? errorColor
+                : mutedColor;
+            return (
+              <View
+                key={String(rec.id)}
+                style={[styles.row, { borderTopColor: borderColor }]}
+              >
+                <View style={styles.rowMain}>
+                  <StyledText
+                    variant="bodyMedium"
+                    style={{ color: textColor }}
+                    numberOfLines={1}
+                  >
+                    {planSubtitle(rec)}
+                  </StyledText>
+                  <StyledText
+                    variant="bodySmall"
+                    style={{ color: mutedColor }}
+                    numberOfLines={1}
+                  >
+                    {dt}
+                  </StyledText>
+                </View>
+                <View style={styles.rowEnd}>
+                  <StyledText variant="bodyMedium" style={{ color: textColor }}>
+                    {Number.isFinite(amt) ? formatEuro(amt) : "—"}
+                  </StyledText>
+                  <StyledText variant="labelSmall" style={{ color: statusTone }}>
+                    {statusLabel(st)}
+                  </StyledText>
+                </View>
               </View>
-              <View style={styles.rowEnd}>
-                <StyledText variant="bodyMedium" style={{ color: textColor }}>
-                  {Number.isFinite(amt) ? formatEuro(amt) : "—"}
-                </StyledText>
-                <StyledText variant="labelSmall" style={{ color: statusTone }}>
-                  {statusLabel(st)}
-                </StyledText>
-              </View>
-            </View>
-          );
-        })}
-    </View>
+            );
+          })}
+        </ScrollView>
+      ) : null}
+     </View>
   );
 };
 
@@ -160,6 +173,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     gap: 8,
+  },
+  listScroll: {
+    maxHeight: 240,
+  },
+  listContent: {
+    paddingBottom: 4,
   },
   title: {
     fontWeight: "600",

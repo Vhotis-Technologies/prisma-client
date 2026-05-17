@@ -13,6 +13,7 @@ import { useThemeColor } from "@/hooks/useThemeColor";
 import { Ionicons } from "@expo/vector-icons";
 import StyledText from "@/app/components/helpers/StyledText";
 import StatsSection from "@/app/components/dashboard/StatsSection";
+import ForthcomingBookingsRow from "@/app/components/dashboard/ForthcomingBookingsRow";
 import usePartner from "@/app/app-hooks/usePartner";
 import { StatCard } from "@/app/interfaces/DashboardInterfaces";
 import { formatCurrency } from "@/app/utils/methods";
@@ -163,22 +164,7 @@ const DealershipPartnerDashboardScreen = () => {
       {/* Stats Section */}
       {stats.length > 0 && <StatsSection stats={stats} />}
 
-      {/* Forthcoming Bookings: same flow as fleet, fleetadmin and regular users */}
-      <View style={styles.upcomingAppointmentDateContainer}>
-        <View style={styles.upcomingSectionHeader}>
-          <Pressable
-            style={[styles.seeAllButton, { backgroundColor: buttonColor }]}
-            onPress={() =>
-              router.push("/main/dashboard/ForthcomingBookingsListScreen")
-            }
-          >
-            <StyledText variant="bodySmall" style={styles.seeAllButtonText}>
-              See all forthcoming bookings
-            </StyledText>
-            <Ionicons name="chevron-forward" size={14} color="#fff" />
-          </Pressable>
-        </View>
-      </View>
+      <ForthcomingBookingsRow />
 
       {/* Referral Metrics */}
       {dashboardData && (
@@ -439,28 +425,5 @@ const styles = StyleSheet.create({
   },
   bottomPadding: {
     height: 40,
-  },
-  upcomingAppointmentDateContainer: {
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-    gap: 5,
-  },
-  upcomingSectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  seeAllButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    gap: 4,
-  },
-  seeAllButtonText: {
-    color: "#fff",
-    fontWeight: "600",
   },
 });

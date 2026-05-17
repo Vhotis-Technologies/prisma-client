@@ -136,11 +136,7 @@ const styles = StyleSheet.create({
     margin: 16,
     padding: 20,
     borderRadius: 10,
-    borderWidth: 1,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+    borderWidth: 0.5,
     gap: 14,
   },
   header: {

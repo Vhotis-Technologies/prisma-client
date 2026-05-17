@@ -314,7 +314,7 @@ const styles = StyleSheet.create({
     padding: 20,
     borderRadius: 16,
     alignItems: "center",
-    marginBottom: 12,
+    marginBottom: 5,
   },
   emptyStateIcon: {
     marginBottom: 16,

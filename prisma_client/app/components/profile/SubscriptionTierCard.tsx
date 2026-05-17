@@ -226,7 +226,7 @@ const SubscriptionTierCard: React.FC<SubscriptionTierCardProps> = ({
         )}
       </View>
 
-
+      {!isSelected && (
       <Pressable
         onPress={onSelect}
         style={[
@@ -249,11 +249,12 @@ const SubscriptionTierCard: React.FC<SubscriptionTierCardProps> = ({
             isSelected
               ? canStartTrial
                 ? "Start Trial"
-                : "Selected"
+                : "Select Plan"
               : "Select Plan"
-          }
-        />
-      </Pressable>
+            }
+          />
+        </Pressable>
+      )}
     </Pressable>
   );
 };

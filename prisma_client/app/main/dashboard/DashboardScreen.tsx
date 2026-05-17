@@ -3,15 +3,12 @@ import {
   StyleSheet,
   ScrollView,
   View,
-  Pressable,
   ActivityIndicator,
   RefreshControl,
 } from "react-native";
-import { router } from "expo-router";
 import { useThemeColor } from "@/hooks/useThemeColor";
-import { Ionicons } from "@expo/vector-icons";
-
 import OngoingServiceCard from "@/app/components/dashboard/OngoingServiceCard";
+import ForthcomingBookingsRow from "@/app/components/dashboard/ForthcomingBookingsRow";
 import RecentServicesSection from "@/app/components/dashboard/RecentServicesSection";
 import StatsSection from "@/app/components/dashboard/StatsSection";
 import LoyaltyCard from "@/app/components/dashboard/LoyaltyCard";
@@ -38,7 +35,6 @@ const DashboardScreen = () => {
   const [showReviewModal, setShowReviewModal] = useState(false);
 
   const backgroundColor = useThemeColor({}, "background");
-  const buttonColor = useThemeColor({}, "button");
   const primaryColor = useThemeColor({}, "primary");
 
   /* Fetch the neccessary hooks */
@@ -135,38 +131,20 @@ const DashboardScreen = () => {
         refreshControl={
           <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
         }
+        contentContainerStyle={{ paddingBottom: 60 }}
       >
         {/* Ongoing Service Card */}
         {inProgressAppointment && (
           <OngoingServiceCard appointment={inProgressAppointment} />
         )}
 
-        {/* Upcoming Appointments: always show section with "See all forthcoming bookings" button */}
-        <View style={styles.upcomingAppointmentDateContainer}>
-          <View style={styles.upcomingSectionHeader}>
-            <Pressable
-              style={[styles.seeAllButton, { backgroundColor: buttonColor }]}
-              onPress={() =>
-                router.push(
-                  "/main/dashboard/ForthcomingBookingsListScreen",
-                )
-              }
-            >
-              <StyledText variant="bodySmall" style={styles.seeAllButtonText}>
-                See all forthcoming bookings
-              </StyledText>
-              <Ionicons name="chevron-forward" size={14} color="#fff" />
-            </Pressable>
-          </View>
-        </View>
+        <ForthcomingBookingsRow />
 
         <RecentServicesSection
           bookings={recentService?.booking_reference ? recentService : null}
           onUnratedPress={handleUnratedPress}
         />
-        <StatsSection stats={stats} />
         <LoyaltyCard loyalty={perksSummary?.loyalty} />
-        <ReferralSection referral={user?.referral_code || ""} />
       </ScrollView>
 
       {/* Notification Permission Modal */}
@@ -218,28 +196,5 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-  },
-  upcomingAppointmentDateContainer: {
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-    gap: 5,
-  },
-  upcomingSectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  seeAllButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    gap: 4,
-  },
-  seeAllButtonText: {
-    color: "#fff",
-    fontWeight: "600",
   },
 });

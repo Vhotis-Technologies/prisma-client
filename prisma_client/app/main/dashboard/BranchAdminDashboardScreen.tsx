@@ -3,25 +3,22 @@ import {
   StyleSheet,
   ScrollView,
   View,
-  Pressable,
   ActivityIndicator,
   RefreshControl,
 } from "react-native";
-import { router } from "expo-router";
 import { useThemeColor } from "@/hooks/useThemeColor";
-import { Ionicons } from "@expo/vector-icons";
 import StyledText from "@/app/components/helpers/StyledText";
 import useDashboard from "@/app/app-hooks/useDashboard";
 import { useAppSelector, RootState } from "@/app/store/main_store";
 import { useGetBranchSpendQuery } from "@/app/store/api/fleetApi";
 import { formatCurrency } from "@/app/utils/methods";
 import OngoingServiceCard from "@/app/components/dashboard/OngoingServiceCard";
+import ForthcomingBookingsRow from "@/app/components/dashboard/ForthcomingBookingsRow";
 import RecentServicesSection from "@/app/components/dashboard/RecentServicesSection";
 import StatsSection from "@/app/components/dashboard/StatsSection";
 
 const BranchAdminDashboardScreen = () => {
   const backgroundColor = useThemeColor({}, "background");
-  const buttonColor = useThemeColor({}, "button");
   const primaryColor = useThemeColor({}, "primary");
   const borderColor = useThemeColor({}, "borders");
   const textColor = useThemeColor({}, "text");
@@ -162,22 +159,7 @@ const BranchAdminDashboardScreen = () => {
         <OngoingServiceCard appointment={inProgressAppointment} />
       )}
 
-      {/* Upcoming Appointments: always show section with "See all forthcoming bookings" button */}
-      <View style={styles.upcomingAppointmentDateContainer}>
-        <View style={styles.upcomingSectionHeader}>
-          <Pressable
-            style={[styles.seeAllButton, { backgroundColor: buttonColor }]}
-            onPress={() =>
-              router.push("/main/dashboard/ForthcomingBookingsListScreen")
-            }
-          >
-            <StyledText variant="bodySmall" style={styles.seeAllButtonText}>
-              See all forthcoming bookings
-            </StyledText>
-            <Ionicons name="chevron-forward" size={14} color="#fff" />
-          </Pressable>
-        </View>
-      </View>
+      <ForthcomingBookingsRow />
 
       {/* Only display recent services section when there is a real recent service (has booking_reference) */}
       {recentService?.booking_reference && (
@@ -214,28 +196,6 @@ const styles = StyleSheet.create({
   branchSubtitle: {
     marginTop: 4,
     opacity: 0.7,
-  },
-  upcomingAppointmentDateContainer: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    gap: 5,
-  },
-  upcomingSectionHeader: {
-    alignItems: "center",
-    marginBottom: 8,
-    padding: 10,
-  },
-  seeAllButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    borderRadius: 8,
-    gap: 4,
-  },
-  seeAllButtonText: {
-    color: "#fff",
-    fontWeight: "600",
   },
   spendingCard: {
     marginHorizontal: 16,

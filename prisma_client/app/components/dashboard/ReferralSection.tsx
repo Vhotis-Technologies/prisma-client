@@ -80,18 +80,6 @@ const ReferralSection: React.FC<ReferralSectionProps> = ({ referral }) => {
           </TouchableOpacity>
         </View>
       </View>
-
-      {/* Action Buttons */}
-      <View style={styles.actionButtons}>
-        <TouchableOpacity
-          style={[styles.actionButton, { backgroundColor }]}
-          onPress={copyReferralCode}
-        >
-          <Ionicons name="copy" size={18} color={iconColor} />
-          <StyledText style={styles.actionButtonText}>Copy Code</StyledText>
-        </TouchableOpacity>
-      </View>
-
       {/* Benefits */}
       <View style={styles.benefitsContainer}>
         <View style={styles.benefitItem}>
