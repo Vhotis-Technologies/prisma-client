@@ -268,13 +268,19 @@ const usePayment = () => {
         }
 
         // Handle network or initialization errors
-        let errorMessage = "An error occurred during payment";
+        let errorMessage =
+          error?.data?.error ||
+          error?.data?.message ||
+          error?.message ||
+          "An error occurred during payment";
 
-        if (error?.message?.includes("network")) {
-          errorMessage =
-            "Network error. Please check your connection and try again.";
-        } else if (error?.message?.includes("timeout")) {
-          errorMessage = "Request timed out. Please try again.";
+        if (errorMessage === "An error occurred during payment") {
+          if (error?.message?.includes("network")) {
+            errorMessage =
+              "Network error. Please check your connection and try again.";
+          } else if (error?.message?.includes("timeout")) {
+            errorMessage = "Request timed out. Please try again.";
+          }
         }
 
         showSnackbarWithConfig({

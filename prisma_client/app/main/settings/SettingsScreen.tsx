@@ -29,6 +29,7 @@ import { useAuthContext } from "@/app/contexts/AuthContextProvider";
 import { Avatar, Snackbar } from "react-native-paper";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import StyledButton from "@/app/components/helpers/StyledButton";
+import { canAccessBulkInvoices } from "@/app/utils/bulkInvoiceAccess";
 
 const SettingScreen = () => {
   const { theme, setTheme } = useThemeContext();
@@ -184,6 +185,7 @@ const SettingScreen = () => {
   const isFleetOwner = userProfile?.is_fleet_owner === true;
   const isPartner = userProfile?.is_dealership === true;
   const isBranchAdmin = userProfile?.is_branch_admin === true;
+  const showBulkInvoices = canAccessBulkInvoices(userProfile);
   const showBusinessName = isFleetOwner || isPartner;
   const canEditProfile = !isBranchAdmin;
 
@@ -429,12 +431,12 @@ const SettingScreen = () => {
             description="View, add or edit your addresses"
             onPress={() => router.push("/main/settings/ManageAddressesScreen")}
           />
-          {(isFleetOwner || isPartner) && !isBranchAdmin && (
+          {showBulkInvoices && (
             <SettingLink
               title="Invoices"
-              description="View paid and unpaid invoices"
+              description="View paid and unpaid bulk invoices"
               onPress={() =>
-                router.push("/main/settings/InvoicesScreen" as any)
+                router.push("/main/settings/InvoicesScreen" as const)
               }
             />
           )}

@@ -13,6 +13,7 @@ import { vehicleBodyStyleRequiresSuvMpvSurcharge } from "@/app/utils/vehicleBody
 import StyledText from "@/app/components/helpers/StyledText";
 import CircleCheckbox from "@/app/components/helpers/CircleCheckbox";
 import LinearGradientComponent from "../helpers/LinearGradientComponent";
+import StyledButton from "../helpers/StyledButton";
 
 interface VehicleSelectorProps {
   vehicles: MyVehiclesProps[];
@@ -58,7 +59,6 @@ const VehicleSelector: React.FC<VehicleSelectorProps> = ({
               style={[
                 styles.vehicleCard,
                 {
-                  backgroundColor: cardColor,
                   borderColor:
                     selectedVehicle?.id === vehicle.id
                       ? primaryPurpleColor
@@ -125,7 +125,7 @@ const VehicleSelector: React.FC<VehicleSelectorProps> = ({
 
       {/* Empty State */}
       {vehiclesList.length === 0 && (
-        <View style={[styles.emptyState, { backgroundColor: cardColor }]}>
+        <View style={[styles.emptyState]}>
           <Ionicons name="car-outline" size={48} color={textColor} />
           <StyledText
             variant="titleMedium"
@@ -139,21 +139,13 @@ const VehicleSelector: React.FC<VehicleSelectorProps> = ({
           >
             Add a vehicle to get started with booking
           </StyledText>
-          <TouchableOpacity
-            style={[
-              styles.addVehicleButton,
-              { backgroundColor: primaryPurpleColor },
-            ]}
+
+          <StyledButton
+            title="Add Vehicle"
             onPress={onAddVehicle}
-          >
-            <Ionicons name="add" size={20} color="white" />
-            <StyledText
-              variant="bodyMedium"
-              style={styles.addVehicleButtonText}
-            >
-              Add Vehicle
-            </StyledText>
-          </TouchableOpacity>
+            style={styles.addVehicleButton}
+            variant="tonal"
+          />
         </View>
       )}
 
@@ -357,16 +349,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   addVehicleButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  addVehicleButtonText: {
-    color: "white",
-    fontWeight: "600",
-    marginLeft: 8,
+    marginTop: 12,
   },
   suvSection: {
     borderRadius: 20,

@@ -12,8 +12,13 @@ import StyledText from "@/app/components/helpers/StyledText";
 import useProfile from "@/app/app-hooks/useProfile";
 import { useGetFleetInvoicesQuery } from "@/app/store/api/fleetApi";
 import { useGetPartnerInvoicesQuery } from "@/app/store/api/partnerApi";
+import { useGetMyBulkInvoicesQuery } from "@/app/store/api/eventApi";
 import type { InvoiceListItem } from "@/app/interfaces/InvoiceInterfaces";
 import InvoiceCardItem from "@/app/components/settings/InvoiceCardItem";
+import {
+  canAccessBulkInvoices,
+  getBulkInvoiceApiSource,
+} from "@/app/utils/bulkInvoiceAccess";
 
 const STATUS_ORDER = [
   "invoice_later",
@@ -49,29 +54,32 @@ const InvoicesScreen = () => {
   const errorColor = useThemeColor({}, "error");
 
   const { userProfile } = useProfile();
-  const isFleetOwner = userProfile?.is_fleet_owner === true;
-  const isPartner = userProfile?.is_dealership === true;
-  const isBranchAdmin = userProfile?.is_branch_admin === true;
+  const canSeeInvoices = canAccessBulkInvoices(userProfile);
+  const apiSource = getBulkInvoiceApiSource(userProfile);
 
-  const canSeeInvoices =
-    (isFleetOwner || isPartner) && !isBranchAdmin;
+  const skipFleet = apiSource !== "fleet";
+  const skipPartner = apiSource !== "partner";
+  const skipMy = apiSource !== "my";
 
-  const skipFleet = !canSeeInvoices || !isFleetOwner;
-  const skipPartner = !canSeeInvoices || isFleetOwner || !isPartner;
-
-  const fleetQuery = useGetFleetInvoicesQuery(undefined, {
-    skip: skipFleet,
-  });
+  const fleetQuery = useGetFleetInvoicesQuery(undefined, { skip: skipFleet });
   const partnerQuery = useGetPartnerInvoicesQuery(undefined, {
     skip: skipPartner,
   });
+  const myQuery = useGetMyBulkInvoicesQuery(undefined, { skip: skipMy });
 
-  const activeQuery = isFleetOwner ? fleetQuery : partnerQuery;
+  const activeQuery =
+    apiSource === "fleet"
+      ? fleetQuery
+      : apiSource === "partner"
+        ? partnerQuery
+        : myQuery;
+
   const invoices = activeQuery.data?.invoices ?? [];
   const isLoading = activeQuery.isLoading;
   const isError = activeQuery.isError;
   const refetch = activeQuery.refetch;
   const isFetching = activeQuery.isFetching;
+  const isFleetOwner = userProfile?.is_fleet_owner === true;
 
   const groupedInvoices = useMemo(() => {
     const groups = new Map<string, InvoiceListItem[]>();
@@ -108,6 +116,16 @@ const InvoicesScreen = () => {
     });
   }, []);
 
+  const subtitle = useMemo(() => {
+    if (isFleetOwner) {
+      return "Fleet bulk orders you are billed for. Tap an invoice to pay or view status.";
+    }
+    if (apiSource === "partner") {
+      return "Your bulk invoices. Tap an invoice to pay or view status.";
+    }
+    return "Bulk orders you booked. Tap an invoice to pay or view status.";
+  }, [apiSource, isFleetOwner]);
+
   if (!canSeeInvoices) {
     return (
       <View style={[styles.container, { backgroundColor }]}>
@@ -115,7 +133,7 @@ const InvoicesScreen = () => {
           Invoices
         </StyledText>
         <StyledText variant="bodyMedium" style={{ color: textColor, opacity: 0.85 }}>
-          Invoices are available to fleet owners and partners only.
+          Invoices are available when you book bulk services with pay later.
         </StyledText>
       </View>
     );
@@ -127,9 +145,7 @@ const InvoicesScreen = () => {
         Invoices
       </StyledText>
       <StyledText variant="bodySmall" style={[styles.subtitle, { color: textColor }]}>
-        {isFleetOwner
-          ? "Fleet bulk orders you are billed for. Tap an invoice to pay or view status."
-          : "Partner bulk invoices. Tap an invoice to pay or view status."}
+        {subtitle}
       </StyledText>
 
       {isLoading ? (

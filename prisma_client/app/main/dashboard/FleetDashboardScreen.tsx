@@ -20,6 +20,7 @@ import LineChart from "@/app/components/dashboard/charts/LineChart";
 import PieChart from "@/app/components/dashboard/charts/PieChart";
 import { useFleetDashboard } from "@/app/app-hooks/useFleetDashboard";
 import { formatCurrency } from "@/app/utils/methods";
+import BulkInvoicesQuickAction from "@/app/components/dashboard/BulkInvoicesQuickAction";
 
 const FleetDashboardScreen = () => {
   const [branchesExpanded, setBranchesExpanded] = useState(false);
@@ -169,6 +170,21 @@ const FleetDashboardScreen = () => {
               style={[styles.quickActionText, { color: textColor }]}
             >
               My bookings
+            </StyledText>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.quickActionButton,
+              { backgroundColor: cardColor, borderColor },
+            ]}
+            onPress={() => router.push("/main/settings/InvoicesScreen" as const)}
+          >
+            <Ionicons name="document-text" size={24} color={primaryColor} />
+            <StyledText
+              variant="bodyMedium"
+              style={[styles.quickActionText, { color: textColor }]}
+            >
+              Invoices
             </StyledText>
           </TouchableOpacity>
         </View>

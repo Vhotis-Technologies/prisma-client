@@ -59,9 +59,11 @@ const StyledText: React.FC<StyledTextProps> = ({
   const styleColor = getColorFromStyle(style);
   const finalColor = color || styleColor || textColor;
 
+  const fontFamily = 'BarlowBold'
+
   return (
     <Text
-      style={[style, { color: finalColor, fontFamily: "BarlowLight"}]}
+      style={[style, { color: finalColor, fontFamily }]}
       {...props}
       variant={variant as VariantProp<never>}
     >

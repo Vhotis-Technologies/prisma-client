@@ -34,6 +34,7 @@ export interface BulkOrderConfirmationModalProps {
   formatPrice: (amount: number) => string;
   onClose: () => void;
   onViewDashboard: () => void;
+  onViewInvoice?: () => void;
 }
 
 const BulkOrderConfirmationModal: React.FC<BulkOrderConfirmationModalProps> = ({
@@ -55,6 +56,7 @@ const BulkOrderConfirmationModal: React.FC<BulkOrderConfirmationModalProps> = ({
   formatPrice,
   onClose,
   onViewDashboard,
+  onViewInvoice,
 }) => {
   const backgroundColor = useThemeColor({}, "background");
   const textColor = useThemeColor({}, "text");
@@ -292,6 +294,14 @@ const BulkOrderConfirmationModal: React.FC<BulkOrderConfirmationModalProps> = ({
 
       {/* Actions */}
       <View style={[styles.actions, { backgroundColor: cardColor, borderTopColor: borderColor }]}>
+        {isConfirmed && invoiceSent && onViewInvoice ? (
+          <StyledButton
+            title="View invoice & pay"
+            variant="small"
+            onPress={onViewInvoice}
+            style={[styles.primaryButton, { backgroundColor: primaryColor }]}
+          />
+        ) : null}
         <StyledButton
           title="View dashboard"
           variant="small"

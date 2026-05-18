@@ -14,6 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import StyledText from "@/app/components/helpers/StyledText";
 import StatsSection from "@/app/components/dashboard/StatsSection";
 import ForthcomingBookingsRow from "@/app/components/dashboard/ForthcomingBookingsRow";
+import BulkInvoicesQuickAction from "@/app/components/dashboard/BulkInvoicesQuickAction";
 import usePartner from "@/app/app-hooks/usePartner";
 import { StatCard } from "@/app/interfaces/DashboardInterfaces";
 import { formatCurrency } from "@/app/utils/methods";
@@ -165,6 +166,8 @@ const DealershipPartnerDashboardScreen = () => {
       {stats.length > 0 && <StatsSection stats={stats} />}
 
       <ForthcomingBookingsRow />
+
+      <BulkInvoicesQuickAction />
 
       {/* Referral Metrics */}
       {dashboardData && (

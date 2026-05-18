@@ -16,6 +16,7 @@ import OngoingServiceCard from "@/app/components/dashboard/OngoingServiceCard";
 import ForthcomingBookingsRow from "@/app/components/dashboard/ForthcomingBookingsRow";
 import RecentServicesSection from "@/app/components/dashboard/RecentServicesSection";
 import StatsSection from "@/app/components/dashboard/StatsSection";
+import BulkInvoicesQuickAction from "@/app/components/dashboard/BulkInvoicesQuickAction";
 
 const BranchAdminDashboardScreen = () => {
   const backgroundColor = useThemeColor({}, "background");
@@ -160,6 +161,8 @@ const BranchAdminDashboardScreen = () => {
       )}
 
       <ForthcomingBookingsRow />
+
+      <BulkInvoicesQuickAction />
 
       {/* Only display recent services section when there is a real recent service (has booking_reference) */}
       {recentService?.booking_reference && (

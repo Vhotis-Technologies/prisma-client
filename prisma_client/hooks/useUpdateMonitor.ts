@@ -1,82 +1,113 @@
 /**
- * Expo Updates: check for OTA updates, prompt reload. Skips in development.
+ * Expo OTA update monitor.
+ *
+ * - Reactively tracks update state via `Updates.useUpdates()`.
+ * - Checks on mount and whenever the app returns to the foreground
+ *   (throttled to avoid hammering the EAS Update server).
+ * - Auto-downloads any available update in the background so the user-facing
+ *   reload prompt is instantaneous.
+ * - Handles rollback-to-embedded directives.
+ * - No-ops in development, in Expo Go, or when `expo-updates` is disabled.
  */
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import * as Updates from "expo-updates";
-import { Alert } from "react-native";
-import Constants from "expo-constants";
+import { Alert, AppState, type AppStateStatus } from "react-native";
+
+const MIN_CHECK_INTERVAL_MS = 5 * 60 * 1000;
 
 export const useUpdateMonitor = () => {
-  const [isCheckingForUpdate, setIsCheckingForUpdate] = useState(false);
-  const [updateAvailable, setUpdateAvailable] = useState(false);
+  const {
+    currentlyRunning,
+    availableUpdate,
+    isUpdateAvailable,
+    isUpdatePending,
+    isChecking,
+    isDownloading,
+    checkError,
+    downloadError,
+  } = Updates.useUpdates();
 
-  useEffect(() => {
-    const checkForUpdates = async () => {
-      // Skip update checks in development
-      if (__DEV__) {
-        return;
-      }
+  const lastCheckRef = useRef(0);
+  const fetchedForRef = useRef<string | null>(null);
+  const promptedForRef = useRef<string | null>(null);
 
-      // Check if updates are enabled
-      if (!Updates.isEnabled) {
-        return;
-      }
-
-      try {
-        setIsCheckingForUpdate(true);
-        const update = await Updates.checkForUpdateAsync();
-
-        if (update.isAvailable) {
-          setUpdateAvailable(true);
-
-          // Show alert to user
-          Alert.alert(
-            "Update Available",
-            "A new version of the app is available. Would you like to download and install it now?",
-            [
-              {
-                text: "Later",
-                style: "cancel",
-              },
-              {
-                text: "Update Now",
-                onPress: async () => {
-                  try {
-                    await Updates.fetchUpdateAsync();
-                    await Updates.reloadAsync();
-                  } catch (error) {
-                    Alert.alert(
-                      "Update Failed",
-                      "Failed to install update. Please try again later."
-                    );
-                  }
-                },
-              },
-            ]
-          );
-        }
-      } catch (error:any) {
-        // Don't show error alerts in production to avoid annoying users
-        if (__DEV__) {
-          Alert.alert("Update Check Failed", error.message);
-        }
-      } finally {
-        setIsCheckingForUpdate(false);
-      }
-    };
-
-    // Check for updates on app start
-    checkForUpdates();
-
-    // Set up periodic checks (every 5 minutes) - only in production
-    if (!__DEV__) {
-      const interval = setInterval(checkForUpdates, 300000);
-      return () => clearInterval(interval);
+  const checkForUpdates = useCallback(async (force = false) => {
+    if (__DEV__ || !Updates.isEnabled) return;
+    const now = Date.now();
+    if (!force && now - lastCheckRef.current < MIN_CHECK_INTERVAL_MS) return;
+    lastCheckRef.current = now;
+    try {
+      await Updates.checkForUpdateAsync();
+    } catch {
+      // `checkError` from useUpdates() captures the failure reactively;
+      // swallow here to avoid an unhandled rejection in production.
     }
   }, []);
 
+  useEffect(() => {
+    void checkForUpdates(true);
+    const sub = AppState.addEventListener("change", (state: AppStateStatus) => {
+      if (state === "active") void checkForUpdates();
+    });
+    return () => sub.remove();
+  }, [checkForUpdates]);
+
+  useEffect(() => {
+    if (__DEV__ || !Updates.isEnabled) return;
+    if (!isUpdateAvailable || isDownloading || isUpdatePending) return;
+
+    const id = availableUpdate?.updateId ?? "rollback-to-embedded";
+    if (fetchedForRef.current === id) return;
+    fetchedForRef.current = id;
+
+    Updates.fetchUpdateAsync().catch(() => {
+      fetchedForRef.current = null;
+    });
+  }, [isUpdateAvailable, isDownloading, isUpdatePending, availableUpdate]);
+
+  useEffect(() => {
+    if (!isUpdatePending) return;
+
+    const id = availableUpdate?.updateId ?? "rollback-to-embedded";
+    if (promptedForRef.current === id) return;
+    promptedForRef.current = id;
+
+    Alert.alert(
+      "Update Ready",
+      "A new version of the app has been downloaded. Reload now to apply it?",
+      [
+        { text: "Later", style: "cancel" },
+        {
+          text: "Reload",
+          onPress: () => {
+            Updates.reloadAsync().catch((err: unknown) => {
+              Alert.alert(
+                "Reload Failed",
+                err instanceof Error
+                  ? err.message
+                  : "Please close and reopen the app to apply the update."
+              );
+            });
+          },
+        },
+      ]
+    );
+  }, [isUpdatePending, availableUpdate]);
+
+  useEffect(() => {
+    if (!__DEV__) return;
+    if (checkError) Alert.alert("Update Check Failed", checkError.message);
+    if (downloadError) Alert.alert("Update Download Failed", downloadError.message);
+  }, [checkError, downloadError]);
+
   return {
-    isCheckingForUpdate,
-    updateAvailable,
+    currentlyRunning,
+    isCheckingForUpdate: isChecking,
+    isDownloading,
+    isUpdateAvailable,
+    isUpdatePending,
+    checkError,
+    downloadError,
+    checkForUpdates,
   };
 };

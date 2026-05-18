@@ -22,7 +22,6 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useThemeColor } from "@/hooks/useThemeColor";
 import { router } from "expo-router";
-import { Stack } from "expo-router";
 
 // Import booking components
 import VehicleSelector from "@/app/components/booking/VehicleSelector";
@@ -62,8 +61,6 @@ import StyledTextInput from "@/app/components/helpers/StyledTextInput";
 import { useAddresses } from "@/app/app-hooks/useAddresses";
 import useVehicles from "@/app/app-hooks/useVehicles";
 import ModalServices from "@/app/utils/ModalServices";
-import PromotionsCardComponent from "@/app/components/booking/PromotionsCard";
-import { PromotionsProps } from "@/app/interfaces/GarageInterface";
 import useProfile from "@/app/app-hooks/useProfile";
 import BookingConfirmationModal from "@/app/components/booking/BookingConfirmationModal";
 import BulkOrderConfirmationModal from "@/app/components/booking/BulkOrderConfirmationModal";
@@ -124,6 +121,7 @@ const BookingScreen = () => {
   const [isBulkInvoiceSubmitting, setIsBulkInvoiceSubmitting] = useState(false);
   const [isBulkAddonModalVisible, setIsBulkAddonModalVisible] = useState(false);
   const [bulkConfirmationPayload, setBulkConfirmationPayload] = useState<{
+    bulkOrderId?: string;
     bookingReference: string;
     invoiceSent: boolean;
     numberOfVehicles: number;
@@ -322,6 +320,23 @@ const BookingScreen = () => {
     setBulkPaymentOption("pay_now");
     router.push("/main/dashboard/DashboardScreen");
   }, [bulk]);
+
+  const handleBulkConfirmationViewInvoice = useCallback(() => {
+    const bulkOrderId = bulkConfirmationPayload?.bulkOrderId;
+    setBulkConfirmationPayload(null);
+    bulk.resetBulkBooking();
+    setIsBulkMode(false);
+    setBulkStep(1);
+    setBulkPaymentOption("pay_now");
+    if (bulkOrderId) {
+      router.push({
+        pathname: "/main/settings/InvoiceDetailScreen",
+        params: { bulkOrderId },
+      });
+      return;
+    }
+    router.push("/main/settings/InvoicesScreen");
+  }, [bulk, bulkConfirmationPayload?.bulkOrderId]);
 
   // Handle add address based on user role
   const handleAddAddress = useCallback(() => {
@@ -892,8 +907,13 @@ const BookingScreen = () => {
   );
 
   const setBulkConfirmedModal = useCallback(
-    (bookingReference: string, invoiceSent: boolean) => {
+    (
+      bookingReference: string,
+      invoiceSent: boolean,
+      bulkOrderId?: string,
+    ) => {
       setBulkConfirmationPayload({
+        bulkOrderId,
         bookingReference,
         invoiceSent,
         numberOfVehicles: bulk.numberOfVehicles,
@@ -960,7 +980,11 @@ const BookingScreen = () => {
         booking_data: bookingData,
         booking_reference: bookingReference,
       }).unwrap();
-      setBulkConfirmedModal(res.booking_reference, true);
+      setBulkConfirmedModal(
+        res.booking_reference,
+        true,
+        String(res.bulk_order_id),
+      );
     } catch (e: unknown) {
       let message = "Could not send invoice. Please try again.";
       if (
@@ -1386,11 +1410,6 @@ const BookingScreen = () => {
         { backgroundColor, paddingBottom: insets.bottom + 30 },
       ]}
     >
-      {promotions && !user?.is_fleet_owner && !user?.is_branch_admin && (
-        <View>
-          <PromotionsCardComponent {...promotions} />
-        </View>
-      )}
       {isBulkEligible && (
         <View
           style={[
@@ -1693,6 +1712,11 @@ const BookingScreen = () => {
             formatPrice={formatPrice}
             onClose={handleBulkConfirmationClose}
             onViewDashboard={handleBulkConfirmationViewDashboard}
+            onViewInvoice={
+              bulkConfirmationPayload.invoiceSent
+                ? handleBulkConfirmationViewInvoice
+                : undefined
+            }
           />
         </Modal>
       )}

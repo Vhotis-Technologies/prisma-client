@@ -18,6 +18,7 @@ import {
   BookedAppointmentProps,
 } from "@/app/interfaces/BookingInterfaces";
 import { PromotionsProps } from "@/app/interfaces/GarageInterface";
+import { InvoiceListResponse } from "@/app/interfaces/InvoiceInterfaces";
 
 /** Server booking quote (step 5) — amounts and Quick Sparkle entitlements. */
 export type BookingQuoteAmounts = {
@@ -522,6 +523,14 @@ const createBookingApi = createApi({
       }),
     }),
 
+    /** Bulk invoice list for the authenticated user (branch admins, referral partners). */
+    getMyBulkInvoices: builder.query<InvoiceListResponse, void>({
+      query: () => ({
+        url: "/api/v1/payment/get_my_bulk_invoices/",
+        method: "GET",
+      }),
+    }),
+
     /** Hosted Stripe invoice URL and payment sync for bulk (pay-later) orders. */
     getBulkInvoiceCheckout: builder.query<
       {
@@ -565,6 +574,7 @@ export const {
   useLazyCheckFreeWashQuery,
   useConfirmPaymentIntentMutation,
   useCreateBulkOrderInvoiceLaterMutation,
+  useGetMyBulkInvoicesQuery,
   useApplyWinnerVoucherMutation,
   useApplyGiftVoucherMutation,
   useCreateGiftVoucherPaymentSheetMutation,
