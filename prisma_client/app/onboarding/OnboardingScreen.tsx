@@ -3,9 +3,7 @@ import {
   View,
   StyleSheet,
   ScrollView,
-  Platform,
   TouchableOpacity,
-  KeyboardAvoidingView,
 } from "react-native";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -148,16 +146,13 @@ const OnboardingScreen = () => {
 
   return (
     <View style={[styles.container, { backgroundColor }]}>
-      <KeyboardAvoidingView
+      <ScrollView
         style={styles.container}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
       >
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-        >
           {/* Main Content */}
           <View style={styles.content}>
             {/* Title Section */}
@@ -442,8 +437,7 @@ const OnboardingScreen = () => {
               </View>
             </View>
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </ScrollView>
 
       {/* Read-only document modal: terms or privacy, fetched from API */}
       <DocumentModal

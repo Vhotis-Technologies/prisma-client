@@ -97,7 +97,6 @@ services:
     networks:
       - prisma_shared_net
 
-
   # client_staging_nginx:
   #   image: nginx:alpine
   #   container_name: client_staging_nginx
@@ -114,7 +113,6 @@ services:
   #     - client_staging_server
   #   networks:
   #     - prisma_shared_net
-
 
   client_staging_job_subscriber:
     build:

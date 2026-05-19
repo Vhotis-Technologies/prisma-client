@@ -1,3 +1,4 @@
+{% load legal_tags %}
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -289,7 +290,7 @@
         <div class="email-footer">
           {% block footer %}
           <div class="footer-links">
-            <a href="{{ privacy_policy_url|default:'https://prismavalet.com/privacy' }}">Privacy Policy</a><span>|</span><a href="{{ terms_of_service_url|default:'https://prismavalet.com/terms' }}">Terms of Service</a>
+            <a href="{% legal_privacy_url %}">Privacy Policy</a><span>|</span><a href="{% legal_terms_url %}">Terms of Service</a>
           </div>
           <div class="footer-copy">&copy; {{ current_year|default:"202" }} Prisma Car Care. All rights reserved.</div>
           {% endblock %}

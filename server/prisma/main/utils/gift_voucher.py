@@ -79,7 +79,7 @@ def validate_gift_voucher_for_payment(user, booking_data: dict, amount_cents: in
     try:
         voucher = GiftVoucher.objects.get(pk=vid)
     except GiftVoucher.DoesNotExist as exc:
-        raise ValueError("Invalid gift voucher") from exc
+        raise ValueError("Invalid giPft voucher") from exc
     v_issue = gift_voucher_validity_issue(voucher)
     if v_issue:
         raise ValueError(gift_voucher_validity_user_message(v_issue))

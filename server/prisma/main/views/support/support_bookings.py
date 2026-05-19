@@ -18,7 +18,9 @@ import traceback
 from datetime import datetime
 from decimal import Decimal
 
+import requests
 from django.conf import settings
+from django.db import transaction
 from django.db.models import Prefetch, Q, Sum
 from django.utils import timezone
 from rest_framework import status
@@ -32,10 +34,15 @@ from main.models import (
     LoyaltyProgram,
     PaymentTransaction,
 )
-from main.tasks import publish_booking_cancelled, publish_booking_rescheduled
+from main.tasks import (
+    publish_booking_cancelled,
+    publish_booking_reassigned,
+    publish_booking_rescheduled,
+)
 from main.services.NotificationServices import NotificationService
 from main.views.events import EventsView
 from main.views.fleet import perform_bulk_order_cancellation, perform_bulk_order_reschedule
+from main.views.payment import assign_detailers_to_booking
 from main.views.support.support_permission_access import SupportPermissionAccess
 
 logger = logging.getLogger(__name__)
@@ -390,6 +397,55 @@ def _booking_by_reference(booking_reference: str):
     ).get(booking_reference=booking_reference)
 
 
+def _detailer_support_url(action: str) -> str:
+    """Endpoint on the detailer (prisma-crew) support API for jobs reassignment."""
+    base = (getattr(settings, "DETAILER_APP_URL", None) or "").rstrip("/")
+    if not base:
+        base = (getattr(settings, "API_CONFIG", {}).get("detailerAppUrl") or "").rstrip("/")
+    return f"{base}/api/v1/support/jobs/{action}/" if base else ""
+
+
+def _detailer_support_headers() -> dict:
+    headers = {"Accept": "application/json", "Content-Type": "application/json"}
+    key = (getattr(settings, "SUPPORT_INTERNAL_API_KEY", "") or "").strip()
+    if key:
+        headers["X-Support-Internal-Key"] = key
+    return headers
+
+
+def _proxy_to_detailer(method: str, action: str, *, params=None, body=None):
+    """Forward a support reassignment call to the detailer API; normalizes errors as DRF Responses."""
+    url = _detailer_support_url(action)
+    if not url:
+        return Response(
+            {"error": "Detailer API is not configured"},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+    try:
+        if method == "GET":
+            resp = requests.get(url, params=params or {}, headers=_detailer_support_headers(), timeout=30)
+        else:
+            resp = requests.post(url, json=body or {}, headers=_detailer_support_headers(), timeout=60)
+    except requests.RequestException as exc:
+        logger.warning("Detailer support proxy failed: %s %s -> %s", method, action, exc)
+        return Response(
+            {"error": "Detailer API unavailable", "detail": str(exc)},
+            status=status.HTTP_502_BAD_GATEWAY,
+        )
+    try:
+        payload = resp.json() if resp.content else {}
+    except ValueError:
+        payload = {"error": resp.text or "Invalid JSON from detailer"}
+    return Response(payload, status=resp.status_code)
+
+
+def _bulk_appointments_for_order(bulk: BulkOrder):
+    return list(
+        BookedAppointment.objects.select_related("user", "address", "service_type", "detailer")
+        .filter(bulk_order=bulk)
+    )
+
+
 def _reject_bulk_booking(booking: BookedAppointment):
     if booking.bulk_order_id:
         return Response(
@@ -414,6 +470,9 @@ class SupportBookingsView(APIView):
         "get_bulk_order_detail": "_get_bulk_order_detail",
         "get_reschedule_slots": "_get_reschedule_slots",
         "get_bulk_reschedule_slots": "_get_bulk_reschedule_slots",
+        "get_reassignment_candidates": "_get_reassignment_candidates",
+        "get_bulk_reassignment_candidates": "_get_bulk_reassignment_candidates",
+        "get_reassignment_history": "_get_reassignment_history",
     }
     patch_action_handler = {
         "cancel_booking": "_patch_cancel_booking",
@@ -421,6 +480,8 @@ class SupportBookingsView(APIView):
         "reschedule_booking": "_patch_reschedule_booking",
         "cancel_bulk_order": "_patch_cancel_bulk_order",
         "reschedule_bulk_order": "_patch_reschedule_bulk_order",
+        "reassign_booking": "_patch_reassign_booking",
+        "reassign_bulk_order": "_patch_reassign_bulk_order",
     }
 
     def get(self, request, *args, **kwargs):
@@ -921,6 +982,207 @@ class SupportBookingsView(APIView):
                 "booking_status": "cancelled",
                 "refund": refund_data,
                 "hours_until_appointment": hours_until_appointment,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    # ------------------------------------------------------------------
+    # Crew reassignment (orchestrates detailer support API and updates booking silently)
+    # ------------------------------------------------------------------
+
+    def _resolve_booking_for_reassignment(self, booking_id):
+        """Eligibility-checked lookup; returns either a booking or a DRF error Response."""
+        if not booking_id:
+            return None, Response(
+                {"error": "booking_id is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            booking = BookedAppointment.objects.select_related(
+                "service_type", "address", "user"
+            ).get(pk=booking_id)
+        except BookedAppointment.DoesNotExist:
+            return None, Response({"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND)
+        if booking.bulk_order_id:
+            return None, Response(
+                {
+                    "error": "This booking is part of a bulk order. Use bulk reassignment instead.",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if booking.status in ("in_progress", "completed", "cancelled"):
+            return None, Response(
+                {"error": f"Booking is {booking.status} and cannot be reassigned."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return booking, None
+
+    def _resolve_bulk_order_for_reassignment(self, bulk_order_id):
+        if not bulk_order_id:
+            return None, None, Response(
+                {"error": "bulk_order_id is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            bulk = BulkOrder.objects.get(pk=bulk_order_id)
+        except BulkOrder.DoesNotExist:
+            return None, None, Response(
+                {"error": "Bulk order not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        appointments = _bulk_appointments_for_order(bulk)
+        blocked = [
+            a for a in appointments if a.status in ("in_progress", "completed", "cancelled")
+        ]
+        if blocked:
+            return None, None, Response(
+                {
+                    "error": "One or more appointments in this bulk order are already in progress, completed, or cancelled.",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return bulk, appointments, None
+
+    def _get_reassignment_candidates(self, request, **kwargs):
+        booking_id = request.query_params.get("booking_id")
+        booking, err = self._resolve_booking_for_reassignment(booking_id)
+        if err:
+            return err
+        return _proxy_to_detailer(
+            "GET",
+            "get_available_detailers",
+            params={"booking_reference": booking.booking_reference},
+        )
+
+    def _get_bulk_reassignment_candidates(self, request, **kwargs):
+        bulk_order_id = request.query_params.get("bulk_order_id")
+        bulk, _appts, err = self._resolve_bulk_order_for_reassignment(bulk_order_id)
+        if err:
+            return err
+        return _proxy_to_detailer(
+            "GET",
+            "get_available_detailers",
+            params={"booking_reference": bulk.booking_reference, "bulk": "true"},
+        )
+
+    def _get_reassignment_history(self, request, **kwargs):
+        booking_reference = (request.query_params.get("booking_reference") or "").strip()
+        if not booking_reference:
+            return Response(
+                {"error": "booking_reference is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return _proxy_to_detailer(
+            "GET",
+            "get_reassignment_history",
+            params={"booking_reference": booking_reference},
+        )
+
+    def _build_reassign_payload(self, request, booking_reference, *, is_bulk):
+        data = request.data.get("data") if isinstance(request.data, dict) else None
+        data = data if isinstance(data, dict) else (request.data or {})
+        return {
+            "booking_reference": booking_reference,
+            "is_bulk": bool(is_bulk),
+            "new_detailer_ids": data.get("new_detailer_ids") or [],
+            "reason_code": (data.get("reason_code") or "other").strip().lower(),
+            "reason_notes": (data.get("reason_notes") or "").strip(),
+            "support_user_id": (data.get("support_user_id") or "").strip(),
+            "support_user_email": (data.get("support_user_email") or "").strip(),
+        }
+
+    def _patch_reassign_booking(self, request, **kwargs):
+        data = request.data.get("data") if isinstance(request.data, dict) else None
+        data = data if isinstance(data, dict) else (request.data or {})
+        booking_id = (data.get("booking_id") or "").strip()
+        booking, err = self._resolve_booking_for_reassignment(booking_id)
+        if err:
+            return err
+
+        payload = self._build_reassign_payload(request, booking.booking_reference, is_bulk=False)
+        if not payload["new_detailer_ids"]:
+            return Response(
+                {"error": "Pick at least one replacement detailer."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        proxied = _proxy_to_detailer("POST", "reassign", body=payload)
+        if proxied.status_code != status.HTTP_200_OK:
+            return proxied
+
+        body = proxied.data if isinstance(proxied.data, dict) else {}
+        assigned_detailers = (body.get("data") or {}).get("assigned_detailers") or []
+
+        try:
+            with transaction.atomic():
+                booking_locked = BookedAppointment.objects.select_for_update().get(pk=booking.pk)
+                assign_detailers_to_booking(booking_locked, assigned_detailers)
+                transaction.on_commit(
+                    lambda: publish_booking_reassigned.delay(
+                        booking_locked.booking_reference, assigned_detailers, False
+                    )
+                )
+        except Exception as exc:
+            logger.error("Support reassign: failed to update client booking: %s", exc)
+            return Response(
+                {"error": "Reassignment succeeded on detailer but client update failed", "detail": str(exc)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        return Response(
+            {
+                "message": "Crew reassigned. The new detailer has been notified.",
+                "data": body.get("data") or {},
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    def _patch_reassign_bulk_order(self, request, **kwargs):
+        data = request.data.get("data") if isinstance(request.data, dict) else None
+        data = data if isinstance(data, dict) else (request.data or {})
+        bulk_order_id = (data.get("bulk_order_id") or "").strip()
+        bulk, appointments, err = self._resolve_bulk_order_for_reassignment(bulk_order_id)
+        if err:
+            return err
+
+        payload = self._build_reassign_payload(request, bulk.booking_reference, is_bulk=True)
+        if not payload["new_detailer_ids"]:
+            return Response(
+                {"error": "Pick at least one replacement detailer."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        proxied = _proxy_to_detailer("POST", "reassign", body=payload)
+        if proxied.status_code != status.HTTP_200_OK:
+            return proxied
+
+        body = proxied.data if isinstance(proxied.data, dict) else {}
+        assigned_detailers = (body.get("data") or {}).get("assigned_detailers") or []
+
+        try:
+            with transaction.atomic():
+                bulk_locked = BulkOrder.objects.select_for_update().get(pk=bulk.pk)
+                bulk_locked.assigned_detailers = assigned_detailers
+                bulk_locked.save(update_fields=["assigned_detailers"])
+                for appt in appointments:
+                    appt_locked = BookedAppointment.objects.select_for_update().get(pk=appt.pk)
+                    assign_detailers_to_booking(appt_locked, assigned_detailers)
+                transaction.on_commit(
+                    lambda: publish_booking_reassigned.delay(
+                        bulk_locked.booking_reference, assigned_detailers, True
+                    )
+                )
+        except Exception as exc:
+            logger.error("Support reassign bulk: client update failed: %s", exc)
+            return Response(
+                {"error": "Reassignment succeeded on detailer but bulk client update failed", "detail": str(exc)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        return Response(
+            {
+                "message": "Bulk crew reassigned. The new team has been notified.",
+                "data": body.get("data") or {},
             },
             status=status.HTTP_200_OK,
         )

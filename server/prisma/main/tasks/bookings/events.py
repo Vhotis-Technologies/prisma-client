@@ -59,6 +59,24 @@ def publish_booking_rescheduled(booking_reference, new_date, new_time, total_cos
 
 
 @shared_task
+def publish_booking_reassigned(booking_reference, assigned_detailers, is_bulk=False):
+    """Publish booking_reassigned to Redis so peer client instances and crew apps can refresh.
+
+    The client subscriber treats this as a silent assigned-detailers swap (no customer push/email).
+    """
+    try:
+        payload = json.dumps({
+            'booking_reference': booking_reference,
+            'detailers': assigned_detailers or [],
+            'is_bulk': bool(is_bulk),
+        })
+        msg_id = stream_add(STREAM_JOB_EVENTS, {'event': 'booking_reassigned', 'payload': payload})
+        return f"Booking reassigned published to stream: {msg_id}"
+    except Exception as e:
+        return f"Failed to publish booking reassigned to redis: {str(e)}"
+
+
+@shared_task
 def publish_review_to_detailer(booking_reference, rating, comment=None):
     """Publish review data to Redis stream for detailer app (optional customer comment)."""
     try:

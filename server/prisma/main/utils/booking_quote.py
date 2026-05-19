@@ -663,12 +663,86 @@ def expected_breakdown_from_booking_data(user, booking_data: dict) -> AmountBrea
     return breakdown_to_response(sub_ex, vat_amt, total_inc)
 
 
+# Keep in sync with client useBulkBooking (BULK_DISCOUNT_THRESHOLD / BULK_DISCOUNT_PERCENT).
+BULK_DISCOUNT_THRESHOLD = 10
+BULK_DISCOUNT_PERCENT = 10
+
+
+def _addon_sum_per_vehicle(addons: Sequence) -> Decimal:
+    """Per-vehicle addon total for bulk bookings (no 4+ addon rule)."""
+    if not addons:
+        return Decimal("0")
+    return money(sum(money(Decimal(str(a.price))) for a in addons))
+
+
+def expected_bulk_total_from_booking_data(user, booking_data: dict) -> Decimal:
+    """
+    Recompute bulk order total (fleet/partner bulk flow).
+    Mirrors client useBulkBooking: N × service + N × addons, bulk % off, then 15% SUV.
+    """
+    service, addons, is_suv, _is_express = _parse_booking_data_service_addons(
+        booking_data, user
+    )
+    try:
+        number_of_vehicles = int(booking_data.get("number_of_vehicles", 0))
+    except (TypeError, ValueError):
+        number_of_vehicles = 0
+    if number_of_vehicles < 1:
+        raise ValueError("Invalid number_of_vehicles")
+
+    unit_price = _service_unit_price(user, service)
+    subtotal = money(unit_price * number_of_vehicles)
+    addon_per_vehicle = _addon_sum_per_vehicle(addons)
+    subtotal_with_addons = money(subtotal + addon_per_vehicle * number_of_vehicles)
+
+    discount_percent = (
+        BULK_DISCOUNT_PERCENT if number_of_vehicles > BULK_DISCOUNT_THRESHOLD else 0
+    )
+    discount_amount = money(
+        subtotal_with_addons * Decimal(str(discount_percent)) / Decimal("100")
+    )
+    amount_after_discount = money(
+        max(Decimal("0"), subtotal_with_addons - discount_amount)
+    )
+    suv_surcharge = (
+        money(amount_after_discount * Decimal("0.15")) if is_suv else Decimal("0")
+    )
+    return money(amount_after_discount + suv_surcharge)
+
+
+def validate_bulk_booking_financials(user, booking_data: dict) -> Optional[str]:
+    """
+    Validate bulk booking total_amount vs server recomputation (±2c).
+    """
+    winner_vid = booking_data.get("winner_voucher_id")
+    if winner_vid:
+        return None
+    try:
+        srv_total = expected_bulk_total_from_booking_data(user, booking_data)
+    except Exception as exc:
+        return f"Could not validate pricing: {exc}"
+
+    ta = booking_data.get("total_amount")
+    try:
+        client_total = money(Decimal(str(ta))) if ta is not None else Decimal("0")
+    except Exception:
+        return "Invalid total_amount"
+
+    if abs(client_total - srv_total) > Decimal("0.02"):
+        return "Booking total does not match server quote. Please refresh and try again."
+    return None
+
+
 def validate_booking_financials(user, booking_data: dict) -> Optional[str]:
     """
     Validate client totals vs server recomputation (±2c).
     Skips when winner_voucher_id is set (handled by validate_winner_voucher_for_payment).
+    Routes bulk bookings to validate_bulk_booking_financials.
     Returns error message or None if OK.
     """
+    if isinstance(booking_data, dict) and booking_data.get("is_bulk") is True:
+        return validate_bulk_booking_financials(user, booking_data)
+
     winner_vid = booking_data.get("winner_voucher_id")
     if winner_vid:
         return None

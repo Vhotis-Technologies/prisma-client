@@ -2,6 +2,17 @@ from celery import shared_task
 from exponent_server_sdk import PushClient, PushMessage
 
 
+def _normalize_push_data(type_or_data, title, message):
+    """Expo requires all push data values to be strings."""
+    if isinstance(type_or_data, dict):
+        data = {str(k): "" if v is None else str(v) for k, v in type_or_data.items()}
+    else:
+        data = {"type": str(type_or_data)}
+    data.setdefault("title", str(title))
+    data.setdefault("body", str(message))
+    return data
+
+
 @shared_task
 def send_push_notification(user_id, title, message, type):
     """Send a push notification to the user."""
@@ -15,24 +26,25 @@ def send_push_notification(user_id, title, message, type):
         if not user.allow_push_notifications:
             return f"Push notification not sent: User {user_id} has disabled push notifications"
 
+        push_data = _normalize_push_data(type, title, message)
         push_client = PushClient()
         response = push_client.publish(
             PushMessage(
                 to=user.notification_token,
                 title=title,
                 body=message,
-                data={
-                    "type": type,
-                    "title": title,
-                    "body": message
-                }
+                data=push_data,
             )
         )
 
-        if response and hasattr(response, 'data') and response.data:
+        if response is not None:
+            validate = getattr(response, "validate_response", None)
+            if callable(validate):
+                validate()
+
+        if response and hasattr(response, "data") and response.data:
             return f"Push notification sent successfully to user {user_id}"
-        else:
-            return f"Push notification failed for user {user_id}: Invalid response"
+        return f"Push notification failed for user {user_id}: Invalid response"
 
     except Exception as e:
         error_msg = f"Failed to send push notification to user {user_id}: {str(e)}"

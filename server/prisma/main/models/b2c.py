@@ -47,7 +47,7 @@ class B2CSubcriptionPlan(models.Model):
 
     def get_service_discount_percent(self) -> int:
         """Percent off paid bookings (VAT-inc stack) for active subscribers — Lite/Pro 5%, Spectrum/Spectacular 7%."""
-        ordered = [('spectacular', 7), ('spectrum', 7), ('lite', 5), ('pro', 5)]
+        ordered = [('spectacular', 15), ('spectrum', 15), ('lite', 10), ('pro', 10)]
         tier_slug = self.tier.name.lower()
         for key, pct in ordered:
             if key in tier_slug:
@@ -77,9 +77,7 @@ class B2CSubcription(models.Model):
     auto_renew = models.BooleanField(default=True)
     cancellation_date = models.DateTimeField(null=True, blank=True)
     cancellation_reason = models.TextField(blank=True, null=True)
-    # Last subscription end-date (calendar day) we emailed "benefits ending soon" for — avoids duplicates.
     expiring_notice_sent_for_end_date = models.DateField(null=True, blank=True)
-    # Complimentary Quick Sparkle uses consumed for this subscription row (reset on renewal / plan change).
     complimentary_sparkles_used = models.PositiveIntegerField(default=0)
 
     def __str__(self) -> str:

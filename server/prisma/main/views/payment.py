@@ -30,6 +30,7 @@ from main.models import (
     Fleet,
 )
 from main.utils.branch_spend import get_branch_spend_for_period
+from main.utils.bulk_invoice import serialize_bulk_order_invoice_list
 from main.utils.booking_quote import (
     validate_booking_financials,
     validate_complimentary_choice,
@@ -692,12 +693,16 @@ def send_booking_to_detailer(pending_booking, booking):
 
 
 def _user_can_pay_bulk_invoice(user, bulk_order):
-    """Fleet owner (same fleet), or the user who owns the bulk order (e.g. partner / booker)."""
+    """Fleet owner (same fleet), booker, or branch admin for orders on their branch."""
     if bulk_order.user_id == user.id:
         return True
     if getattr(user, "is_fleet_owner", False):
         fleet = Fleet.objects.filter(owner=user).first()
         if fleet and bulk_order.fleet_id and bulk_order.fleet_id == fleet.id:
+            return True
+    if getattr(user, "is_branch_admin", False):
+        managed_branch = user.get_managed_branch()
+        if managed_branch and bulk_order.branch_id == managed_branch.id:
             return True
     return False
 
@@ -752,6 +757,7 @@ class PaymentView(APIView):
         'apply_gift_voucher': 'apply_gift_voucher',
         'create_gift_voucher_payment_sheet': 'create_gift_voucher_payment_sheet',
         'get_bulk_invoice_checkout': 'get_bulk_invoice_checkout',
+        'get_my_bulk_invoices': 'get_my_bulk_invoices',
     }
 
     def get(self, request, *args, **kwargs):
@@ -853,6 +859,24 @@ class PaymentView(APIView):
             'amount_due': float(due),
             'amount_due_cents': cents,
         }, status=status.HTTP_200_OK)
+
+    def get_my_bulk_invoices(self, request):
+        """Bulk invoice list for the authenticated user (branch admins, referral partners, etc.)."""
+        try:
+            invoices_qs = (
+                BulkOrder.objects.filter(
+                    user=request.user,
+                    payment_status__in=['invoice_later', 'succeeded', 'paid', 'failed', 'cancelled'],
+                )
+                .select_related('user', 'branch')
+                .order_by('-created_at')
+            )
+            return Response(
+                {'invoices': serialize_bulk_order_invoice_list(invoices_qs)},
+                status=status.HTTP_200_OK,
+            )
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     def get_bulk_invoice_checkout(self, request):
         """

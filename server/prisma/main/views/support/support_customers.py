@@ -38,7 +38,9 @@ from main.models import (
     FleetVehicle,
     LoyaltyProgram,
     Partner,
+    PartnerBankAccount,
     PartnerMetricsCache,
+    PartnerPayoutRequest,
     ReferralAttribution,
     User,
     Vehicle,
@@ -656,12 +658,55 @@ def _partner_referred_metrics(partner: Partner) -> dict:
     }
 
 
+def _mask_iban(value: str | None) -> str:
+    """Mask IBAN for display: show only last 4 chars."""
+    if not value or len(value) < 4:
+        return value or ""
+    clean = (value or "").replace(" ", "")
+    return "****" + clean[-4:]
+
+
+def _serialize_bank_account_summary(partner: Partner) -> dict:
+    """Return masked bank account info for support display."""
+    try:
+        bank = partner.bank_account
+        return {
+            "has_bank_account": True,
+            "account_holder_name": bank.account_holder_name or "",
+            "iban_masked": _mask_iban(bank.iban),
+        }
+    except PartnerBankAccount.DoesNotExist:
+        return {"has_bank_account": False}
+
+
+def _serialize_payout_request(pr: PartnerPayoutRequest) -> dict:
+    """Serialize a payout request for support display."""
+    return {
+        "id": str(pr.id),
+        "amount_requested": float(pr.amount_requested),
+        "status": pr.status,
+        "requested_at": _iso(pr.requested_at),
+        "requested_at_display": _fmt_display_date(pr.requested_at),
+        "paid_at": _iso(pr.paid_at),
+        "paid_at_display": _fmt_display_date(pr.paid_at),
+        "admin_notes": pr.admin_notes or "",
+    }
+
+
 def _serialize_partner_detail(partner: Partner) -> dict:
     base = _serialize_partner_list_item(partner)
     m = _partner_referred_metrics(partner)
     u = partner.user
     addr = _user_primary_address(u) if u else None
     partner_vehicles = _vehicles_for_user(u) if u else []
+
+    payout_requests = PartnerPayoutRequest.objects.filter(partner=partner).order_by("-requested_at")[:20]
+    open_payout_total = sum(
+        float(pr.amount_requested)
+        for pr in payout_requests
+        if pr.status in ("pending", "processing")
+    )
+
     return {
         **base,
         "user_id": str(u.id) if u else "",
@@ -688,6 +733,9 @@ def _serialize_partner_detail(partner: Partner) -> dict:
         "commission_total_earned": m["commission_total_earned"],
         "commission_pending": m["commission_pending"],
         "commission_paid": m["commission_paid"],
+        "bank_account_summary": _serialize_bank_account_summary(partner),
+        "payout_requests": [_serialize_payout_request(pr) for pr in payout_requests],
+        "open_payout_total": open_payout_total,
     }
 
 

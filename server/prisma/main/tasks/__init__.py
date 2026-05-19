@@ -25,6 +25,7 @@ from main.tasks.notifications.scheduled import (
 # Bookings / events
 from main.tasks.bookings.events import (
     publish_booking_cancelled,
+    publish_booking_reassigned,
     publish_booking_rescheduled,
     publish_review_to_detailer,
 )
@@ -63,6 +64,7 @@ __all__ = [
     'expire_old_transfers',
     'send_b2c_subscription_expiry_reminders',
     'publish_booking_cancelled',
+    'publish_booking_reassigned',
     'publish_booking_rescheduled',
     'publish_review_to_detailer',
     'send_welcome_email',

@@ -1,12 +1,4 @@
-import {
-  StyleSheet,
-  Text,
-  View,
-  Pressable,
-  Platform,
-  KeyboardAvoidingView,
-  StatusBar,
-} from "react-native";
+import { StyleSheet, View, Pressable, StatusBar } from "react-native";
 import React, { useState, useEffect } from "react";
 import {
   SafeAreaView,
@@ -107,8 +99,7 @@ export default function MainLayout() {
 
   return (
     <ExpoStripeProvider>
-      <KeyboardAvoidingView style={{ flex: 1 }}>
-        <SafeAreaView style={[styles.mainContainer, { backgroundColor }]}>
+      <SafeAreaView style={[styles.mainContainer, { backgroundColor }]}>
           <StatusBar
             barStyle={
               currentTheme === "dark" ? "light-content" : "dark-content"
@@ -206,8 +197,7 @@ export default function MainLayout() {
               </Pressable>
             </LinearGradientComponent>
           </BlurView>
-        </SafeAreaView>
-      </KeyboardAvoidingView>
+      </SafeAreaView>
     </ExpoStripeProvider>
   );
 }

@@ -120,15 +120,13 @@ class SupportGiftVouchersView(APIView):
         return getattr(self, self.patch_action_handler[action])(request, **kwargs)
 
     def _list_gift_vouchers(self, request, **kwargs):
-        qs = (
-            GiftVoucher.objects.select_related(
-                "assigned_user", "consumed_booking", "purchased_by", "payment_transaction"
-            )
-            .order_by("-created_at")
-        )
+        qs = GiftVoucher.objects.select_related(
+            "assigned_user", "consumed_booking", "purchased_by", "payment_transaction"
+        ).order_by("-created_at")
         rows = [_serialize_gift(v) for v in qs]
         return Response({"data": {"gift_vouchers": rows}})
 
+    # Get a specific Gift Voucher
     def _get_gift_voucher_detail(self, request, **kwargs):
         vid = request.query_params.get("gift_voucher_id")
         if not vid:

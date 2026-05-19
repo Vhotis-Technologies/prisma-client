@@ -277,43 +277,29 @@ class PartnerView(APIView):
         }, status=status.HTTP_200_OK)
 
     def get_invoices(self, request):
-        """Get invoice list for a single-account partner (only their own invoices)."""
+        """Get invoice list for a dealership partner (their own bulk pay-later orders)."""
         partner = self._get_partner(request)
-        if not partner:
-            return Response({'error': 'Partner profile not found or inactive'}, status=status.HTTP_403_FORBIDDEN)
+        if not partner and not getattr(request.user, 'is_dealership', False):
+            return Response(
+                {'error': 'Partner profile not found or inactive'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        from main.utils.bulk_invoice import serialize_bulk_order_invoice_list
 
         invoices_qs = (
             BulkOrder.objects.filter(
                 user=request.user,
                 payment_status__in=['invoice_later', 'succeeded', 'paid', 'failed', 'cancelled'],
             )
-            .select_related('user')
+            .select_related('user', 'branch')
             .order_by('-created_at')
         )
 
-        invoices = []
-        for bulk_order in invoices_qs:
-            invoices.append({
-                'id': str(bulk_order.id),
-                'booking_reference': bulk_order.booking_reference or '',
-                'invoice_id': bulk_order.stripe_invoice_id or None,
-                'payment_status': bulk_order.payment_status or '',
-                'total_amount': float(bulk_order.total_amount) if bulk_order.total_amount is not None else None,
-                'currency': 'eur',
-                'number_of_vehicles': bulk_order.number_of_vehicles or 0,
-                'created_at': bulk_order.created_at.isoformat() if bulk_order.created_at else None,
-                'created_by': {
-                    'id': str(request.user.id),
-                    'name': request.user.name,
-                    'email': request.user.email,
-                },
-                'branch': {
-                    'id': None,
-                    'name': None,
-                },
-            })
-
-        return Response({'invoices': invoices}, status=status.HTTP_200_OK)
+        return Response(
+            {'invoices': serialize_bulk_order_invoice_list(invoices_qs)},
+            status=status.HTTP_200_OK,
+        )
 
     def update_payout_details(self, request):
         """Create/update Stripe Connect ID and/or bank account. Accepts full values, returns masked."""
@@ -372,28 +358,40 @@ class PartnerView(APIView):
         ]
         return Response({'payout_requests': payout_requests}, status=status.HTTP_200_OK)
 
+
     def create_payout_request(self, request):
         """Partner requests a payout; support will process within 24 hours."""
         partner = self._get_partner(request)
         if not partner:
             return Response({'error': 'Partner profile not found or inactive'}, status=status.HTTP_403_FORBIDDEN)
 
-        pending = CommissionEarning.objects.filter(
-            partner=partner, status='pending'
+        # Check for existing pending/processing payout request
+        existing_request = PartnerPayoutRequest.objects.filter(
+            partner=partner, status__in=['pending', 'processing']
+        ).exists()
+        if existing_request:
+            return Response(
+                {'error': 'You already have a pending payout request. Please wait for it to be processed.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Sum approved earnings (not yet paid out)
+        approved_balance = CommissionEarning.objects.filter(
+            partner=partner, status='approved'
         ).aggregate(s=Sum('commission_amount'))['s'] or Decimal('0')
 
-        if pending <= 0:
+        if approved_balance <= 0:
             return Response(
-                {'error': 'No pending commission to request. Your balance is zero.'},
+                {'error': 'No approved commission to request. Your balance is zero.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         PartnerPayoutRequest.objects.create(
             partner=partner,
-            amount_requested=pending,
+            amount_requested=approved_balance,
             status='pending',
         )
         return Response({
             'message': 'Your payment request has been submitted. You will be paid within 24 hours.',
-            'amount_requested': float(pending),
+            'amount_requested': float(approved_balance),
         }, status=status.HTTP_201_CREATED)

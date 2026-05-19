@@ -14,7 +14,6 @@ import {
   TouchableOpacity,
   TextInput,
   ActivityIndicator,
-  KeyboardAvoidingView,
   Platform,
   Modal,
   Pressable,

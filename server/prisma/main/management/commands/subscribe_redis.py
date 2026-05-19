@@ -126,7 +126,13 @@ class Command(BaseCommand):
     def _process_message(self, msg_id, fields, channel_layer):
         event = fields.get("event")
         raw = fields.get("payload", "{}")
-        if event not in ("job_acceptance", "job_started", "job_completed"):
+        if event not in (
+            "job_acceptance",
+            "job_started",
+            "job_completed",
+            "job_reassigned",
+            "booking_reassigned",
+        ):
             ack(STREAM_JOB_EVENTS, CLIENT_GROUP, msg_id)
             return
         try:
@@ -180,6 +186,11 @@ class Command(BaseCommand):
             except Exception as e:
                 self.stderr.write(f"Job started message fallback: {e}")
                 return "Your valet service has started. The detailer is now working on your vehicle."
+
+        if event in ("booking_reassigned", "job_reassigned"):
+            self._handle_reassignment(event, data, booking_reference)
+            ack(STREAM_JOB_EVENTS, CLIENT_GROUP, msg_id)
+            return
 
         try:
             booking = BookedAppointment.objects.get(booking_reference=booking_reference)
@@ -477,6 +488,53 @@ class Command(BaseCommand):
         except Exception as e:
             self.stderr.write(f"Processing error: {e}")
             ack(STREAM_JOB_EVENTS, CLIENT_GROUP, msg_id)
+
+    def _handle_reassignment(self, event, data, booking_reference):
+        """Silent swap of ``assigned_detailers`` for a booking or every appointment in a bulk order.
+
+        Idempotent — if the new payload already matches what's stored we skip writes. We never
+        send customer emails / pushes here; reassignment is purely an operational change for the
+        client app's UI to reflect.
+        """
+        from main.views.payment import assign_detailers_to_booking
+
+        detailers = data.get("detailers") if isinstance(data, dict) else None
+        is_bulk = bool(isinstance(data, dict) and data.get("is_bulk"))
+        if not isinstance(detailers, list) or not detailers:
+            self.stderr.write(f"{event}: empty detailers payload for {booking_reference}")
+            return
+
+        def already_applied(current, incoming):
+            if not isinstance(current, list):
+                return False
+            current_ids = sorted([str((d or {}).get("id") or "") for d in current])
+            incoming_ids = sorted([str((d or {}).get("id") or "") for d in incoming])
+            return current_ids and current_ids == incoming_ids
+
+        if is_bulk:
+            bulk = BulkOrder.objects.filter(booking_reference=booking_reference).first()
+            if not bulk:
+                self.stderr.write(f"{event}: bulk order {booking_reference} not found")
+                return
+            if not already_applied(getattr(bulk, "assigned_detailers", []) or [], detailers):
+                bulk.assigned_detailers = detailers
+                bulk.save(update_fields=["assigned_detailers"])
+                self.stdout.write(f"{event}: updated bulk order {booking_reference}")
+            for appt in BookedAppointment.objects.filter(bulk_order=bulk):
+                if already_applied(appt.assigned_detailers or [], detailers):
+                    continue
+                assign_detailers_to_booking(appt, detailers)
+            return
+
+        booking = BookedAppointment.objects.filter(booking_reference=booking_reference).first()
+        if not booking:
+            self.stderr.write(f"{event}: booking {booking_reference} not found")
+            return
+        if already_applied(booking.assigned_detailers or [], detailers):
+            self.stdout.write(f"{event}: {booking_reference} already in sync, skipping")
+            return
+        assign_detailers_to_booking(booking, detailers)
+        self.stdout.write(f"{event}: updated booking {booking_reference}")
 
     def create_notification(self, user, title, type, status, message):
         try:
