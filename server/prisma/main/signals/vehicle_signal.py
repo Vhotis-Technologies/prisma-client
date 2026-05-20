@@ -19,6 +19,16 @@ from main.utils.bulk_notifications import try_send_bulk_client_confirmation_noti
 
 @receiver(post_save, sender=BookedAppointment)
 def handle_booking_completion(sender, instance, created, **kwargs):
+    """
+    On booking completion: advance B2C loyalty tier, grant activity bonus, notify user.
+
+    Quick-sparkle services are excluded from loyalty counters and activity-bonus wash counts.
+
+    Args:
+        sender: ``BookedAppointment`` model class.
+        instance: The saved appointment (any save where status is completed).
+        created: Unused; loyalty runs whenever status is completed.
+    """
     if instance.status != 'completed':
         return
 
@@ -110,6 +120,16 @@ def handle_booking_completion(sender, instance, created, **kwargs):
 
 @receiver(post_save, sender=BookedAppointment)
 def handle_booking_status_change(sender, instance, created, **kwargs):
+    """
+    When a booking is confirmed, send reminder push (or bulk confirmation package).
+
+    Bulk orders delegate to ``try_send_bulk_client_confirmation_notifications`` once per order.
+
+    Args:
+        sender: ``BookedAppointment`` model class.
+        instance: The saved appointment.
+        created: Skips insert; only handles transitions to confirmed.
+    """
     if not created and instance.status == 'confirmed':
         # Bulk: one confirmation package per BulkOrder (same atomic flag as subscribe_redis).
         if instance.bulk_order_id:
@@ -134,6 +154,14 @@ def handle_booking_status_change(sender, instance, created, **kwargs):
 
 @receiver(post_save, sender=BookedAppointment)
 def handle_booking_completion_create_event(sender, instance, created, **kwargs):
+    """
+    Create a ``VehicleEvent`` (wash) and link before/after images when a booking completes.
+
+    Args:
+        sender: ``BookedAppointment`` model class.
+        instance: The saved appointment.
+        created: Only on update to completed with a vehicle attached.
+    """
     if not created and instance.status == 'completed' and instance.vehicle:
         if not VehicleEvent.objects.filter(booking=instance).exists():
             if instance.appointment_date:

@@ -1,3 +1,6 @@
+/**
+ * Animated modal shell: fullscreen, bottom sheet, or centered dialog.
+ */
 import {
   Modal,
   Pressable,
@@ -26,6 +29,7 @@ interface ModalServicesProps {
   maxHeight?: number;
 }
 
+/** Renders modal content with theme-aware header and scroll body. */
 const ModalServices = ({
   visible,
   onClose,
@@ -98,6 +102,7 @@ const ModalServices = ({
     }
   }, [visible, modalType]);
 
+  /** Pick layout (fullscreen / sheet / center) and render children. */
   const renderModalContent = () => {
     switch (modalType) {
       case "fullscreen":

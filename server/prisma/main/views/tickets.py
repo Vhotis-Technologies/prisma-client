@@ -19,6 +19,7 @@ class TicketView(APIView):
 
     def post(self, request, *args, **kwargs):
         """Create a new ticket. URL: /api/v1/tickets/create/"""
+        # Path-based routing (not action kwarg)
         if "create" not in request.path:
             return Response({"error": "Invalid path"}, status=status.HTTP_400_BAD_REQUEST)
         return self._create(request)
@@ -49,6 +50,7 @@ class TicketView(APIView):
                 status="pending",
             )
             preview = (description[:200] + "…") if len(description) > 200 else description
+            # Side effect: confirmation email (async; failure logged only)
             try:
                 send_ticket_created_email.delay(
                     request.user.email,

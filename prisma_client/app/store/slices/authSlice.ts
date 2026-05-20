@@ -17,18 +17,23 @@ const authSlice = createSlice({
   name: "auth",
   initialState,
   reducers: {
+    /** Set authenticated user profile in state. */
     setUser: (state, action) => {
       state.user = action.payload;
     },
+    /** Toggle auth loading flag (e.g. during login). */
     setIsLoading: (state, action) => {
       state.isLoading = action.payload;
     },
+    /** Set whether the user is logged in. */
     setIsAuthenticated: (state, action) => {
       state.isAuthenticated = action.payload;
     },
+    /** Store JWT access token. */
     setAccessToken: (state, action) => {
       state.access = action.payload;
     },
+    /** Store JWT refresh token. */
     setRefreshToken: (state, action) => {
       state.refresh = action.payload;
     },
@@ -46,6 +51,7 @@ const authSlice = createSlice({
       (state.signUpData as Record<string, unknown>)[field] = value;
     },
 
+    /** Apply new access/refresh tokens after silent refresh. */
     refreshTokenSuccess: (state, action) => {
       state.access = action.payload.access;
       state.refresh = action.payload.refresh;

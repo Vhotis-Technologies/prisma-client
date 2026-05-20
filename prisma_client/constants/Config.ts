@@ -3,7 +3,7 @@
  */
 import Constants from "expo-constants";
 
-// Function to get config with fallbacks
+/** Read Expo extra config (manifest / expoConfig) with empty fallback. */
 const getConfig = () => {
   const config =
     Constants.expoConfig?.extra || (Constants.manifest as any)?.extra || {};
@@ -37,13 +37,13 @@ export function getStripePublishableKey(): string | undefined {
 
 export const STRIPE_PUBLISHABLE_KEY = getStripePublishableKey();
 
-// Stripe Configuration (raw keys; prefer STRIPE_PUBLISHABLE_KEY / getStripePublishableKey in UI)
+/** Raw Stripe keys from app config (prefer getStripePublishableKey in UI). */
 export const STRIPE_CONFIG = {
   publishableKey: config.stripe?.publishableKey,
   productionPublishableKey: config.stripe?.productionPublishableKey,
 };
 
-// API Configuration with fallbacks for testing
+/** Customer, detailer, and websocket base URLs from app config. */
 export const API_CONFIG = {
   detailerAppUrl: config.detailer_app_url,
   customerAppUrl: config.customer_app_url,
@@ -62,11 +62,12 @@ export const API_CONFIG = {
 // - Places API (New)
 // - Places API (Legacy) - for autocomplete
 // - Geocoding API - for place details
+/** Google Places / Geocoding API key from app config. */
 export const KEY_CONFIGS = {
   googleApiKeys: config.googleApiKeys || config.googoleApiKeys, // Support both correct and typo'd config keys
 };
 
-// App Configuration
+/** App name, version, deep-link scheme, and EAS project id. */
 export const APP_CONFIG = {
   name: Constants.expoConfig?.name || "Prisma Client",
   version: Constants.expoConfig?.version || "1.0.0",

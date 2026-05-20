@@ -42,10 +42,15 @@ import traceback
 # Initialize Stripe with your secret key
 stripe.api_key = settings.STRIPE_SECRET_KEY
 
-""" The view is used to define the structure of the booking api for the client.  """
 class EventsView(APIView):
+    """
+    Booking catalog and lifecycle: services, valets, quotes, book/cancel/reschedule, payment methods.
+
+    Action-routed via ``events/<action>/``. Primary paid flow uses payment view + webhook;
+    ``book_appointment`` is the legacy direct-create path.
+    """
+
     permission_classes = [IsAuthenticated]
-    """ Action handlers designed to route the url to the appropriate function """
     action_handlers = {
         'get_service_type' : 'get_service_type',
         'get_valet_type' : 'get_valet_type',

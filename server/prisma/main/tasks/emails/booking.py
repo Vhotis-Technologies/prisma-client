@@ -1,3 +1,8 @@
+"""
+Celery tasks and helpers for booking confirmation and 6-hour reminder emails.
+
+Uses Microsoft Graph mail and ``email_legal_context`` for footer links.
+"""
 from celery import shared_task
 from django.template.loader import render_to_string
 from datetime import datetime
@@ -8,6 +13,25 @@ from main.utils.legal_urls import email_legal_context
 
 @shared_task
 def send_booking_confirmation_email(user_email, customer_name, booking_reference, vehicle_make, vehicle_model, booking_date, start_time, service_type_name, valet_type_name, total_cost, detailer_name):
+    """
+    Send single-booking confirmation email after detailer acceptance.
+
+    Args:
+        user_email: Recipient address.
+        customer_name: Customer display name.
+        booking_reference: Booking ref for subject line.
+        vehicle_make: Vehicle make string.
+        vehicle_model: Vehicle model string.
+        booking_date: ``date`` for appointment.
+        start_time: ``time`` for appointment start.
+        service_type_name: Service label.
+        valet_type_name: Valet tier label.
+        total_cost: Decimal or numeric total.
+        detailer_name: Assigned detailer name.
+
+    Returns:
+        str: Success or failure message.
+    """
     subject = f'Booking Confirmation - #{booking_reference}'
     context = email_legal_context(
         year=booking_date.year if booking_date else None,
@@ -31,7 +55,15 @@ def send_booking_confirmation_email(user_email, customer_name, booking_reference
 
 
 def _bulk_order_date_time(order_data):
-    """Parse appointment date and start_time from bulk order_data. Returns (date_str, time_str)."""
+    """
+    Parse appointment date and start_time from bulk ``order_data`` JSON.
+
+    Args:
+        order_data: Dict from ``BulkOrder.order_data``.
+
+    Returns:
+        tuple: ``(date_str, time_str)`` formatted for email templates.
+    """
     date_str = ''
     time_str = ''
     d = order_data.get('date') or order_data.get('appointment_date', '')
@@ -57,7 +89,15 @@ def _bulk_order_date_time(order_data):
 
 
 def _bulk_service_valet_names(order_data):
-    """Get service_type_name and valet_type_name from order_data."""
+    """
+    Extract service and valet display names from bulk ``order_data``.
+
+    Args:
+        order_data: Dict from ``BulkOrder.order_data``.
+
+    Returns:
+        tuple: ``(service_name, valet_name)`` with sensible defaults.
+    """
     st = order_data.get('service_type')
     vt = order_data.get('valet_type')
     service_name = (st.get('name') if isinstance(st, dict) else (st if isinstance(st, str) else '')) or 'Valet'
@@ -67,7 +107,15 @@ def _bulk_service_valet_names(order_data):
 
 @shared_task
 def send_bulk_booking_confirmation_email(bulk_order_id):
-    """Send a single confirmation email for a bulk order (multiple vehicles)."""
+    """
+    Send one confirmation email for an entire bulk order (multiple vehicles).
+
+    Args:
+        bulk_order_id: Primary key of ``BulkOrder``.
+
+    Returns:
+        str: Success or failure message.
+    """
     try:
         bulk_order = BulkOrder.objects.get(id=bulk_order_id)
     except BulkOrder.DoesNotExist:
@@ -107,8 +155,14 @@ def send_bulk_booking_confirmation_email(bulk_order_id):
 def deliver_single_booking_reminder_6h_email(appointment):
     """
     Send the 6-hour reminder email for a standard (non-bulk) booking.
-    Caller is responsible for allow_email_notifications and dedupe flags.
-    Returns True if an email was handed to the mail backend.
+
+    Caller must enforce ``allow_email_notifications`` and dedupe flags before calling.
+
+    Args:
+        appointment: ``BookedAppointment`` with user, vehicle, detailer loaded.
+
+    Returns:
+        bool: True if mail was handed to Graph; False when user/email missing.
     """
     user = appointment.user
     if not user or not user.email:
@@ -140,7 +194,13 @@ def deliver_single_booking_reminder_6h_email(appointment):
 def deliver_bulk_booking_reminder_6h_email(bulk_order, sample_appointment):
     """
     Send one 6-hour reminder email for an entire bulk order.
-    sample_appointment: any linked BookedAppointment (same date/time as bulk window).
+
+    Args:
+        bulk_order: Parent ``BulkOrder``.
+        sample_appointment: Any child appointment (date/time fallback for template).
+
+    Returns:
+        bool: True if mail was sent; False when user/email missing.
     """
     user = bulk_order.user
     if not user or not user.email:

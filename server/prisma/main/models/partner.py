@@ -1,4 +1,10 @@
-"""Partner, referral attribution, commission - partner related models."""
+"""
+Partner referral program: profiles, attributions, commissions, payouts, and metrics.
+
+Partners earn commission on referred users' bookings. Support marks manual bank payouts via
+:class:`PartnerPayoutRequest`; earnings move pending → approved → paid with audit in
+:class:`CommissionAdminLog`.
+"""
 import random
 import string
 import uuid
@@ -10,6 +16,8 @@ from .vehicle import BookedAppointment
 
 
 class Partner(models.Model):
+    """Dealership/garage partner profile linked 1:1 to a :class:`~main.models.user.User`."""
+
     PARTNER_TYPE_CHOICES = [
         ('dealership', 'Dealership'),
         ('garage', 'Garage'),
@@ -23,7 +31,6 @@ class Partner(models.Model):
     is_active = models.BooleanField(default=True)
     commission_rate = models.DecimalField(max_digits=5, decimal_places=2, default=5.00)
     min_payout_threshold = models.DecimalField(max_digits=10, decimal_places=2, default=50.00)
-    stripe_connect_account_id = models.CharField(max_length=255, blank=True, null=True)
     business_address = models.CharField(max_length=255, blank=True)
     business_postcode = models.CharField(max_length=20, blank=True)
     business_city = models.CharField(max_length=100, blank=True)
@@ -34,11 +41,13 @@ class Partner(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def _generate_referral_code(self):
+        """Build a unique ``DP`` + 8-char alphanumeric referral code candidate."""
         prefix = 'DP'
         suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
         return f"{prefix}{suffix}"
 
     def save(self, *args, **kwargs):
+        """Assign ``referral_code`` on first save if empty (collision-safe loop)."""
         if not self.referral_code:
             while True:
                 code = self._generate_referral_code()
@@ -52,6 +61,8 @@ class Partner(models.Model):
 
 
 class ReferralAttribution(models.Model):
+    """Permanent link between a referred consumer and the partner who acquired them."""
+
     SOURCE_CHOICES = [
         ('user', 'User'),
         ('partner', 'Partner'),
@@ -79,6 +90,8 @@ class ReferralAttribution(models.Model):
 
 
 class CommissionPayout(models.Model):
+    """Batch payout period for a partner (legacy Stripe payout tracking)."""
+
     STATUS_CHOICES = [
         ('pending', 'Pending'),
         ('processing', 'Processing'),
@@ -102,6 +115,8 @@ class CommissionPayout(models.Model):
 
 
 class CommissionEarning(models.Model):
+    """Commission line item for one referred user's completed booking."""
+
     STATUS_CHOICES = [
         ('pending', 'Pending'),
         ('approved', 'Approved'),
@@ -132,6 +147,8 @@ class CommissionEarning(models.Model):
 
 
 class PartnerMetricsCache(models.Model):
+    """Denormalized referral/revenue/commission totals for fast partner dashboard reads."""
+
     partner = models.OneToOneField(Partner, on_delete=models.CASCADE, related_name='metrics_cache')
     total_referred_users = models.IntegerField(default=0)
     active_referred_users = models.IntegerField(default=0)
@@ -145,6 +162,8 @@ class PartnerMetricsCache(models.Model):
 
 
 class CommissionAdminLog(models.Model):
+    """Audit trail when support or admin changes commission earning status/amount."""
+
     ACTION_CHOICES = [
         ('reverse', 'Reversed'),
         ('adjust', 'Adjusted'),

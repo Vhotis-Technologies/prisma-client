@@ -16,6 +16,10 @@ const axiosInstance = axios.create({
   timeout: 30000,
 });
 
+/**
+ * RTK Query base query: attaches Bearer token, handles FormData via fetch on native,
+ * refreshes access token on 401, and retries the original request.
+ */
 export const axiosBaseQuery = (): BaseQueryFn => {
   return async ({ url, method, data, params, headers }, api, extraOptions) => {
     try {

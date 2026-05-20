@@ -1,9 +1,26 @@
+"""
+Celery task for Expo push notifications to mobile clients.
+
+``send_push_notification`` loads the user, respects opt-out and token presence,
+normalizes payload values to strings (Expo requirement), and publishes via
+``exponent_server_sdk``.
+"""
 from celery import shared_task
 from exponent_server_sdk import PushClient, PushMessage
 
 
 def _normalize_push_data(type_or_data, title, message):
-    """Expo requires all push data values to be strings."""
+    """
+    Build Expo-compatible push ``data`` dict with string values only.
+
+    Args:
+        type_or_data: Either a notification type string or a dict of custom fields.
+        title: Push title (also copied into data when missing).
+        message: Push body (also copied into data when missing).
+
+    Returns:
+        dict: String-keyed payload for ``PushMessage.data``.
+    """
     if isinstance(type_or_data, dict):
         data = {str(k): "" if v is None else str(v) for k, v in type_or_data.items()}
     else:
@@ -15,7 +32,18 @@ def _normalize_push_data(type_or_data, title, message):
 
 @shared_task
 def send_push_notification(user_id, title, message, type):
-    """Send a push notification to the user."""
+    """
+    Send a single Expo push notification to one user asynchronously.
+
+    Args:
+        user_id: Primary key of ``User``.
+        title: Notification title shown on device.
+        message: Notification body text.
+        type: Either a type string or dict merged into push data.
+
+    Returns:
+        str: Human-readable success or failure reason (Celery result).
+    """
     try:
         from main.models import User
         user = User.objects.get(id=user_id)
@@ -37,6 +65,7 @@ def send_push_notification(user_id, title, message, type):
             )
         )
 
+        # Validate ticket when the SDK exposes validate_response.
         if response is not None:
             validate = getattr(response, "validate_response", None)
             if callable(validate):

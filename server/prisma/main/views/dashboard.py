@@ -48,8 +48,14 @@ def _vehicle_media_image_url(vehicle):
 
 
 class DashboardView(APIView):
+    """
+    Client home dashboard: upcoming bookings, recent service, stats, reviews, detailer map, perks.
+
+    Action-routed via ``dashboard/<action>/``. Branch admins see branch-wide data unless
+    ``scope=my_bookings`` is set. Bulk orders appear as single upcoming items.
+    """
+
     permission_classes = [IsAuthenticated]
-    """ Action handlers designed to route the url to the appropriate function """
     action_handlers = {
         'get_upcoming_appointments': '_get_upcoming_appointments',
         'cancel_appointment': '_cancel_appointment',
@@ -357,6 +363,7 @@ class DashboardView(APIView):
 
             # Sort combined list by booking_date then start_time
             def _sort_key(item):
+                """Tuple key for chronological sort (date, then HH:MM start)."""
                 d = item.get('booking_date') or '9999-99-99'
                 t = item.get('start_time') or '00:00'
                 if isinstance(t, str) and len(t) >= 5:

@@ -1,3 +1,6 @@
+/**
+ * Stripe provider wrapper: publishable key and return URL for native payments.
+ */
 import { Platform } from "react-native";
 import { StripeProvider } from "@stripe/stripe-react-native";
 import { loadStripe } from "@stripe/stripe-js";
@@ -11,6 +14,7 @@ const publishableKey = STRIPE_PUBLISHABLE_KEY ?? "";
 // Initialize Stripe for web
 const stripePromise = loadStripe(publishableKey);
 
+/** Wraps children with @stripe/stripe-react-native StripeProvider. */
 export default function ExpoStripeProvider(
   props: Omit<
     React.ComponentProps<typeof StripeProvider>,

@@ -1,8 +1,16 @@
-""" This model is specifically for all entries of a b2c users subscription """
+"""
+B2C consumer subscription catalog and billing.
+
+Tiers define marketing copy and reference prices; :class:`B2CSubcriptionPlan` rows are the
+billable SKUs (monthly/yearly). Active subscriptions live on :class:`B2CSubcription` with
+Stripe ids and complimentary Quick Sparkle usage tracked per period.
+"""
 import uuid
 from django.db import models
 
+
 class B2CSubcriptionTier(models.Model):
+    """Named subscription tier (Lite, Pro, Spectrum, etc.) with list pricing and feature bullets."""
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=100, unique=True)
     tagLine = models.CharField(max_length=255, blank=True, null=True)
@@ -21,6 +29,8 @@ class B2CSubcriptionTier(models.Model):
 
 
 class B2CSubcriptionPlan(models.Model):
+    """Concrete plan row: tier + billing cycle + price; entitlements derived from tier name."""
+
     BILLING_CYCLE_CHOICES = [('monthly', 'Monthly'), ('yearly', 'Yearly')]
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     tier = models.ForeignKey(B2CSubcriptionTier, on_delete=models.CASCADE, related_name='plans')
@@ -56,6 +66,8 @@ class B2CSubcriptionPlan(models.Model):
 
 
 class B2CSubcription(models.Model):
+    """A user's active or historical B2C subscription instance (Stripe-backed)."""
+
     STATUS_CHOICES = [
         ('active', 'Active'),
         ('pending', 'Pending'),
@@ -97,6 +109,8 @@ class B2CSubcription(models.Model):
 
 
 class B2CSubcriptionBilling(models.Model):
+    """Invoice/charge row for a B2C subscription renewal or initial payment."""
+
     STATUS_CHOICES = [
         ('paid', 'Paid'),
         ('pending', 'Pending'),

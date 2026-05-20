@@ -178,7 +178,7 @@ export const useImageDownload = () => {
   return { download, share };
 };
 
-// Satisfy Expo Router: this file lives under app/ but is a util module, not a screen.
+/** Expo Router no-op route (util module, not a screen). */
 export default function ImageDownloadRoute() {
   return null;
 }

@@ -1,9 +1,20 @@
-"""Serialize BulkOrder rows for invoice list APIs."""
+"""Serialize ``BulkOrder`` rows for fleet invoice list APIs (Stripe invoice metadata)."""
 
 
 def serialize_bulk_order_invoice_list(bulk_orders):
+    """
+    Map a queryset or iterable of ``BulkOrder`` instances to API-friendly dicts.
+
+    Args:
+        bulk_orders: Iterable of ``BulkOrder`` (typically with ``user`` and ``branch`` prefetched).
+
+    Returns:
+        list[dict]: Each entry has id, booking_reference, invoice_id, payment_status,
+        total_amount, currency, number_of_vehicles, created_at, created_by, and branch.
+    """
     invoices = []
     for bulk_order in bulk_orders:
+        # One list row per bulk order; amounts exposed as float for JSON clients.
         invoices.append({
             'id': str(bulk_order.id),
             'booking_reference': bulk_order.booking_reference or '',

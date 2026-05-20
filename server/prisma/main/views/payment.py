@@ -1,13 +1,28 @@
 """
 Payment and Stripe webhook views for Prisma Car Care.
 
-This module handles:
-- create_payment_sheet: Creates PendingBooking and Stripe PaymentIntent (or free Quick Sparkle booking).
-- create_reschedule_fee_payment_sheet: PaymentIntent for late reschedule; webhook applies slot and records reschedule_fee transaction.
-- Stripe webhook (payment_intent.succeeded): Creates BookedAppointment or BulkOrder from PendingBooking,
-  sends job to detailer app, creates PaymentTransaction, then deletes PendingBooking.
-- create_booking_from_pending: Shared helper to create BookedAppointment from PendingBooking.booking_data.
-- build_detailer_payload_from_booking_data: Builds detailer app payload when client does not send it.
+**PaymentView** (authenticated, action-routed via URL ``action`` kwarg):
+- ``create_payment_sheet`` — PendingBooking + PaymentIntent, or zero-amount paths (winner/gift voucher,
+  complimentary Quick Sparkle) that book immediately without Stripe.
+- ``create_reschedule_fee_payment_sheet`` — late reschedule fee PaymentIntent.
+- ``create_gift_voucher_payment_sheet`` — purchase a gift voucher for a recipient email.
+- ``create_bulk_order_invoice_later`` — BulkOrder with Stripe Invoice (pay later) + detailer bulk job.
+- ``apply_winner_voucher`` / ``apply_gift_voucher`` — validate codes and return checkout amounts.
+- ``get_bulk_invoice_checkout`` / ``get_my_bulk_invoices`` — fleet/partner bulk invoice pay & list.
+- ``confirm_payment_intent`` / ``check_payment_status`` / ``get_refund_status`` — polling and support.
+
+**StripeWebhookView** (unsigned POST, signature-verified):
+- ``payment_intent.succeeded`` — booking/bulk fulfillment, subscriptions, gift voucher, reschedule fee.
+- ``payment_intent.payment_failed`` — mark PendingBooking failed.
+- ``invoice.*`` — subscription renewals, bulk invoice paid, reminders (upcoming / will_be_due / overdue).
+- ``customer.subscription.*`` — trial end, plan/status updates, cancellation.
+- ``charge.*`` / ``refund.failed`` / ``charge.dispute.created`` — refunds, failures, disputes.
+
+**Module helpers** (shared by PaymentView and webhook):
+- ``create_booking_from_pending``, ``build_detailer_payload_from_booking_data``,
+  ``build_bulk_detailer_payload``, ``try_create_booking_on_detailer``,
+  ``try_create_bulk_booking_on_detailer``, ``assign_detailer(s)_to_booking``,
+  ``send_booking_to_detailer``, ``sync_bulk_order_paid_from_stripe_invoice``.
 
 See docs/BOOKING_FLOW.md for the full booking flow.
 """
@@ -22,7 +37,10 @@ from datetime import datetime, timedelta, timezone as dt_timezone
 from django.utils import timezone
 from django.db import transaction
 from django.db.models import Q
+from django.utils.decorators import method_decorator
+from django_ratelimit.decorators import ratelimit
 from rest_framework.views import APIView
+from main.utils.ratelimit_helpers import rate_limit_json_response
 from main.models import (
     GiftVoucher,
     User, BookedAppointment, PaymentTransaction, RefundRecord, Address, PendingBooking, BulkOrder,
@@ -73,7 +91,18 @@ logger = logging.getLogger(__name__)
 
 
 def _stripe_nested_id(value):
-    """Normalize Stripe id fields from API objects or webhook dicts (str, dict with id, or object with id)."""
+    """
+    Normalize Stripe id fields from API objects or webhook dicts.
+
+    Stripe may return an id as a plain string, a nested dict ``{'id': '...'}``, or an object
+    with an ``id`` attribute (e.g. expanded PaymentIntent on Invoice).
+
+    Args:
+        value: Stripe id field (str, dict, object, or None).
+
+    Returns:
+        str | None: The id string, or None if not present.
+    """
     if value is None:
         return None
     if isinstance(value, str):
@@ -84,6 +113,15 @@ def _stripe_nested_id(value):
 
 
 def _stripe_object_to_dict(obj):
+    """
+    Convert a Stripe API object or webhook payload fragment to a plain dict.
+
+    Args:
+        obj: StripeObject, dict, or None.
+
+    Returns:
+        dict: Empty dict if obj is None; otherwise dict representation suitable for .get().
+    """
     if obj is None:
         return {}
     if isinstance(obj, dict):
@@ -405,7 +443,22 @@ def build_detailer_payload_from_booking_data(booking_data, user, booking_referen
 
 
 def build_bulk_detailer_payload(booking_data, user, booking_reference):
-    """Build payload for detailer create_bulk_booking from bulk booking_data or order_data."""
+    """
+    Build the flat payload expected by the detailer app for bulk (fleet) jobs.
+
+    Resolves address from dict, address_id (Address or Branch), service/valet names,
+    date window, vehicle count, and client contact fields.
+
+    Args:
+        booking_data: Dict with address/address_id, service_type, valet_type, date,
+            start/end or best_start_time/estimated_finish_time, number_of_vehicles, etc.
+        user: User instance (client_name, client_phone).
+        booking_reference: Bulk booking reference string.
+
+    Returns:
+        dict | None: Payload for POST ``/api/v1/booking/create_bulk_booking/``, or None if
+            address cannot be resolved.
+    """
     if not booking_data or not isinstance(booking_data, dict):
         return None
     address_obj = booking_data.get('address')
@@ -521,8 +574,16 @@ def build_bulk_detailer_payload(booking_data, user, booking_reference):
 
 def try_create_bulk_booking_on_detailer(pending_booking_or_bulk_order):
     """
-    Call detailer app create_bulk_booking. Accepts PendingBooking (booking_data is_bulk) or BulkOrder (order_data).
-    Returns (True, assigned_detailers_list) on success (list may be empty), (False, error_message) on failure.
+    POST bulk job to the detailer app (create_bulk_booking).
+
+    Accepts either a PendingBooking (uses ``booking_data``) or a BulkOrder (uses ``order_data``).
+
+    Args:
+        pending_booking_or_bulk_order: PendingBooking or BulkOrder with user and booking_reference.
+
+    Returns:
+        tuple[bool, list | str]: ``(True, assigned_detailers)`` on HTTP 200/201 (list may be empty),
+            or ``(False, error_message)`` on failure or missing configuration.
     """
     import requests
     if hasattr(pending_booking_or_bulk_order, 'booking_data'):
@@ -562,10 +623,18 @@ def try_create_bulk_booking_on_detailer(pending_booking_or_bulk_order):
 
 def try_create_booking_on_detailer(pending_booking):
     """
-    Attempt to create the job on the detailer app (POST only). Used to try detailer first
-    before creating the client booking, so we can refund on slot conflict.
-    Returns (True, detailer_info) on success (detailer_info may be None if not in response),
-    or (False, error_message) on failure.
+    Attempt to create a single job on the detailer app before confirming payment.
+
+    Uses ``pending_booking.detailer_booking_data`` when present; otherwise builds payload
+    via ``build_detailer_payload_from_booking_data``. Called before ``create_booking_from_pending``
+    so a slot conflict can trigger a refund without creating a client-side appointment.
+
+    Args:
+        pending_booking: PendingBooking with booking_data, detailer_booking_data, and reference.
+
+    Returns:
+        tuple[bool, list | str]: ``(True, assigned_detailers)`` on HTTP 200/201 (list of detailer dicts,
+            possibly empty), or ``(False, error_message)`` on failure.
     """
     import requests
 
@@ -624,8 +693,17 @@ def try_create_booking_on_detailer(pending_booking):
 
 def assign_detailer_to_booking(booking, detailer_info):
     """
-    Assign a single detailer to a booking from detailer info dict (name, phone, rating, detailer_id).
-    Same logic as subscribe_redis job_acceptance so the UI shows the detailer immediately.
+    Assign one detailer to a booking from the detailer API response.
+
+    Thin wrapper around ``assign_detailers_to_booking`` for a single detailer dict.
+    Mirrors subscribe_redis job_acceptance so the client UI shows the detailer immediately.
+
+    Args:
+        booking: BookedAppointment to update.
+        detailer_info: Dict with at least ``phone``; optional name, rating, id/detailer_id, image.
+
+    Returns:
+        None
     """
     if not detailer_info or not isinstance(detailer_info, dict) or not detailer_info.get("phone"):
         return
@@ -634,8 +712,17 @@ def assign_detailer_to_booking(booking, detailer_info):
 
 def assign_detailers_to_booking(booking, assigned_detailers_list):
     """
-    Assign one or more detailers to a booking (express = 2, standard = 1).
-    Sets booking.assigned_detailers (list of dicts) and booking.detailer (first profile).
+    Assign one or more detailers to a booking (express may have 2, standard 1).
+
+    Upserts DetailerProfile rows by normalized phone, sets ``booking.assigned_detailers``
+    (list of display dicts) and ``booking.detailer`` to the first profile.
+
+    Args:
+        booking: BookedAppointment to update.
+        assigned_detailers_list: List of detailer dicts from detailer app (name, phone, rating, id).
+
+    Returns:
+        None
     """
     if not assigned_detailers_list or not isinstance(assigned_detailers_list, list):
         return
@@ -685,15 +772,35 @@ def assign_detailers_to_booking(booking, assigned_detailers_list):
 
 def send_booking_to_detailer(pending_booking, booking):
     """
-    Send booking data to detailer app after payment validation.
-    Shared by PaymentView (free Quick Sparkle) and StripeWebhookView.
+    Send booking data to the detailer app after payment validation.
+
+    Shared by PaymentView (free Quick Sparkle path) and legacy flows. Prefer
+    ``try_create_booking_on_detailer`` before creating the appointment when slot
+    availability must be checked first.
+
+    Args:
+        pending_booking: PendingBooking with detailer payload fields.
+        booking: BookedAppointment (unused by implementation; kept for call-site compatibility).
+
+    Returns:
+        bool: True if detailer app accepted the job, False otherwise.
     """
     success, _ = try_create_booking_on_detailer(pending_booking)
     return success
 
 
 def _user_can_pay_bulk_invoice(user, bulk_order):
-    """Fleet owner (same fleet), booker, or branch admin for orders on their branch."""
+    """
+    Whether the user may open checkout for a fleet/partner bulk invoice.
+
+    Args:
+        user: Authenticated User.
+        bulk_order: BulkOrder with user_id, fleet_id, branch_id.
+
+    Returns:
+        bool: True if user is the booker, fleet owner of the order's fleet, or branch admin
+            for the order's branch.
+    """
     if bulk_order.user_id == user.id:
         return True
     if getattr(user, "is_fleet_owner", False):
@@ -708,13 +815,36 @@ def _user_can_pay_bulk_invoice(user, bulk_order):
 
 
 def _stripe_inv_field(invoice, key, default=None):
+    """
+    Read a field from a Stripe Invoice whether it is a dict or StripeObject.
+
+    Args:
+        invoice: Invoice dict (webhook) or stripe.Invoice object.
+        key: Field name (e.g. ``status``, ``hosted_invoice_url``, ``amount_paid``).
+        default: Value if the field is missing.
+
+    Returns:
+        Any: Field value or default.
+    """
     if isinstance(invoice, dict):
         return invoice.get(key, default)
     return getattr(invoice, key, default)
 
 
 def sync_bulk_order_paid_from_stripe_invoice(bulk_order, invoice):
-    """If Stripe invoice is paid, align BulkOrder and PaymentTransaction (idempotent)."""
+    """
+    If the Stripe invoice is paid, align BulkOrder and PaymentTransaction (idempotent).
+
+    Used when the customer pays via hosted invoice URL before the webhook arrives, or from
+    reminder handlers that re-fetch invoice state.
+
+    Args:
+        bulk_order: BulkOrder to update when invoice status is ``paid``.
+        invoice: Stripe Invoice dict or object.
+
+    Returns:
+        None
+    """
     if _stripe_inv_field(invoice, "status") != "paid":
         return
     if bulk_order.payment_status == "succeeded":
@@ -744,6 +874,26 @@ def sync_bulk_order_paid_from_stripe_invoice(bulk_order, invoice):
 
 
 class PaymentView(APIView):
+    """
+    Authenticated payment API routed by URL ``action`` (see ``action_handlers``).
+
+    ``get`` and ``post`` look up ``kwargs['action']`` and delegate to the matching handler.
+    Invalid actions return 400. Rate limits apply at the URL layer where configured.
+
+    Actions:
+        create_payment_sheet (POST) — Stripe Payment Sheet for a booking or bulk pay-now;
+            zero-amount winner/gift/Quick Sparkle paths skip Stripe and book immediately.
+        create_reschedule_fee_payment_sheet (POST) — PaymentIntent for late reschedule fee.
+        create_gift_voucher_payment_sheet (POST) — PaymentIntent to purchase a gift voucher.
+        create_bulk_order_invoice_later (POST) — BulkOrder + Stripe Invoice (email pay later).
+        apply_winner_voucher (POST) — Validate winner code; return discount and amount due.
+        apply_gift_voucher (POST) — Validate gift voucher code; return discount and amount due.
+        get_bulk_invoice_checkout (GET) — Hosted invoice URL; sync paid status from Stripe.
+        get_my_bulk_invoices (GET) — List bulk orders / invoices for the current user.
+        get_refund_status (GET) — RefundRecord list for a booking_reference.
+        check_payment_status (GET) — PaymentTransaction or pending refund-by-slot status.
+        confirm_payment_intent (POST) — Poll whether webhook created PaymentTransaction.
+    """
     permission_classes = [IsAuthenticated]
 
     action_handlers = {
@@ -761,7 +911,16 @@ class PaymentView(APIView):
     }
 
     def get(self, request, *args, **kwargs):
-        """Route GET by action (get_refund_status, check_payment_status). Returns 400 if action invalid."""
+        """
+        Route GET requests by ``action`` URL segment.
+
+        Args:
+            request: DRF request; query/body params depend on the handler.
+            kwargs: Must include ``action`` matching a key in ``action_handlers``.
+
+        Returns:
+            Response: Handler result, or 400 if action is unknown.
+        """
         action = kwargs.get('action')
         if action not in self.action_handlers:
             return Response({'error': 'Invalid action'}, status=status.HTTP_400_BAD_REQUEST)
@@ -769,7 +928,16 @@ class PaymentView(APIView):
         return handler(request)
     
     def post(self, request, *args, **kwargs):
-        """Route POST by action (create_payment_sheet, create_bulk_order_invoice_later, confirm_payment_intent). Returns 400 if action invalid."""
+        """
+        Route POST requests by ``action`` URL segment.
+
+        Args:
+            request: DRF request with JSON body per handler.
+            kwargs: Must include ``action`` matching a key in ``action_handlers``.
+
+        Returns:
+            Response: Handler result, or 400 if action is unknown.
+        """
         action = kwargs.get('action')
         if action not in self.action_handlers:
             return Response({'error': 'Invalid action'}, status=status.HTTP_400_BAD_REQUEST)
@@ -777,7 +945,16 @@ class PaymentView(APIView):
         return handler(request)
 
     def apply_winner_voucher(self, request):
-        """Validate a winner discount code for the current user; returns amounts for checkout."""
+        """
+        Validate a winner discount code for the current user and return checkout amounts.
+
+        Args:
+            request.data: ``code``, ``pre_voucher_total_amount`` (required).
+
+        Returns:
+            Response: 200 with valid, voucher_type, discount_applied, amount_due, amount_due_cents;
+                400 on missing fields, invalid code, expiry, or ineligible user.
+        """
         code = request.data.get('code')
         pre_raw = request.data.get('pre_voucher_total_amount')
         if not code or pre_raw is None:
@@ -819,7 +996,16 @@ class PaymentView(APIView):
         }, status=status.HTTP_200_OK)
 
     def apply_gift_voucher(self, request):
-        """Validate a paid gift voucher code for the current user; returns amounts for checkout."""
+        """
+        Validate a paid gift voucher code for the current user and return checkout amounts.
+
+        Args:
+            request.data: ``code``, ``pre_voucher_total_amount`` (required).
+
+        Returns:
+            Response: 200 with valid, voucher_type, discount_applied, amount_due, amount_due_cents;
+                400 on missing fields, invalid code, expiry, or ineligible user.
+        """
         code = request.data.get('code')
         pre_raw = request.data.get('pre_voucher_total_amount')
         if not code or pre_raw is None:
@@ -861,7 +1047,17 @@ class PaymentView(APIView):
         }, status=status.HTTP_200_OK)
 
     def get_my_bulk_invoices(self, request):
-        """Bulk invoice list for the authenticated user (branch admins, referral partners, etc.)."""
+        """
+        List bulk orders / invoices for the authenticated user.
+
+        Includes orders in invoice_later, succeeded, paid, failed, or cancelled states.
+
+        Args:
+            request: Authenticated user (no extra query params).
+
+        Returns:
+            Response: 200 with ``invoices`` serialized list; 400 on unexpected errors.
+        """
         try:
             invoices_qs = (
                 BulkOrder.objects.filter(
@@ -880,8 +1076,17 @@ class PaymentView(APIView):
 
     def get_bulk_invoice_checkout(self, request):
         """
-        Return Stripe hosted invoice URL for an unpaid fleet/partner bulk invoice, and sync paid
-        status from Stripe when the customer has already paid (webhook delay).
+        Return Stripe hosted invoice URL for an unpaid fleet/partner bulk invoice.
+
+        Syncs paid status from Stripe when the customer paid before the webhook (idempotent via
+        ``sync_bulk_order_paid_from_stripe_invoice``). Access gated by ``_user_can_pay_bulk_invoice``.
+
+        Args:
+            request.query_params: ``bulk_order_id`` (required).
+
+        Returns:
+            Response: 200 with bulk_order_id, payment_status, hosted_invoice_url, amount_due_cents,
+                already_paid; 400/403/404/502 on validation, access, missing order, or Stripe errors.
         """
         bulk_order_id = (request.query_params.get("bulk_order_id") or "").strip()
         if not bulk_order_id:
@@ -959,6 +1164,14 @@ class PaymentView(APIView):
           returns paymentIntent client secret, ephemeralKey, customer, booking_reference.
 
         Branch admins: blocked if branch spend limit would be exceeded (403 BRANCH_SPEND_LIMIT_EXCEEDED).
+
+        Args:
+            request.data: booking_data (required), optional booking_reference, detailer_booking_data,
+                amount (cents; derived from total_amount if omitted).
+
+        Returns:
+            Response: Payment Sheet fields (paymentIntent, ephemeralKey, customer, booking_reference),
+                or free_booking payload; 400/403/500 on validation, slot conflict, or spend limit.
         """
         try:
             booking_data = request.data.get('booking_data')
@@ -1262,8 +1475,16 @@ class PaymentView(APIView):
 
     def create_gift_voucher_payment_sheet(self, request):
         """
-        Create Stripe PaymentIntent for purchasing a gift voucher for recipient_email.
-        Webhook fulfills code, validity window, PaymentTransaction, and recipient email.
+        Create Stripe PaymentIntent for purchasing a gift voucher.
+
+        Creates a pending GiftVoucher row; webhook ``payment_intent.succeeded`` with
+        metadata.type=gift_voucher fulfills code, validity, PaymentTransaction, and email.
+
+        Args:
+            request.data: recipient_email, credit_amount, validity_days (30–60).
+
+        Returns:
+            Response: paymentIntent client secret, ephemeralKey, customer, giftVoucherId; 400/502 on validation or Stripe errors.
         """
         email_re = re.compile(r'^[^\s@]+@[^\s@]+\.[^\s@]+$')
         try:
@@ -1391,8 +1612,17 @@ class PaymentView(APIView):
 
     def create_reschedule_fee_payment_sheet(self, request):
         """
-        Payment sheet for late reschedule (<12h before current start). Creates a PaymentIntent with
-        metadata.type=reschedule_fee; webhook verifies amount, records PaymentTransaction, applies reschedule.
+        Payment sheet for late reschedule (less than 12 hours before appointment start).
+
+        Creates a PaymentIntent with metadata.type=reschedule_fee; webhook verifies amount,
+        records PaymentTransaction, and applies the new slot via EventsView validation.
+
+        Args:
+            request.data: booking_reference, new_date, new_time (required).
+
+        Returns:
+            Response: paymentIntent client secret and fee_amount_cents; 400 if no fee required,
+                slot invalid, or bulk booking; 404 if booking not found.
         """
         from main.views.events import EventsView
 
@@ -1516,7 +1746,19 @@ class PaymentView(APIView):
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def create_bulk_order_invoice_later(self, request):
-        """Create a bulk order with payment_status=invoice_later, create Stripe Invoice and send to user.email; then send bulk order to detailer."""
+        """
+        Create a bulk order billed via Stripe Invoice (pay later) and notify the detailer app.
+
+        Creates BulkOrder with payment_status=invoice_later, finalizes and emails a Stripe Invoice,
+        then POSTs create_bulk_booking to the detailer app. Branch spend limits apply for admins.
+
+        Args:
+            request.data: booking_data (or root body), optional booking_reference.
+
+        Returns:
+            Response: 201 with success, booking_reference, bulk_order_id; 403 spend limit;
+                502 if Stripe invoice fails.
+        """
         try:
             booking_data = request.data.get('booking_data') or request.data
             if not booking_data or not isinstance(booking_data, dict):
@@ -1655,7 +1897,15 @@ class PaymentView(APIView):
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def get_refund_status(self, request):
-        """Get refund status for a booking - useful for dispute resolution"""
+        """
+        List refund records for a booking (support / dispute resolution).
+
+        Args:
+            request.data or query: booking_reference.
+
+        Returns:
+            Response: 200 with booking_reference and refunds list; 404 if booking not found.
+        """
         try:
             booking_reference = request.data.get('booking_reference')
             booking = BookedAppointment.objects.get(booking_reference=booking_reference)
@@ -1690,13 +1940,18 @@ class PaymentView(APIView):
 ############################
 
     def confirm_payment_intent(self, request):
-        """Check if payment intent has been confirmed via webhook (for polling)
-        
-        Works for all payment types:
-        - Regular bookings (transaction_type='payment')
-        - Fleet subscriptions (transaction_type='fleet_subscription')
-        - B2C subscriptions (transaction_type='b2c_subscription')
-        - Late reschedule fees (transaction_type='reschedule_fee')
+        """
+        Poll whether a PaymentIntent was fulfilled by the Stripe webhook.
+
+        Works for bookings, bulk orders, fleet/B2C subscriptions, gift vouchers, and
+        reschedule_fee transactions (any succeeded PaymentTransaction with this intent id).
+        Also reports refunded_slot_unavailable when detailer rejected the slot after charge.
+
+        Args:
+            request.data: payment_intent_id (required).
+
+        Returns:
+            Response: confirmed True/False, transaction_type when confirmed, or slot refund status.
         """
         try:
             payment_intent_id = request.data.get('payment_intent_id')
@@ -1739,7 +1994,16 @@ class PaymentView(APIView):
 
 
     def check_payment_status(self, request):
-        """Check payment status for a booking - useful for debugging"""
+        """
+        Check payment status by payment_intent_id or booking_reference (debugging / client poll).
+
+        Args:
+            request.data: payment_intent_id and/or booking_reference (one required).
+
+        Returns:
+            Response: has_payment, payment_status, amount; or refunded_slot_unavailable for
+                pending bookings refunded after slot conflict; 404 if booking not found.
+        """
         try:
             booking_reference = request.data.get('booking_reference')
             payment_intent_id = request.data.get('payment_intent_id')
@@ -1816,6 +2080,10 @@ class PaymentView(APIView):
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+@method_decorator(
+    ratelimit(key="ip", rate="300/m", method="POST", block=rate_limit_json_response),
+    name="post",
+)
 class StripeWebhookView(APIView):
     """
     Handles Stripe webhook events (POST). Used for payment_intent.succeeded and payment_failed.
@@ -1838,9 +2106,21 @@ class StripeWebhookView(APIView):
     permission_classes = [AllowAny]
     
     def post(self, request, *args, **kwargs):
-        """Verify Stripe signature, parse event, and dispatch to _handle_* for payment_intent.*, invoice.* (incl. upcoming, will_be_due, overdue), charge.*, refund.failed, customer.subscription.*, charge.dispute.created. Returns 200/400/500."""
+        """
+        Verify Stripe signature, parse event, and dispatch by ``event['type']``.
+
+        Major branches: payment_intent.succeeded/failed, invoice.payment_succeeded/failed/upcoming/
+        will_be_due/overdue/sent, customer.subscription.*, charge.*, refund.failed,
+        charge.dispute.created. Unrecognized types return 200 with event_type for ack only.
+
+        Args:
+            request: Raw body required for signature verification; HTTP_STRIPE_SIGNATURE header.
+
+        Returns:
+            Response: 200 on handled/ignored events, 400 on bad signature/payload, 500 on unexpected errors.
+        """
         try:
-            # Get the raw request body - important for signature verification
+            # Raw body must not be parsed JSON before construct_event (signature bytes).
             payload = request.body
             
             # Get the Stripe signature from headers
@@ -1867,14 +2147,14 @@ class StripeWebhookView(APIView):
                 event = event.to_dict()
 
             event_type = event.get('type')
-            
-            # Handle payment success events
+
+            # --- payment_intent.succeeded: bookings, bulk, subscriptions, gift voucher, reschedule ---
             if event_type == 'payment_intent.succeeded':
                 payment_intent = event['data']['object']
                 metadata = payment_intent.get('metadata', {})
                 
                 try:
-                    # Deprecated product: ignore vin_lookup payment intents (Stripe idempotency).
+                    # Legacy vin_lookup product — acknowledge without side effects (idempotent).
                     transaction_type = metadata.get('transaction_type')
                     if transaction_type == 'vin_lookup':
                         logger.info(
@@ -1886,27 +2166,29 @@ class StripeWebhookView(APIView):
                             status=status.HTTP_200_OK,
                         )
 
-                    # Check if this is a fleet subscription payment (no booking flow)
+                    # Fleet subscription first payment / renewal (metadata.type=fleet_subscription).
                     if metadata.get('type') == 'fleet_subscription':
                         return self._handle_fleet_subscription_payment_intent(payment_intent, metadata)
 
-                    # Check if this is a B2C subscription payment
+                    # Consumer subscription (metadata.type=b2c_subscription).
                     if metadata.get('type') == 'b2c_subscription':
                         return self._handle_b2c_subscription_payment_intent(payment_intent, metadata)
 
+                    # Gift voucher purchase — issue code and email recipient.
                     if metadata.get('type') == 'gift_voucher':
                         return self._handle_gift_voucher_payment_intent(payment_intent, metadata)
 
+                    # Late reschedule fee — apply new slot and record transaction.
                     if metadata.get('type') == 'reschedule_fee':
                         return self._handle_reschedule_fee_payment_intent(payment_intent, metadata)
                     
-                    # Get pending booking ID from metadata (bulk pay-now uses pending_booking_id + is_bulk; invoice-later bulk is paid via invoice webhook)
+                    # Standard booking / bulk pay-now: pending_booking_id in metadata (invoice-later bulk uses invoice.*).
                     pending_booking_id = metadata.get('pending_booking_id')
                     booking_reference = metadata.get('booking_reference')
                     user_id = metadata.get('user_id')
                     
                     if not pending_booking_id:
-                        # Fall back to old flow for backward compatibility
+                        # Pre–PendingBooking clients: booking_reference + user_id only.
                         return self._handle_payment_old_flow(payment_intent, metadata, booking_reference, user_id)
                     
                     # Get pending booking
@@ -1928,7 +2210,7 @@ class StripeWebhookView(APIView):
                     is_bulk = isinstance(pending_booking.booking_data, dict) and pending_booking.booking_data.get('is_bulk') is True
 
                     if is_bulk:
-                        # Bulk order flow: create BulkOrder and send to detailer create_bulk_booking
+                        # Bulk pay-now: BulkOrder + detailer create_bulk_booking; refund if slot rejected.
                         try:
                             bulk_order = BulkOrder.objects.get(booking_reference=booking_reference)
                         except BulkOrder.DoesNotExist:
@@ -2000,7 +2282,7 @@ class StripeWebhookView(APIView):
                         try:
                             booking = BookedAppointment.objects.get(booking_reference=booking_reference)
                         except BookedAppointment.DoesNotExist:
-                            # Try detailer first; only create client booking if detailer accepts
+                            # Single booking: detailer slot check first, then create_booking_from_pending.
                             success, result = try_create_booking_on_detailer(pending_booking)
                             if not success:
                                 error_message = result  # (False, error_message)
@@ -2068,8 +2350,8 @@ class StripeWebhookView(APIView):
                 except Exception as e:
                     return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
             
-            
-            # Handle payment failure - mark pending booking as failed
+
+            # --- payment_intent.payment_failed: mark PendingBooking failed ---
             elif event_type == 'payment_intent.payment_failed':
                 payment_intent = event['data']['object']
                 metadata = payment_intent.get('metadata', {})
@@ -2085,7 +2367,7 @@ class StripeWebhookView(APIView):
                 
                 return Response({'status': 'payment failed handled'}, status=status.HTTP_200_OK)
             
-            # Handle refund / charge events
+            # --- charge / refund / dispute lifecycle ---
             elif event_type == 'charge.dispute.created':
                 dispute = event['data']['object']
                 return self._handle_dispute(dispute)
@@ -2106,12 +2388,13 @@ class StripeWebhookView(APIView):
                 refund_obj = event['data']['object']
                 return self._handle_stripe_refund_failed(refund_obj)
 
-            # Handle subscription invoice payment or bulk order invoice payment
+            # --- invoice.payment_succeeded: bulk invoice pay-later or subscription renewal ---
             elif event_type == 'invoice.payment_succeeded':
                 invoice = event['data']['object']
                 metadata = invoice.get('metadata') or {}
                 bulk_order_id = metadata.get('bulk_order_id')
                 if bulk_order_id:
+                    # Fleet/partner bulk order paid via Stripe Invoice (not PaymentIntent checkout).
                     try:
                         bulk_order = BulkOrder.objects.get(id=bulk_order_id)
                     except BulkOrder.DoesNotExist:
@@ -2137,38 +2420,40 @@ class StripeWebhookView(APIView):
                             status='succeeded',
                         )
                     return Response({'status': 'bulk order payment recorded'}, status=status.HTTP_200_OK)
+                # B2C / fleet subscription invoice paid — extend entitlements, record transaction.
                 return self._handle_subscription_payment(invoice)
 
-            # Upcoming subscription invoice (~Stripe's reminder window); backup if customer emails are disabled in Stripe
+            # --- invoice.upcoming: subscription renewal reminder email (backup to Stripe emails) ---
             elif event_type == 'invoice.upcoming':
                 invoice = event['data']['object']
                 return self._handle_invoice_upcoming(invoice)
 
-            # Handle subscription trial will end (7 days before)
+            # --- customer.subscription.trial_will_end: notify before trial ends ---
             elif event_type == 'customer.subscription.trial_will_end':
                 subscription = event['data']['object']
                 return self._handle_trial_will_end(subscription)
             
-            # Handle subscription updates (status changes, plan changes, etc.)
+            # --- customer.subscription.updated: plan/status sync to User / Fleet ---
             elif event_type == 'customer.subscription.updated':
                 subscription = event['data']['object']
                 previous_attributes = (event.get('data') or {}).get('previous_attributes') or {}
                 return self._handle_subscription_updated(subscription, previous_attributes)
             
-            # Handle subscription deletion (cancellation)
+            # --- customer.subscription.deleted: cancel entitlements ---
             elif event_type == 'customer.subscription.deleted':
                 subscription = event['data']['object']
                 return self._handle_subscription_deleted(subscription)
             
-            # Handle invoice payment failed
+            # --- invoice.payment_failed: dunning / subscription or bulk invoice failure ---
             elif event_type == 'invoice.payment_failed':
                 invoice = event['data']['object']
                 return self._handle_invoice_payment_failed(invoice)
 
+            # --- invoice.sent: acknowledge (invoice email handled by Stripe) ---
             elif event_type == 'invoice.sent':
                 return Response({'status': 'received'}, status=status.HTTP_200_OK)
 
-            # Stripe Billing automations: bulk invoice due soon / overdue (metadata.bulk_order_id)
+            # --- invoice.will_be_due / invoice.overdue: bulk invoice reminder emails ---
             elif event_type == 'invoice.will_be_due':
                 invoice = event['data']['object']
                 return self._handle_bulk_invoice_payment_reminder(invoice, 'due_soon')
@@ -2177,6 +2462,7 @@ class StripeWebhookView(APIView):
                 invoice = event['data']['object']
                 return self._handle_bulk_invoice_payment_reminder(invoice, 'overdue')
             
+            # Unhandled event types — return 200 so Stripe does not retry indefinitely.
             else:
                 return Response({
                     'status': 'success',
@@ -3030,6 +3316,7 @@ class StripeWebhookView(APIView):
                 )
 
             def _after_commit():
+                """Run post-reschedule side effects only after DB commit (Redis + emails)."""
                 publish_booking_rescheduled.delay(
                     booking.booking_reference,
                     booking.appointment_date,

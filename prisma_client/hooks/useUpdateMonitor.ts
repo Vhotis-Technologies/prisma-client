@@ -15,6 +15,7 @@ import { Alert, AppState, type AppStateStatus } from "react-native";
 
 const MIN_CHECK_INTERVAL_MS = 5 * 60 * 1000;
 
+/** Monitor, download, and prompt reload for Expo OTA updates. */
 export const useUpdateMonitor = () => {
   const {
     currentlyRunning,
@@ -31,6 +32,7 @@ export const useUpdateMonitor = () => {
   const fetchedForRef = useRef<string | null>(null);
   const promptedForRef = useRef<string | null>(null);
 
+  /** Check EAS for OTA updates (throttled unless force). */
   const checkForUpdates = useCallback(async (force = false) => {
     if (__DEV__ || !Updates.isEnabled) return;
     const now = Date.now();

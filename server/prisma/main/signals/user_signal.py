@@ -11,12 +11,24 @@ from main.tasks import send_push_notification
 
 
 def check_referral_rewards(user):
-    """Check if user's spending triggers referral rewards - only for completed bookings."""
+    """
+    Grant the referrer a 10% promotion when the referred user reaches €100+ paid spend.
+
+    Sums succeeded payment transactions linked to completed bookings only. Creates at
+    most one reward per referred user (matched by promotion description).
+
+    Args:
+        user: The referred ``User`` whose spend is evaluated.
+
+    Returns:
+        None
+    """
     completed_bookings = BookedAppointment.objects.filter(
         user=user,
         status='completed'
     )
     total_completed_spending = Decimal('0.00')
+    # Only count money actually collected on completed services.
     for booking in completed_bookings:
         payment_transaction = PaymentTransaction.objects.filter(
             booking=booking,
@@ -56,11 +68,27 @@ def check_referral_rewards(user):
 
 @receiver(post_save, sender=BookedAppointment)
 def handle_booking_completion_referral(sender, instance, created, **kwargs):
+    """
+    Re-evaluate referral rewards when a booking transitions to completed.
+
+    Args:
+        sender: ``BookedAppointment`` model class.
+        instance: The saved appointment.
+        created: Ignored for completion path; checks status on updates.
+    """
     if not created and instance.status == 'completed':
         check_referral_rewards(instance.user)
 
 
 @receiver(post_save, sender=PaymentTransaction)
 def handle_payment_transaction_creation(sender, instance, created, **kwargs):
+    """
+    Re-evaluate referral rewards when a new successful payment is recorded.
+
+    Args:
+        sender: ``PaymentTransaction`` model class.
+        instance: The transaction row.
+        created: Only runs on insert.
+    """
     if created and instance.status == 'succeeded' and instance.transaction_type == 'payment':
         check_referral_rewards(instance.user)

@@ -1,6 +1,7 @@
 """
-Redis GEO read helper for detailer location.
-Uses the same Redis instance and key as the detailer server (detailers:geo).
+Redis GEO read helper for detailer live location.
+
+Uses the same Redis instance and key as the detailer server (``detailers:geo``).
 """
 from typing import Optional, Tuple
 
@@ -11,9 +12,13 @@ REDIS_KEY_DETAILERS_GEO = "detailers:geo"
 
 def get_detailer_location(detailer_id: int) -> Optional[Tuple[float, float]]:
     """
-    Get a detailer's (latitude, longitude) from Redis GEO set.
-    detailer_id is the detailer app's Detailer id (stored as BookedAppointment.detailer.external_id).
-    Returns None if not found or on error.
+    Get a detailer's (latitude, longitude) from the shared Redis GEO set.
+
+    Args:
+        detailer_id: Detailer app id (stored as ``BookedAppointment.detailer.external_id``).
+
+    Returns:
+        tuple[float, float] | None: ``(lat, lon)`` when found; None on miss or Redis error.
     """
     try:
         r = get_redis(decode_responses=True)
@@ -21,6 +26,7 @@ def get_detailer_location(detailer_id: int) -> Optional[Tuple[float, float]]:
             pos = r.geopos(REDIS_KEY_DETAILERS_GEO, str(detailer_id))
             if not pos or pos[0] is None:
                 return None
+            # geopos returns (longitude, latitude); callers expect lat-first.
             lon, lat = pos[0]
             return (float(lat), float(lon))
         finally:

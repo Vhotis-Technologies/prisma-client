@@ -1,3 +1,6 @@
+/**
+ * Bulk booking and invoice access rules by user role (fleet, branch, partner).
+ */
 import type { UserProfileProps } from "@/app/interfaces/ProfileInterfaces";
 
 /** Same roles that can use bulk booking with pay-later. */
@@ -13,6 +16,7 @@ export function isBulkBookingEligible(
   );
 }
 
+/** Whether the user may view bulk invoice lists in the app. */
 export function canAccessBulkInvoices(
   user?: UserProfileProps | null,
 ): boolean {
@@ -21,6 +25,7 @@ export function canAccessBulkInvoices(
 
 export type BulkInvoiceApiSource = "fleet" | "partner" | "my";
 
+/** RTK API source for bulk invoices: fleet, partner, or my (branch admin). */
 export function getBulkInvoiceApiSource(
   user?: UserProfileProps | null,
 ): BulkInvoiceApiSource | null {

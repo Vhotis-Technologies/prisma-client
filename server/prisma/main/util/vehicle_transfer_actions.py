@@ -1,4 +1,8 @@
-"""Approve/reject vehicle transfers — shared by web flow and support API."""
+"""
+Approve/reject vehicle transfers — shared by web flow and support API.
+
+Encapsulates ownership rollover, competing pending transfer cleanup, and notification emails.
+"""
 from __future__ import annotations
 
 from django.db import transaction
@@ -10,8 +14,17 @@ from main.tasks import send_transfer_approved_email, send_transfer_rejected_emai
 
 def apply_vehicle_transfer_approval(transfer: VehicleTransfer) -> str | None:
     """
-    Runs the same steps as the email web approval flow.
-    Returns None on success, or a user-facing error string.
+    Run the same steps as the email web approval flow.
+
+    Ends the seller's active ownership, creates private ownership for the buyer,
+    marks the transfer approved, rejects other pending transfers on the vehicle,
+    increments ``owner_count``, and queues the approval email.
+
+    Args:
+        transfer: Pending ``VehicleTransfer`` to approve.
+
+    Returns:
+        str | None: User-facing error message on failure; None on success.
     """
     if transfer.status != "pending":
         return f"This transfer request is {transfer.status} and cannot be processed"
@@ -39,6 +52,7 @@ def apply_vehicle_transfer_approval(transfer: VehicleTransfer) -> str | None:
         transfer.responded_at = timezone.now()
         transfer.save()
 
+        # Only one approved transfer per vehicle; cancel other pending requests.
         VehicleTransfer.objects.filter(
             vehicle=transfer.vehicle,
             status="pending",
@@ -61,8 +75,14 @@ def apply_vehicle_transfer_approval(transfer: VehicleTransfer) -> str | None:
 
 def apply_vehicle_transfer_rejection(transfer: VehicleTransfer) -> str | None:
     """
-    Runs the same steps as the web rejection flow (including expired edge case).
-    Returns None on success, or a user-facing error string (no email on hard errors).
+    Run the same steps as the web rejection flow (including expired edge case).
+
+    Args:
+        transfer: ``VehicleTransfer`` to reject.
+
+    Returns:
+        str | None: User-facing error when not rejectable; None on success (email queued
+        unless the request was already expired).
     """
     if transfer.status != "pending":
         return f"This transfer request is {transfer.status} and cannot be processed"

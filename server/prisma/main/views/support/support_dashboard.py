@@ -53,6 +53,12 @@ class SupportDashboardView(APIView):
     }
 
     def get(self, request, *args, **kwargs):
+        """
+        Route URL ``action`` to :attr:`action_handler` (currently ``get_dashboard_data`` only).
+
+        Returns:
+            DRF ``Response`` from the handler, or 400 for unknown actions.
+        """
         action = kwargs.get('action')
         if action not in self.action_handler:
             return Response({'error': 'Invalid action'}, status=status.HTTP_400_BAD_REQUEST)
@@ -60,6 +66,15 @@ class SupportDashboardView(APIView):
         return handler(request)
 
     def _get_dashboard_data(self, request):
+        """
+        Compute KPI cards for the support home screen.
+
+        Query params:
+            timeframe: ``daily`` | ``30days`` | ``quarterly`` | ``yearly``.
+
+        Returns:
+            ``{'data': {'metrics': [...], 'meta': {...}}}`` with value and percent-change strings.
+        """
         raw = (request.query_params.get('timeframe') or 'daily').strip().lower()
         if raw not in TIMEFRAME_WINDOW_DAYS:
             return Response(
@@ -88,6 +103,17 @@ class SupportDashboardView(APIView):
 
     @staticmethod
     def _pct_change(current: float, previous: float) -> tuple[float, str, bool]:
+        """
+        Percent change vs prior period for dashboard cards.
+
+        Args:
+            current: Metric total in the current window.
+            previous: Metric total in the immediately preceding window of equal length.
+
+        Returns:
+            Tuple ``(raw_pct, formatted_string, is_increase)``; treats zero previous as 100%% if
+            current > 0.
+        """
         if previous <= 0:
             pct = 100.0 if current > 0 else 0.0
         else:
@@ -98,6 +124,7 @@ class SupportDashboardView(APIView):
 
     @staticmethod
     def _client_users_qs():
+        """End-customer accounts only (exclude Django staff/superuser rows)."""
         return User.objects.filter(is_staff=False, is_superuser=False)
 
     def _build_dashboard_metrics(self, window_days: int):

@@ -3,7 +3,13 @@ Winner voucher admin for support tooling: list, detail, create, patch.
 
 **Auth:** ``SupportPermissionAccess`` (internal key via support server proxy).
 
-After create, attempts to link ``assigned_user`` when an active user already exists
+**GET actions:** ``list_vouchers``, ``get_voucher_detail``.
+
+**POST actions:** ``create_voucher``.
+
+**PATCH actions:** ``update_voucher`` — ``is_active``, ``valid_from``, ``expires_at``.
+
+After create/detail, attempts to link ``assigned_user`` when an active user already exists
 with ``assigned_email`` (same linkability rules as signup signal).
 """
 from __future__ import annotations
@@ -28,12 +34,14 @@ _EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
 
 def _iso_or_null(dt):
+    """ISO string for API payloads, or ``None`` when the datetime is unset."""
     if dt is None:
         return None
     return dt.isoformat()
 
 
 def _serialize_voucher(v: WinnerVoucher) -> dict[str, Any]:
+    """CamelCase dict for support-app winner voucher screens."""
     assigned = None
     if v.assigned_user_id:
         try:
@@ -98,6 +106,12 @@ def _try_link_existing_user(voucher: WinnerVoucher) -> None:
 
 
 class SupportVouchersView(APIView):
+    """
+    Winner (promotional) voucher CRUD for the internal support app.
+
+    **GET:** list, detail. **POST:** create. **PATCH:** update active flag and validity window.
+    """
+
     permission_classes = [SupportPermissionAccess]
 
     get_action_handler = {
@@ -112,24 +126,28 @@ class SupportVouchersView(APIView):
     }
 
     def get(self, request, *args, **kwargs):
+        """Dispatch GET by URL ``action`` (list or detail)."""
         action = kwargs.get("action")
         if action not in self.get_action_handler:
             return Response({"error": "Invalid action"}, status=status.HTTP_400_BAD_REQUEST)
         return getattr(self, self.get_action_handler[action])(request, **kwargs)
 
     def post(self, request, *args, **kwargs):
+        """Dispatch POST by URL ``action`` (``create_voucher``)."""
         action = kwargs.get("action")
         if action not in self.post_action_handler:
             return Response({"error": "Invalid action"}, status=status.HTTP_400_BAD_REQUEST)
         return getattr(self, self.post_action_handler[action])(request, **kwargs)
 
     def patch(self, request, *args, **kwargs):
+        """Dispatch PATCH by URL ``action`` (``update_voucher``)."""
         action = kwargs.get("action")
         if action not in self.patch_action_handler:
             return Response({"error": "Invalid action"}, status=status.HTTP_400_BAD_REQUEST)
         return getattr(self, self.patch_action_handler[action])(request, **kwargs)
 
     def _list_vouchers(self, request, **kwargs):
+        """Return all winner vouchers newest-first."""
         qs = (
             WinnerVoucher.objects.select_related("assigned_user", "consumed_booking")
             .order_by("-created_at")
@@ -138,6 +156,12 @@ class SupportVouchersView(APIView):
         return Response({"data": {"vouchers": rows}})
 
     def _get_voucher_detail(self, request, **kwargs):
+        """
+        Single voucher by ``voucher_id``; re-link ``assigned_user`` when email matches.
+
+        Returns:
+            ``{'data': {'voucher': ...}}`` or 400/404.
+        """
         vid = request.query_params.get("voucher_id")
         if not vid:
             return Response(
@@ -155,6 +179,14 @@ class SupportVouchersView(APIView):
         return Response({"data": {"voucher": _serialize_voucher(v)}})
 
     def _post_create_voucher(self, request, **kwargs):
+        """
+        Create a winner voucher (code, email, credit, optional validity, ``is_active``).
+
+        Body: ``code``, ``assigned_email``, ``credit_amount``, optional ``valid_from`` / ``expires_at``.
+
+        Returns:
+            201 with voucher payload, or 400 on validation/duplicate code.
+        """
         code_raw = request.data.get("code")
         email_raw = (request.data.get("assigned_email") or "").strip()
         credit_raw = request.data.get("credit_amount")
@@ -221,6 +253,12 @@ class SupportVouchersView(APIView):
         )
 
     def _patch_update_voucher(self, request, **kwargs):
+        """
+        Update ``is_active``, ``valid_from``, and/or ``expires_at`` for an existing voucher.
+
+        Returns:
+            Updated voucher dict; 400 on date ordering errors, 404 if not found.
+        """
         vid = request.data.get("voucher_id")
         if not vid:
             return Response(

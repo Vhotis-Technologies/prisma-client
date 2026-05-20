@@ -11,7 +11,17 @@ from main.utils.redis_streams import stream_add, STREAM_JOB_EVENTS
 
 
 def _serialize_reschedule_fields(new_date, new_time, total_cost):
-    """JSON-serializable date/time/amount for Redis payloads."""
+    """
+    Normalize reschedule fields for JSON Redis payloads.
+
+    Args:
+        new_date: ``date`` or ISO date string.
+        new_time: ``time`` or HH:MM(:SS) string.
+        total_cost: ``Decimal``, float, or None.
+
+    Returns:
+        tuple: ``(date_str, time_str, total_float)``.
+    """
     if hasattr(new_date, "isoformat") and not hasattr(new_date, "hour"):
         d = new_date.isoformat()[:10]
     else:
@@ -34,6 +44,15 @@ def _serialize_reschedule_fields(new_date, new_time, total_cost):
 
 @shared_task
 def publish_booking_cancelled(booking_reference):
+    """
+    Publish ``booking_cancelled`` to the detailer Redis job-events stream.
+
+    Args:
+        booking_reference: Client booking reference string.
+
+    Returns:
+        str: Success message with stream message id, or error text.
+    """
     try:
         payload = json.dumps({'booking_reference': booking_reference})
         msg_id = stream_add(STREAM_JOB_EVENTS, {'event': 'booking_cancelled', 'payload': payload})
@@ -44,6 +63,18 @@ def publish_booking_cancelled(booking_reference):
 
 @shared_task
 def publish_booking_rescheduled(booking_reference, new_date, new_time, total_cost):
+    """
+    Publish ``booking_rescheduled`` with new date, time, and total to Redis.
+
+    Args:
+        booking_reference: Client booking reference.
+        new_date: New appointment date.
+        new_time: New start time.
+        total_cost: Updated total amount.
+
+    Returns:
+        str: Success message with stream message id, or error text.
+    """
     try:
         d, t, tot = _serialize_reschedule_fields(new_date, new_time, total_cost)
         payload = json.dumps({
@@ -60,9 +91,18 @@ def publish_booking_rescheduled(booking_reference, new_date, new_time, total_cos
 
 @shared_task
 def publish_booking_reassigned(booking_reference, assigned_detailers, is_bulk=False):
-    """Publish booking_reassigned to Redis so peer client instances and crew apps can refresh.
+    """
+    Publish ``booking_reassigned`` so client subscribers and crew apps refresh detailers.
 
-    The client subscriber treats this as a silent assigned-detailers swap (no customer push/email).
+    Silent for customers (no push/email); used for operational detailer swaps.
+
+    Args:
+        booking_reference: Booking or bulk order reference.
+        assigned_detailers: List of detailer dicts (id, name, phone, etc.).
+        is_bulk: True when reference is a bulk order parent ref.
+
+    Returns:
+        str: Success message with stream message id, or error text.
     """
     try:
         payload = json.dumps({
@@ -78,7 +118,17 @@ def publish_booking_reassigned(booking_reference, assigned_detailers, is_bulk=Fa
 
 @shared_task
 def publish_review_to_detailer(booking_reference, rating, comment=None):
-    """Publish review data to Redis stream for detailer app (optional customer comment)."""
+    """
+    Publish ``review_received`` to the detailer Redis stream.
+
+    Args:
+        booking_reference: Completed booking reference.
+        rating: Numeric rating value.
+        comment: Optional customer comment text.
+
+    Returns:
+        str: Success message with stream message id, or error text.
+    """
     try:
         body = {
             'booking_reference': booking_reference,

@@ -9,7 +9,17 @@ from main.models import GiftVoucher, User
 
 @receiver(post_save, sender=User)
 def link_gift_vouchers_on_user_create(sender, instance, created, raw, **kwargs):
-    """Same pattern as winner vouchers, but only rows with a code (payment fulfilled)."""
+    """
+    Attach paid gift vouchers (by email) to a newly created active user.
+
+    Only vouchers with a non-empty code (Stripe payment fulfilled) and valid date window.
+
+    Args:
+        sender: ``User`` model class.
+        instance: The new user.
+        created: Only on insert.
+        raw: Skips fixture loads.
+    """
     if not created or raw:
         return
     if not instance.is_active:

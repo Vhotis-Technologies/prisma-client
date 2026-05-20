@@ -98,6 +98,12 @@ const dummyNotifications: Notification[] = [
   },
 ];
 
+/**
+ * Legacy notifications list hook using local dummy data (dev/preview).
+ * Prefer useNotification.ts for production API-backed notifications.
+ *
+ * @returns Filtered notifications, unread count, and local CRUD helpers
+ */
 export const useNotification = () => {
   const [notifications, setNotifications] =
     useState<Notification[]>(dummyNotifications);
@@ -107,7 +113,11 @@ export const useNotification = () => {
     types: [],
   });
 
-  // Get filtered notifications
+  /**
+   * Get notifications filtered by read status and type, sorted newest first.
+   *
+   * @returns Filtered notification array
+   */
   const getFilteredNotifications = (): Notification[] => {
     return notifications
       .filter((notification) => {
@@ -128,7 +138,11 @@ export const useNotification = () => {
       .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
   };
 
-  // Mark notification as read
+  /**
+   * Mark a single notification as read in local state.
+   *
+   * @param notificationId - Notification ID to mark read
+   */
   const markAsRead = (notificationId: string) => {
     setNotifications((prev) =>
       prev.map((notification) =>
@@ -139,31 +153,47 @@ export const useNotification = () => {
     );
   };
 
-  // Mark all notifications as read
+  /** Mark all notifications as read in local state. */
   const markAllAsRead = () => {
     setNotifications((prev) =>
       prev.map((notification) => ({ ...notification, isRead: true }))
     );
   };
 
-  // Delete notification
+  /**
+   * Remove a notification from local state.
+   *
+   * @param notificationId - Notification ID to delete
+   */
   const deleteNotification = (notificationId: string) => {
     setNotifications((prev) =>
       prev.filter((notification) => notification.id !== notificationId)
     );
   };
 
-  // Get unread count
+  /**
+   * Count unread notifications in local state.
+   *
+   * @returns Number of unread notifications
+   */
   const getUnreadCount = (): number => {
     return notifications.filter((notification) => !notification.isRead).length;
   };
 
-  // Update filters
+  /**
+   * Merge partial filter settings with current filters.
+   *
+   * @param newFilters - Partial NotificationFilters to apply
+   */
   const updateFilters = (newFilters: Partial<NotificationFilters>) => {
     setFilters((prev) => ({ ...prev, ...newFilters }));
   };
 
-  // Add new notification (for future use with real notifications)
+  /**
+   * Prepend a new notification to local state (for future real-time use).
+   *
+   * @param notification - Notification data without id or timestamp
+   */
   const addNotification = (
     notification: Omit<Notification, "id" | "timestamp">
   ) => {

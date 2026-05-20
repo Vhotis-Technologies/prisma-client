@@ -11,7 +11,18 @@ from main.models.b2c import B2CSubcription, B2CSubcriptionBilling
 
 
 def _latest_paid_subscription_billing(user):
-    """Most recent active B2C subscription with a paid billing row, if any."""
+    """
+    Resolve the user's active B2C subscription and its most recent paid billing row.
+
+    Used when a complimentary subscription sparkle has zero ``total_amount`` so
+    commission can be derived from subscription revenue instead of booking price.
+
+    Args:
+        user: The ``User`` who completed the booking.
+
+    Returns:
+        tuple: ``(subscription, billing)`` or ``(None, None)`` when no qualifying rows exist.
+    """
     subscription = (
         B2CSubcription.objects.filter(user=user, status='active')
         .select_related('plan', 'plan__tier')
@@ -30,14 +41,27 @@ def _latest_paid_subscription_billing(user):
 
 @receiver(post_save, sender=BookedAppointment)
 def handle_booking_completion_commission(sender, instance, created, **kwargs):
+    """
+    Create an approved ``CommissionEarning`` when a referred user's booking completes.
+
+    Skips non-completions, users without partner attribution, duplicate earnings, and
+    zero-gross bookings unless the booking used a subscription complimentary sparkle.
+
+    Args:
+        sender: ``BookedAppointment`` model class.
+        instance: The saved appointment.
+        created: True on insert; commission only runs on status updates to completed.
+    """
     if not created and instance.status == 'completed':
         partner = get_partner_for_user(instance.user)
         if partner is None:
             return
+        # Idempotent: one earning row per partner + booking.
         if CommissionEarning.objects.filter(partner=partner, booking=instance).exists():
             return
 
         gross = instance.total_amount
+        # Subscription sparkle may have no charge; allocate share of last paid invoice.
         if gross is None or gross <= 0:
             if not (
                 instance.applied_free_quick_sparkle
@@ -68,13 +92,28 @@ def handle_booking_completion_commission(sender, instance, created, **kwargs):
 
 @receiver(post_save, sender=RefundRecord)
 def handle_refund_reverse_commission(sender, instance, created, **kwargs):
+    """
+    Mark partner commission as reversed when a refund succeeds for the booking.
+
+    Args:
+        sender: ``RefundRecord`` model class.
+        instance: The refund row being saved.
+        created: True on insert (reversal applies on any save with succeeded status).
+    """
     if instance.status == 'succeeded':
         CommissionEarning.objects.filter(booking=instance.booking).update(status='reversed')
 
 
 @receiver(post_save, sender=PartnerPayoutRequest)
 def handle_payout_request_creation(sender, instance, created, **kwargs):
-    """Notify partner when payout request is created or paid."""
+    """
+    Notify the partner (in-app + push) when a new payout request is submitted.
+
+    Args:
+        sender: ``PartnerPayoutRequest`` model class.
+        instance: The payout request row.
+        created: Only runs on insert.
+    """
     if created:
         # Notify partner their request was submitted
         partner = instance.partner
@@ -102,7 +141,14 @@ def handle_payout_request_creation(sender, instance, created, **kwargs):
 
 @receiver(post_save, sender=PartnerPayoutRequest)
 def handle_payout_request_paid(sender, instance, created, **kwargs):
-    """Notify partner when payout is marked as paid by support."""
+    """
+    Notify the partner (in-app + push) when support marks the payout as paid.
+
+    Args:
+        sender: ``PartnerPayoutRequest`` model class.
+        instance: The payout request row.
+        created: Skips insert; only fires on status updates.
+    """
     if not created and instance.status == 'paid':
         partner = instance.partner
         user = partner.user

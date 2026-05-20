@@ -3,6 +3,7 @@
  * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
  */
 
+/** Semantic color tokens for light and dark themes. */
 export const Colors = {
   light: {
     background: "#F1F1F1",

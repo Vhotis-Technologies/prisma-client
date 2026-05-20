@@ -1,3 +1,6 @@
+/**
+ * Load app font families via expo-font; gate UI until fonts are ready.
+ */
 import { useFonts } from "expo-font";
 
 /**

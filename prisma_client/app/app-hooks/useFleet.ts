@@ -23,6 +23,7 @@ import {
 } from "@/app/utils/fleetDashboardUtils";
 import type { BranchProps } from "@/app/interfaces/FleetInterfaces";
 
+/** Dismiss the alert modal by resetting AlertContext to hidden. */
 const dismissAlert = (setAlertConfig: (config: AlertState) => void) =>
   setAlertConfig({ isVisible: false, title: "", message: "", type: "error" });
 
@@ -37,6 +38,12 @@ export interface UseFleetOptions {
   selectedBranchId?: string | null;
 }
 
+/**
+ * Fleet management hook: branches, spend caps, bulk orders, cancel/reschedule.
+ *
+ * @param options - Optional selectedBranchId for branch-scoped queries
+ * @returns Branch CRUD, cap management, bulk order actions, and loading flags
+ */
 export function useFleet(options: UseFleetOptions = {}) {
   const { selectedBranchId = null } = options;
   const { setAlertConfig } = useAlertContext();
@@ -118,6 +125,7 @@ export function useFleet(options: UseFleetOptions = {}) {
     { skip: !selectedBranchId },
   );
 
+  /** Reset the branch create/edit form fields. */
   const clearBranchForm = useCallback(() => {
     setNewBranchName("");
     setNewBranchAddress("");
@@ -128,6 +136,11 @@ export function useFleet(options: UseFleetOptions = {}) {
     setNewBranchLongitude(undefined);
   }, []);
 
+  /**
+   * Populate branch form from a Google Places address selection.
+   *
+   * @param result - Parsed address with coordinates
+   */
   const handleBranchAddressSelect = useCallback(
     (result: {
       address: string;
@@ -147,6 +160,7 @@ export function useFleet(options: UseFleetOptions = {}) {
     [],
   );
 
+  /** Create a new fleet branch from the current form state. */
   const handleCreateBranch = useCallback(async () => {
     if (!newBranchName.trim()) {
       setAlertConfig({
@@ -202,6 +216,11 @@ export function useFleet(options: UseFleetOptions = {}) {
     setAlertConfig,
   ]);
 
+  /**
+   * Update an existing branch from the current form state.
+   *
+   * @param branchId - Branch ID to update
+   */
   const handleUpdateBranch = useCallback(
     async (branchId: string) => {
       const branch = branches.find((b) => b.id === branchId);
@@ -254,6 +273,12 @@ export function useFleet(options: UseFleetOptions = {}) {
     ],
   );
 
+  /**
+   * Confirm and delete a branch after user approval in alert dialog.
+   *
+   * @param branchId - Branch ID to delete
+   * @param branchName - Display name shown in confirmation message
+   */
   const handleDeleteBranch = useCallback(
     (branchId: string, branchName: string) => {
       setAlertConfig({
@@ -291,6 +316,11 @@ export function useFleet(options: UseFleetOptions = {}) {
     [deleteBranch, refetchBranches, setAlertConfig],
   );
 
+  /**
+   * Enter edit mode and populate the form from an existing branch.
+   *
+   * @param branch - Branch to edit
+   */
   const startEditing = useCallback((branch: BranchProps) => {
     setEditingBranch(branch.id);
     setNewBranchName(branch.name ?? "");
@@ -302,11 +332,17 @@ export function useFleet(options: UseFleetOptions = {}) {
     setNewBranchLongitude(branch.longitude ?? undefined);
   }, []);
 
+  /** Exit branch edit mode and clear the form. */
   const cancelEditing = useCallback(() => {
     setEditingBranch(null);
     clearBranchForm();
   }, [clearBranchForm]);
 
+  /**
+   * Save or update a branch spending cap for the selected period.
+   *
+   * @param branchId - Branch ID to update
+   */
   const handleSaveCap = useCallback(
     async (branchId: string) => {
       const parsed = parseFloat(capAmount);
@@ -352,6 +388,11 @@ export function useFleet(options: UseFleetOptions = {}) {
     [capAmount, capPeriod, updateBranch, refetchBranches, setAlertConfig],
   );
 
+  /**
+   * Remove the spending cap from a branch (sets limit to 0).
+   *
+   * @param branchId - Branch ID to update
+   */
   const handleRevertCap = useCallback(
     async (branchId: string) => {
       setIsSavingCap(true);
@@ -385,6 +426,11 @@ export function useFleet(options: UseFleetOptions = {}) {
     [updateBranch, refetchBranches, setAlertConfig],
   );
 
+  /**
+   * Show cancel confirmation and refund a cancellable bulk order.
+   *
+   * @param order - Bulk order summary with id and booking reference
+   */
   const handleCancelBulkOrder = useCallback(
     (order: {
       id: string;
@@ -435,6 +481,11 @@ export function useFleet(options: UseFleetOptions = {}) {
     [cancelBulkOrder, refetchBulkOrders, setAlertConfig],
   );
 
+  /**
+   * Open the bulk order reschedule modal for the given order.
+   *
+   * @param order - Bulk order to reschedule
+   */
   const openRescheduleModal = useCallback(
     (order: {
       id: string;
@@ -456,20 +507,26 @@ export function useFleet(options: UseFleetOptions = {}) {
     [],
   );
 
+  /** Close the bulk order reschedule modal and clear confirmation payload. */
   const closeRescheduleModal = useCallback(() => {
     setRescheduleOrder(null);
     setRescheduleConfirmationPayload(null);
   }, []);
 
+  /** Clear fetched reschedule capacity options. */
   const clearRescheduleOptions = useCallback(() => {
     setRescheduleOptions(null);
     setRescheduleSelectedOption(null);
   }, []);
 
+  /** Dismiss the post-reschedule confirmation modal. */
   const clearRescheduleConfirmation = useCallback(() => {
     setRescheduleConfirmationPayload(null);
   }, []);
 
+  /**
+   * Check detailer bulk capacity for the reschedule date and populate time options.
+   */
   const checkRescheduleCapacity = useCallback(async () => {
     if (!rescheduleOrder || !rescheduleNewDate.trim()) {
       setAlertConfig({
@@ -544,6 +601,7 @@ export function useFleet(options: UseFleetOptions = {}) {
     }
   }, [rescheduleOrder, rescheduleNewDate, setAlertConfig]);
 
+  /** Submit the selected reschedule slot to the server. */
   const confirmReschedule = useCallback(async () => {
     const selected =
       rescheduleOptions?.[rescheduleSelectedIndex] ?? rescheduleSelectedOption;

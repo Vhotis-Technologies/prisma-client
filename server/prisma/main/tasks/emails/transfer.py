@@ -1,3 +1,4 @@
+"""Celery tasks: vehicle transfer request / approved / rejected emails."""
 from celery import shared_task
 from django.conf import settings
 from django.template.loader import render_to_string
@@ -6,7 +7,18 @@ from main.util.graph_mail import send_mail as graph_send_mail
 
 @shared_task
 def send_transfer_request_email(transfer_id, owner_email, requester_name, vehicle_registration):
-    """Send email to current owner requesting vehicle transfer consent."""
+    """
+    Email the current owner to approve or reject a vehicle transfer.
+
+    Args:
+        transfer_id: ``VehicleTransfer`` primary key.
+        owner_email: Recipient (from_owner) address.
+        requester_name: Display name of the requester.
+        vehicle_registration: Plate string for subject line.
+
+    Returns:
+        str: Success or failure message.
+    """
     from main.models import VehicleTransfer
 
     try:
@@ -33,7 +45,18 @@ def send_transfer_request_email(transfer_id, owner_email, requester_name, vehicl
 
 @shared_task
 def send_transfer_approved_email(transfer_id, requester_email, owner_name, vehicle_registration):
-    """Send email to requester when transfer is approved."""
+    """
+    Email the requester when the owner approves the transfer.
+
+    Args:
+        transfer_id: ``VehicleTransfer`` primary key.
+        requester_email: Recipient (to_owner) address.
+        owner_name: Approving owner's display name.
+        vehicle_registration: Plate string for subject line.
+
+    Returns:
+        str: Success or failure message.
+    """
     from main.models import VehicleTransfer
 
     try:
@@ -60,7 +83,18 @@ def send_transfer_approved_email(transfer_id, requester_email, owner_name, vehic
 
 @shared_task
 def send_transfer_rejected_email(transfer_id, requester_email, owner_name, vehicle_registration):
-    """Send email to requester when transfer is rejected."""
+    """
+    Email the requester when the owner rejects the transfer.
+
+    Args:
+        transfer_id: ``VehicleTransfer`` primary key.
+        requester_email: Recipient (to_owner) address.
+        owner_name: Rejecting owner's display name.
+        vehicle_registration: Plate string for subject line.
+
+    Returns:
+        str: Success or failure message.
+    """
     from main.models import VehicleTransfer
 
     try:

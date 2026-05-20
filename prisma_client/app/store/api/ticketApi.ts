@@ -14,6 +14,7 @@ const ticketApi = createApi({
   baseQuery: axiosBaseQuery(),
   tagTypes: ["Tickets", "TicketDetail"],
   endpoints: (builder) => ({
+    /** Open a new support ticket with issue type and description. */
     createTicket: builder.mutation<Ticket, CreateTicketPayload>({
       query: (payload) => ({
         url: "/api/v1/tickets/create/",
@@ -27,6 +28,7 @@ const ticketApi = createApi({
       invalidatesTags: [{ type: "Tickets", id: "LIST" }],
     }),
 
+    /** List support tickets for the authenticated user. */
     fetchTickets: builder.query<Ticket[], void>({
       query: () => ({
         url: "/api/v1/tickets/list/",
@@ -54,6 +56,7 @@ const ticketApi = createApi({
           : [{ type: "Tickets", id: "LIST" }],
     }),
 
+    /** Ticket detail with description and status updates. */
     fetchTicketDetail: builder.query<TicketDetail, string>({
       query: (id) => ({
         url: `/api/v1/tickets/detail/${id}/`,

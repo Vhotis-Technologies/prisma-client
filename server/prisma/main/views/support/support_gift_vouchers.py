@@ -1,7 +1,11 @@
 """
 Paid gift voucher listing for support: list, detail, patch (is_active / optional dates).
 
-Auth: ``SupportPermissionAccess`` (internal key via support server proxy).
+**Auth:** ``SupportPermissionAccess`` (internal key via support server proxy).
+
+**GET actions:** ``list_gift_vouchers``, ``get_gift_voucher_detail`` (re-links recipient user when possible).
+
+**PATCH actions:** ``update_gift_voucher`` — ``is_active``, ``valid_from``, ``expires_at``.
 """
 from __future__ import annotations
 
@@ -21,12 +25,14 @@ from main.views.support.support_permission_access import SupportPermissionAccess
 
 
 def _iso_or_null(dt):
+    """ISO string for API payloads, or ``None`` when the datetime is unset."""
     if dt is None:
         return None
     return dt.isoformat()
 
 
 def _serialize_gift(v: GiftVoucher) -> dict[str, Any]:
+    """CamelCase dict for support-app gift voucher screens (payment + redemption metadata)."""
     assigned = None
     if v.assigned_user_id:
         try:
@@ -86,6 +92,7 @@ def _serialize_gift(v: GiftVoucher) -> dict[str, Any]:
 
 
 def _parse_optional_datetime(raw) -> tuple:
+    """Parse PATCH body datetime; return ``(aware_dt, None)`` or ``(None, error_message)``."""
     if raw is None or (isinstance(raw, str) and not raw.strip()):
         return None, None
     dt = parse_datetime(str(raw).strip())
@@ -97,6 +104,8 @@ def _parse_optional_datetime(raw) -> tuple:
 
 
 class SupportGiftVouchersView(APIView):
+    """List, detail, and patch paid gift vouchers for the internal support app."""
+
     permission_classes = [SupportPermissionAccess]
 
     get_action_handler = {
@@ -108,26 +117,34 @@ class SupportGiftVouchersView(APIView):
     }
 
     def get(self, request, *args, **kwargs):
+        """
+        Dispatch GET by URL ``action`` (list or detail).
+
+        Returns:
+            DRF ``Response`` from the matched handler, or 400 for unknown actions.
+        """
         action = kwargs.get("action")
         if action not in self.get_action_handler:
             return Response({"error": "Invalid action"}, status=status.HTTP_400_BAD_REQUEST)
         return getattr(self, self.get_action_handler[action])(request, **kwargs)
 
     def patch(self, request, *args, **kwargs):
+        """Route PATCH ``action`` to ``patch_action_handler`` (update fields)."""
         action = kwargs.get("action")
         if action not in self.patch_action_handler:
             return Response({"error": "Invalid action"}, status=status.HTTP_400_BAD_REQUEST)
         return getattr(self, self.patch_action_handler[action])(request, **kwargs)
 
     def _list_gift_vouchers(self, request, **kwargs):
+        """Return all gift vouchers newest-first with related user/booking/payment data."""
         qs = GiftVoucher.objects.select_related(
             "assigned_user", "consumed_booking", "purchased_by", "payment_transaction"
         ).order_by("-created_at")
         rows = [_serialize_gift(v) for v in qs]
         return Response({"data": {"gift_vouchers": rows}})
 
-    # Get a specific Gift Voucher
     def _get_gift_voucher_detail(self, request, **kwargs):
+        """Single voucher by ``gift_voucher_id``; re-link recipient if email matches existing user."""
         vid = request.query_params.get("gift_voucher_id")
         if not vid:
             return Response(
@@ -153,6 +170,7 @@ class SupportGiftVouchersView(APIView):
         return Response({"data": {"gift_voucher": _serialize_gift(v)}})
 
     def _patch_update_gift_voucher(self, request, **kwargs):
+        """Update ``is_active``, ``valid_from``, and/or ``expires_at``; validate date ordering."""
         vid = request.data.get("gift_voucher_id")
         if not vid:
             return Response(

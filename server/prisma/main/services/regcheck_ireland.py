@@ -22,14 +22,33 @@ MAX_IMAGE_BYTES = 6 * 1024 * 1024
 
 
 class RegcheckIrelandError(Exception):
-    """RegCheck request failed or returned unusable payload."""
+    """
+    RegCheck request failed or returned unusable payload.
+
+    Attributes:
+        code: Machine-readable error category (e.g. ``validation``, ``incomplete``).
+    """
 
     def __init__(self, message: str, code: str = "lookup_failed"):
+        """
+        Args:
+            message: Human-readable error for logs/API.
+            code: Short category for clients (``validation``, ``incomplete``, etc.).
+        """
         super().__init__(message)
         self.code = code
 
 
 def _ctv(node: Any) -> str:
+    """
+    Extract display text from RegCheck JSON nodes (often ``CurrentTextValue`` dicts).
+
+    Args:
+        node: Raw JSON value from vehicle payload.
+
+    Returns:
+        str: Trimmed text or empty string.
+    """
     if node is None:
         return ""
     if isinstance(node, dict):
@@ -41,6 +60,15 @@ def _ctv(node: Any) -> str:
 
 
 def _parse_int_soft(val: Any) -> int | None:
+    """
+    Parse integers from messy RegCheck strings (strip non-digits, allow floats).
+
+    Args:
+        val: Raw field value.
+
+    Returns:
+        int | None: Parsed integer or None when not parseable.
+    """
     if val is None:
         return None
     s = str(val).strip()
@@ -53,6 +81,18 @@ def _parse_int_soft(val: Any) -> int | None:
 
 
 def _find_vehicle_json_text(xml_content: str) -> str:
+    """
+    Parse RegCheck XML response and return the ``vehicleJson`` inner JSON string.
+
+    Args:
+        xml_content: Raw HTTP response body from RegCheck.
+
+    Returns:
+        str: JSON text embedded in ``vehicleJson`` element.
+
+    Raises:
+        RegcheckIrelandError: On invalid XML, missing node, or truncated payload.
+    """
     try:
         root = ET.fromstring(xml_content.encode("utf-8") if isinstance(xml_content, str) else xml_content)
     except ET.ParseError as e:
@@ -76,6 +116,18 @@ def _find_vehicle_json_text(xml_content: str) -> str:
 
 
 def _parse_vehicle_json(js: str) -> dict[str, Any]:
+    """
+    Parse the embedded vehicle JSON string into a Python dict.
+
+    Args:
+        js: JSON text from ``vehicleJson`` XML node.
+
+    Returns:
+        dict: Decoded vehicle fields.
+
+    Raises:
+        RegcheckIrelandError: When JSON is invalid.
+    """
     js = js.replace("\ufeff", "")
     try:
         return json.loads(js)
@@ -85,6 +137,19 @@ def _parse_vehicle_json(js: str) -> dict[str, Any]:
 
 
 def lookup_ireland(registration_number: str, *, username: str | None = None) -> dict[str, Any]:
+    """
+    Look up an Irish registration via RegCheck and return normalized vehicle fields.
+
+    Args:
+        registration_number: Plate string (spaces stripped, uppercased).
+        username: RegCheck account username; defaults to ``settings.CAR_REG_USERNAME``.
+
+    Returns:
+        dict: Normalized make/model/year and metadata plus ``registration_provider_payload``.
+
+    Raises:
+        RegcheckIrelandError: On config, validation, upstream, parse, or incomplete data errors.
+    """
     username = username or getattr(settings, "CAR_REG_USERNAME", None)
     if not username:
         raise RegcheckIrelandError(
@@ -169,6 +234,18 @@ def lookup_ireland(registration_number: str, *, username: str | None = None) -> 
 
 
 def download_provider_image(image_url: str) -> tuple[bytes, str]:
+    """
+    Stream-download a vehicle image from RegCheck (size-capped).
+
+    Args:
+        image_url: HTTP(S) URL from lookup payload.
+
+    Returns:
+        tuple: ``(raw_bytes, content_type)`` without parameters suffix.
+
+    Raises:
+        RegcheckIrelandError: On invalid URL, network failure, empty body, or oversize file.
+    """
     if not image_url or not image_url.startswith(("http://", "https://")):
         raise RegcheckIrelandError("Invalid image URL", "image_error")
 
@@ -195,7 +272,15 @@ def download_provider_image(image_url: str) -> tuple[bytes, str]:
 
 
 def ireland_payload_for_cache(payload: dict[str, Any]) -> dict[str, Any]:
-    """Return JSON-serializable dict for Django cache (no bytes)."""
+    """
+    Strip non-cacheable keys before storing lookup result in Django cache.
+
+    Args:
+        payload: Normalized lookup dict (may include transient keys).
+
+    Returns:
+        dict: Copy safe for JSON serialization.
+    """
     out = dict(payload)
     out.pop("_image_download_error", None)
     out.pop("vin_plain", None)

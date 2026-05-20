@@ -15,6 +15,7 @@ from .models import User, Vehicle, VehicleOwnership, VehicleEvent, Fleet, FleetM
 
 
 
+# Branding for the Django admin site (staff-only operations console)
 admin.site.site_header = "Prisma Car Care Admin"
 admin.site.site_title = "Prisma Admin"
 admin.site.index_title = "Welcome to Prisma Car Care Admin Panel"
@@ -22,6 +23,7 @@ admin.site.index_title = "Welcome to Prisma Car Care Admin Panel"
 
 # Custom form for ServiceType to handle description as textarea
 class ServiceTypeForm(forms.ModelForm):
+    """Admin form: edit service description as newline-separated lines stored as JSON array."""
     description_text = forms.CharField(
         widget=forms.Textarea(attrs={'rows': 4, 'cols': 50}),
         help_text="Enter each service item on a new line. These will be stored as an array.",
@@ -33,6 +35,7 @@ class ServiceTypeForm(forms.ModelForm):
         fields = '__all__'
     
     def __init__(self, *args, **kwargs):
+        """Pre-fill ``description_text`` from stored JSON when editing an existing row."""
         super().__init__(*args, **kwargs)
         if self.instance and self.instance.pk:
             # Convert JSON array back to text for editing
@@ -40,6 +43,7 @@ class ServiceTypeForm(forms.ModelForm):
                 self.fields['description_text'].initial = '\n'.join(self.instance.description)
     
     def save(self, commit=True):
+        """Persist ``description_text`` textarea lines as a JSON string array on the model."""
         instance = super().save(commit=False)
         # Convert textarea input to JSON array
         description_text = self.cleaned_data.get('description_text', '')
@@ -56,6 +60,7 @@ class ServiceTypeForm(forms.ModelForm):
 
 # Custom form for SubscriptionTier to handle features JSONField as textarea
 class SubscriptionTierForm(forms.ModelForm):
+    """Admin form: edit fleet tier features as newline-separated lines (JSON array)."""
     features_text = forms.CharField(
         widget=forms.Textarea(attrs={'rows': 8, 'cols': 50}),
         help_text="Enter each feature on a new line. These will be stored as an array.",
@@ -67,6 +72,7 @@ class SubscriptionTierForm(forms.ModelForm):
         fields = '__all__'
     
     def __init__(self, *args, **kwargs):
+        """Pre-fill ``features_text`` from stored JSON when editing an existing tier."""
         super().__init__(*args, **kwargs)
         if self.instance and self.instance.pk:
             # Convert JSON array back to text for editing
@@ -74,6 +80,7 @@ class SubscriptionTierForm(forms.ModelForm):
                 self.fields['features_text'].initial = '\n'.join(self.instance.features)
     
     def save(self, commit=True):
+        """Persist ``features_text`` lines as a JSON feature list on ``SubscriptionTier``."""
         instance = super().save(commit=False)
         # Convert textarea input to JSON array
         features_text = self.cleaned_data.get('features_text', '')
@@ -90,6 +97,7 @@ class SubscriptionTierForm(forms.ModelForm):
 
 
 class B2CSubcriptionTierForm(forms.ModelForm):
+    """Admin form: edit B2C tier features as newline-separated lines (JSON array)."""
     features_text = forms.CharField(
         widget=forms.Textarea(attrs={'rows': 8, 'cols': 50}),
         help_text="Enter each feature on a new line. These will be stored as an array.",
@@ -101,12 +109,14 @@ class B2CSubcriptionTierForm(forms.ModelForm):
         fields = '__all__'
 
     def __init__(self, *args, **kwargs):
+        """Pre-fill ``features_text`` from stored JSON when editing an existing B2C tier."""
         super().__init__(*args, **kwargs)
         if self.instance and self.instance.pk:
             if self.instance.features:
                 self.fields['features_text'].initial = '\n'.join(self.instance.features)
 
     def save(self, commit=True):
+        """Persist ``features_text`` lines as a JSON feature list on ``B2CSubcriptionTier``."""
         instance = super().save(commit=False)
         features_text = self.cleaned_data.get('features_text', '')
         if features_text:
@@ -120,6 +130,7 @@ class B2CSubcriptionTierForm(forms.ModelForm):
 
 # Custom form for ValetType to handle description as textarea
 class ValetTypeForm(forms.ModelForm):
+    """Admin form: plain-text valet description textarea."""
     description_text = forms.CharField(
         widget=forms.Textarea(attrs={'rows': 4, 'cols': 50}),
         help_text="Enter the valet service description.",
@@ -131,12 +142,14 @@ class ValetTypeForm(forms.ModelForm):
         fields = '__all__'
     
     def __init__(self, *args, **kwargs):
+        """Pre-fill ``description_text`` when editing an existing valet type."""
         super().__init__(*args, **kwargs)
         if self.instance and self.instance.pk:
             # Set the textarea with current description
             self.fields['description_text'].initial = self.instance.description
     
     def save(self, commit=True):
+        """Copy ``description_text`` from the admin textarea onto ``ValetType.description``."""
         instance = super().save(commit=False)
         # Get the description from textarea
         instance.description = self.cleaned_data.get('description_text', '')
@@ -147,6 +160,7 @@ class ValetTypeForm(forms.ModelForm):
 
 
 class PrismaUserChangeForm(UserChangeForm):
+    """Change form for existing Prisma users (email-based auth)."""
     class Meta(UserChangeForm.Meta):
         model = User
 
@@ -159,6 +173,7 @@ class PrismaAdminUserCreationForm(AdminUserCreationForm):
         fields = ('email', 'name', 'phone')
 
     def clean_email(self):
+        """Reject duplicate emails when creating a user via Django admin."""
         email = self.cleaned_data.get('email')
         if email and User.objects.filter(email__iexact=email).exists():
             raise ValidationError('A user with this email already exists.')
@@ -167,6 +182,7 @@ class PrismaAdminUserCreationForm(AdminUserCreationForm):
 
 @admin.register(User)
 class UserAdmin(DjangoUserAdmin):
+    """Django admin for custom User model (fleet, branch, referrals, notifications)."""
     form = PrismaUserChangeForm
     add_form = PrismaAdminUserCreationForm
     ordering = ('email',)
@@ -260,6 +276,7 @@ class UserAdmin(DjangoUserAdmin):
 
 @admin.register(EventDataManagement)
 class EventDataManagementAdmin(admin.ModelAdmin):
+    """Inspection / digital health check records per booking."""
     list_filter = ('inspected_at',)
     search_fields = ('booking__booking_reference',)
     readonly_fields = ('id', 'inspected_at')
@@ -267,6 +284,7 @@ class EventDataManagementAdmin(admin.ModelAdmin):
 
 @admin.register(Vehicle)
 class VehicleAdmin(admin.ModelAdmin):
+    """Vehicle registry (make, model, registration, country)."""
     list_display = ('make', 'model', 'year', 'color', 'registration_number', 'country', 'created_at')
     list_filter = ('make', 'year', 'country', 'created_at')
     search_fields = ('make', 'model', 'registration_number', 'country', 'county')
@@ -274,6 +292,7 @@ class VehicleAdmin(admin.ModelAdmin):
 
 @admin.register(VehicleOwnership)
 class VehicleOwnershipAdmin(admin.ModelAdmin):
+    """Ownership history between users and vehicles."""
     list_display = ('vehicle', 'owner', 'ownership_type', 'start_date', 'end_date', 'created_at')
     list_filter = ('ownership_type', 'start_date', 'created_at')
     search_fields = ('vehicle__registration_number', 'owner__name', 'owner__email')
@@ -282,6 +301,7 @@ class VehicleOwnershipAdmin(admin.ModelAdmin):
 
 @admin.register(VehicleEvent)
 class VehicleEventAdmin(admin.ModelAdmin):
+    """Garage timeline events (wash, inspection, etc.)."""
     list_display = ('vehicle', 'event_type', 'performed_by', 'event_date', 'visibility', 'created_at')
     list_filter = ('event_type', 'visibility', 'event_date', 'created_at')
     search_fields = ('vehicle__registration_number', 'performed_by__name', 'booking__booking_reference')
@@ -290,6 +310,7 @@ class VehicleEventAdmin(admin.ModelAdmin):
 
 @admin.register(Fleet)
 class FleetAdmin(admin.ModelAdmin):
+    """Fleet businesses and owners."""
     list_display = ('name', 'owner', 'created_at')
     list_filter = ('created_at',)
     search_fields = ('name', 'owner__name', 'owner__email')
@@ -297,6 +318,7 @@ class FleetAdmin(admin.ModelAdmin):
 
 @admin.register(FleetMember)
 class FleetMemberAdmin(admin.ModelAdmin):
+    """Fleet staff memberships and roles."""
     list_display = ('fleet', 'user', 'role', 'joined_at')
     list_filter = ('role', 'joined_at')
     search_fields = ('fleet__name', 'user__name', 'user__email')
@@ -304,6 +326,7 @@ class FleetMemberAdmin(admin.ModelAdmin):
 
 @admin.register(FleetVehicle)
 class FleetVehicleAdmin(admin.ModelAdmin):
+    """Vehicles linked to fleets and branches."""
     list_display = ('fleet', 'vehicle', 'added_by', 'added_at')
     list_filter = ('added_at',)
     search_fields = ('fleet__name', 'vehicle__registration_number', 'added_by__name')
@@ -311,6 +334,7 @@ class FleetVehicleAdmin(admin.ModelAdmin):
 
 @admin.register(VehicleTransfer)
 class VehicleTransferAdmin(admin.ModelAdmin):
+    """Ownership transfer requests with bulk expire action."""
     list_display = ('vehicle', 'from_owner', 'to_owner', 'status', 'requested_at', 'expires_at')
     list_filter = ('status', 'requested_at', 'expires_at')
     search_fields = ('vehicle__registration_number', 'from_owner__name', 'from_owner__email', 'to_owner__name', 'to_owner__email')
@@ -330,13 +354,14 @@ class VehicleTransferAdmin(admin.ModelAdmin):
 
 @admin.register(ServiceType)
 class ServiceTypeAdmin(admin.ModelAdmin):
+    """Service catalog with textarea description editor."""
     form = ServiceTypeForm
     list_display = ('name', 'price', 'duration')
     list_filter = ('price', 'duration')
     search_fields = ('name',)
     
     def get_fields(self, request, obj=None):
-        # Exclude the original description field and use our custom one
+        """Hide raw JSON ``description``; admin uses ``description_text`` on the form instead."""
         fields = list(super().get_fields(request, obj))
         if 'description' in fields:
             fields.remove('description')
@@ -344,12 +369,13 @@ class ServiceTypeAdmin(admin.ModelAdmin):
 
 @admin.register(ValetType)
 class ValetTypeAdmin(admin.ModelAdmin):
+    """Valet types with textarea description."""
     form = ValetTypeForm
     list_display = ('name',)
     search_fields = ('name',)
     
     def get_fields(self, request, obj=None):
-        # Exclude the original description field and use our custom one
+        """Hide raw ``description``; admin uses ``description_text`` on ``ValetTypeForm``."""
         fields = list(super().get_fields(request, obj))
         if 'description' in fields:
             fields.remove('description')
@@ -357,6 +383,7 @@ class ValetTypeAdmin(admin.ModelAdmin):
 
 @admin.register(DetailerProfile)
 class DetailerProfileAdmin(admin.ModelAdmin):
+    """Detailer profiles synced from detailer service."""
     list_display = ('name', 'phone', 'rating', 'created_at')
     list_filter = ('rating', 'created_at')
     search_fields = ('name','phone')
@@ -364,12 +391,14 @@ class DetailerProfileAdmin(admin.ModelAdmin):
 
 @admin.register(Address)
 class AddressAdmin(admin.ModelAdmin):
+    """User saved addresses."""
     list_display = ('user', 'address', 'post_code', 'city', 'country')
     list_filter = ('city', 'country')
     search_fields = ('user__name', 'address', 'city')
 
 @admin.register(BookedAppointment)
 class BookedAppointmentAdmin(admin.ModelAdmin):
+    """Bookings with reference, status, and amounts."""
     list_display = ('user', 'vehicle', 'service_type', 'valet_type', 'appointment_date', 'status', 'total_amount','booking_reference')
     list_filter = ('status', 'appointment_date', 'created_at')
     search_fields = ('user__name', 'vehicle__make', 'vehicle__model', 'booking_reference')
@@ -378,28 +407,33 @@ class BookedAppointmentAdmin(admin.ModelAdmin):
 
 @admin.register(AddOns)
 class AddOnsAdmin(admin.ModelAdmin):
+    """Booking add-on catalog."""
     list_display = ('name', 'price', 'description', 'extra_duration')
     search_fields = ('name',)
     readonly_fields = ('created_at', 'updated_at')
 
 @admin.register(Notification)
 class NotificationAdmin(admin.ModelAdmin):
+    """User in-app notifications."""
     list_display = ('user', 'title', 'type', 'status', 'message')
     list_filter = ('type', 'status')
     search_fields = ('user__name', 'title')
 
 @admin.register(LoyaltyProgram)
 class LoyaltyProgramAdmin(admin.ModelAdmin):
+    """B2C loyalty tiers and counters."""
     list_display = ('user', 'current_tier', 'completed_bookings')
     search_fields = ('user__name',)
 
 @admin.register(Promotions)
 class PromotionsAdmin(admin.ModelAdmin):
+    """Per-user promotional discounts."""
     list_display = ('user', 'title', 'discount_percentage', 'valid_until', 'is_active', 'terms_conditions')
     search_fields = ('user__name', 'title')
 
 @admin.register(PaymentTransaction)
 class PaymentTransactionAdmin(admin.ModelAdmin):
+    """Stripe payment and subscription charges."""
     list_display = ['booking', 'user', 'transaction_type', 'amount', 'status', 'created_at']
     list_filter = ['transaction_type', 'status', 'created_at']
     search_fields = ['booking__booking_reference', 'user__email', 'stripe_payment_intent_id']
@@ -407,6 +441,7 @@ class PaymentTransactionAdmin(admin.ModelAdmin):
 
 @admin.register(RefundRecord)
 class RefundRecordAdmin(admin.ModelAdmin):
+    """Refunds and disputes with resolve actions."""
     list_display = ['booking', 'user', 'requested_amount', 'status', 'created_at', 'dispute_resolved']
     list_filter = ['status', 'dispute_resolved', 'created_at']
     search_fields = ['booking__booking_reference', 'user__email', 'stripe_refund_id']
@@ -430,16 +465,19 @@ class RefundRecordAdmin(admin.ModelAdmin):
 
 @admin.register(TermsAndConditions)
 class TermsAndConditionsAdmin(admin.ModelAdmin):
+    """Versioned terms content."""
     list_display = ('version', 'last_updated')
     ordering = ('-last_updated',)
 
 @admin.register(PrivacyPolicy)
 class PrivacyPolicyAdmin(admin.ModelAdmin):
+    """Versioned privacy policy content."""
     list_display = ('version', 'last_updated')
     ordering = ('-last_updated',)
 
 @admin.register(Referral)
 class ReferralAdmin(admin.ModelAdmin):
+    """Consumer peer referrals."""
     list_display = ('referrer', 'referred', 'created_at')
     list_filter = ('created_at',)
     search_fields = ('referrer__name', 'referred__name')
@@ -447,6 +485,7 @@ class ReferralAdmin(admin.ModelAdmin):
 
 @admin.register(Branch)
 class BranchAdmin(admin.ModelAdmin):
+    """Fleet branch locations."""
     list_display = ('name', 'address', 'postcode', 'city', 'country', 'created_at')
     list_filter = ('created_at',)
     search_fields = ('name', 'address', 'postcode', 'city', 'country')
@@ -454,6 +493,7 @@ class BranchAdmin(admin.ModelAdmin):
 
 @admin.register(B2CSubcriptionTier)
 class B2CSubcriptionTierAdmin(admin.ModelAdmin):
+    """B2C subscription tiers (reference pricing, features)."""
     form = B2CSubcriptionTierForm
     list_display = ('name', 'monthlyPrice', 'yearly_price', 'created_at')
     search_fields = ('name', 'tagLine')
@@ -473,6 +513,7 @@ class B2CSubcriptionTierAdmin(admin.ModelAdmin):
     )
 
     def get_fields(self, request, obj=None):
+        """Hide raw JSON ``features``; admin uses ``features_text`` on the tier form."""
         fields = list(super().get_fields(request, obj))
         if 'features' in fields:
             fields.remove('features')
@@ -481,6 +522,7 @@ class B2CSubcriptionTierAdmin(admin.ModelAdmin):
 
 @admin.register(B2CSubcriptionPlan)
 class B2CSubcriptionPlanAdmin(admin.ModelAdmin):
+    """B2C billable plans per tier and cycle."""
     list_display = ('tier', 'billing_cycle', 'price', 'created_at')
     list_filter = ('billing_cycle', 'tier', 'created_at')
     search_fields = ('tier__name',)
@@ -491,6 +533,7 @@ class B2CSubcriptionPlanAdmin(admin.ModelAdmin):
 
 @admin.register(B2CSubcription)
 class B2CSubcriptionAdmin(admin.ModelAdmin):
+    """Consumer subscriptions and complimentary sparkle ledger."""
     list_display = (
         'user',
         'plan',
@@ -523,6 +566,7 @@ class B2CSubcriptionAdmin(admin.ModelAdmin):
 
 @admin.register(B2CSubcriptionBilling)
 class B2CSubcriptionBillingAdmin(admin.ModelAdmin):
+    """B2C subscription payment rows."""
     list_display = ('subscription', 'amount', 'billing_date', 'status', 'transaction_id')
     list_filter = ('status', 'billing_date')
     search_fields = (
@@ -537,6 +581,7 @@ class B2CSubcriptionBillingAdmin(admin.ModelAdmin):
 
 @admin.register(SubscriptionTier)
 class SubscriptionTierAdmin(admin.ModelAdmin):
+    """Fleet SaaS tiers."""
     form = SubscriptionTierForm
     list_display = ('name', 'monthlyPrice', 'yearly_price', 'is_active', 'created_at')
     list_filter = ('is_active', 'created_at')
@@ -559,7 +604,7 @@ class SubscriptionTierAdmin(admin.ModelAdmin):
     )
     
     def get_fields(self, request, obj=None):
-        # Exclude the original features field and use our custom one
+        """Hide raw JSON ``features``; admin uses ``features_text`` on ``SubscriptionTierForm``."""
         fields = list(super().get_fields(request, obj))
         if 'features' in fields:
             fields.remove('features')
@@ -567,6 +612,7 @@ class SubscriptionTierAdmin(admin.ModelAdmin):
 
 @admin.register(SubscriptionPlan)
 class SubscriptionPlanAdmin(admin.ModelAdmin):
+    """Fleet billable plans."""
     list_display = ('name', 'tier', 'billing_cycle', 'price', 'is_active', 'created_at')
     list_filter = ('billing_cycle', 'is_active', 'tier', 'created_at')
     search_fields = ('name', 'tier__name')
@@ -574,6 +620,7 @@ class SubscriptionPlanAdmin(admin.ModelAdmin):
 
 @admin.register(FleetSubscription)
 class FleetSubscriptionAdmin(admin.ModelAdmin):
+    """Fleet subscription lifecycle and Stripe ids."""
     list_display = ('fleet', 'plan', 'status', 'start_date', 'end_date', 'auto_renew', 'created_at')
     list_filter = ('status', 'auto_renew', 'start_date', 'end_date', 'created_at')
     search_fields = ('fleet__name', 'fleet__owner__name', 'fleet__owner__email', 'stripe_subscription_id')
@@ -599,6 +646,7 @@ class FleetSubscriptionAdmin(admin.ModelAdmin):
 
 @admin.register(BookedAppointmentImage)
 class BookedAppointmentImageAdmin(admin.ModelAdmin):
+    """Before/after job images."""
     list_display = ('booking', 'image_type', 'segment', 'image_url', 'created_at')
     list_filter = ('image_type', 'segment', 'created_at')
     search_fields = ('booking__booking_reference', 'image_url')
@@ -607,6 +655,7 @@ class BookedAppointmentImageAdmin(admin.ModelAdmin):
 
 @admin.register(SubscriptionBilling)
 class SubscriptionBillingAdmin(admin.ModelAdmin):
+    """Fleet subscription billing rows."""
     list_display = ('subscription', 'amount', 'billing_date', 'status', 'transaction_id', 'created_at')
     list_filter = ('status', 'billing_date', 'created_at')
     search_fields = ('subscription__fleet__name', 'transaction_id', 'subscription__stripe_subscription_id')
@@ -616,6 +665,7 @@ class SubscriptionBillingAdmin(admin.ModelAdmin):
 
 @admin.register(Partner)
 class PartnerAdmin(admin.ModelAdmin):
+    """Partner profiles and referral codes."""
     list_display = ('business_name', 'partner_type', 'referral_code', 'user', 'commission_rate', 'is_active', 'created_at')
     list_filter = ('partner_type', 'is_active', 'created_at')
     search_fields = ('business_name', 'referral_code', 'user__email', 'user__name')
@@ -625,6 +675,7 @@ class PartnerAdmin(admin.ModelAdmin):
 
 @admin.register(PartnerBankAccount)
 class PartnerBankAccountAdmin(admin.ModelAdmin):
+    """Partner IBAN for manual payouts."""
     list_display = ('partner', 'account_holder_name', 'created_at')
     search_fields = ('partner__business_name', 'account_holder_name')
     readonly_fields = ('id', 'created_at', 'updated_at')
@@ -633,6 +684,7 @@ class PartnerBankAccountAdmin(admin.ModelAdmin):
 
 @admin.register(PartnerPayoutRequest)
 class PartnerPayoutRequestAdmin(admin.ModelAdmin):
+    """Support-processed payout requests."""
     list_display = ('partner', 'amount_requested', 'status', 'requested_at', 'paid_at')
     list_filter = ('status', 'requested_at')
     search_fields = ('partner__business_name', 'partner__user__email')
@@ -644,6 +696,7 @@ class PartnerPayoutRequestAdmin(admin.ModelAdmin):
 
 @admin.register(ReferralAttribution)
 class ReferralAttributionAdmin(admin.ModelAdmin):
+    """Partner → referred user attribution."""
     list_display = ('partner', 'referred_user', 'source', 'attribution_type', 'attributed_at', 'expires_at')
     list_filter = ('source', 'attribution_type', 'attributed_at')
     search_fields = ('partner__business_name', 'referred_user__email', 'referred_user__name')
@@ -653,6 +706,7 @@ class ReferralAttributionAdmin(admin.ModelAdmin):
 
 @admin.register(CommissionEarning)
 class CommissionEarningAdmin(admin.ModelAdmin):
+    """Per-booking commission lines with approve/reverse actions."""
     list_display = ('partner', 'booking', 'referred_user', 'gross_amount', 'commission_rate', 'commission_amount', 'status', 'created_at')
     list_filter = ('status', 'created_at')
     search_fields = ('partner__business_name', 'booking__booking_reference', 'referred_user__email')
@@ -662,6 +716,7 @@ class CommissionEarningAdmin(admin.ModelAdmin):
     actions = ['reverse_commission', 'approve_commission']
 
     def reverse_commission(self, request, queryset):
+        """Bulk admin action: mark commissions reversed and append audit log rows."""
         from main.models import CommissionAdminLog
         count = 0
         for earning in queryset.exclude(status='reversed'):
@@ -682,6 +737,7 @@ class CommissionEarningAdmin(admin.ModelAdmin):
     reverse_commission.short_description = 'Reverse selected commissions'
 
     def approve_commission(self, request, queryset):
+        """Bulk admin action: approve pending commissions and log each change."""
         from main.models import CommissionAdminLog
         count = 0
         for earning in queryset.filter(status='pending'):
@@ -702,6 +758,7 @@ class CommissionEarningAdmin(admin.ModelAdmin):
 
 @admin.register(CommissionAdminLog)
 class CommissionAdminLogAdmin(admin.ModelAdmin):
+    """Audit log for commission status changes."""
     list_display = ('commission_earning', 'admin_user', 'action', 'previous_status', 'previous_amount', 'reason', 'created_at')
     list_filter = ('action', 'created_at')
     search_fields = ('commission_earning__booking__booking_reference', 'admin_user__email', 'reason')
@@ -712,6 +769,7 @@ class CommissionAdminLogAdmin(admin.ModelAdmin):
 
 @admin.register(CommissionPayout)
 class CommissionPayoutAdmin(admin.ModelAdmin):
+    """Legacy batch commission payouts."""
     list_display = ('partner', 'total_amount', 'period_start', 'period_end', 'status', 'paid_at', 'created_at')
     list_filter = ('status', 'period_start', 'period_end')
     search_fields = ('partner__business_name', 'stripe_payout_id')
@@ -722,12 +780,14 @@ class CommissionPayoutAdmin(admin.ModelAdmin):
 
 @admin.register(PartnerMetricsCache)
 class PartnerMetricsCacheAdmin(admin.ModelAdmin):
+    """Denormalized partner dashboard metrics."""
     list_display = ('partner', 'total_referred_users', 'active_referred_users', 'total_revenue_from_referrals', 'total_commission_earned', 'pending_commission', 'last_updated')
     search_fields = ('partner__business_name',)
     readonly_fields = ('last_updated',)
 
 @admin.register(PendingBooking)
 class PendingBookingAdmin(admin.ModelAdmin):
+    """Checkout sessions awaiting payment."""
     list_display = ('booking_reference', 'user', 'payment_status', 'expires_at', 'created_at')
     list_filter = ('payment_status', 'expires_at', 'created_at')
     search_fields = ('booking_reference', 'user__email', 'user__name')
@@ -735,6 +795,7 @@ class PendingBookingAdmin(admin.ModelAdmin):
 
 @admin.register(BulkOrder)
 class BulkOrderAdmin(admin.ModelAdmin):
+    """Multi-vehicle fleet bulk orders."""
     list_display = ('booking_reference', 'user', 'branch', 'fleet', 'payment_status', 'number_of_vehicles', 'total_amount', 'created_at')
     list_filter = ('payment_status', 'created_at')
     search_fields = ('booking_reference', 'user__email', 'user__name')
@@ -768,6 +829,7 @@ class WinnerVoucherAdmin(admin.ModelAdmin):
 
 @admin.register(GiftVoucher)
 class GiftVoucherAdmin(admin.ModelAdmin):
+    """Purchased gift vouchers (Stripe-paid)."""
     list_display = (
         'code',
         'assigned_email',

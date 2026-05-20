@@ -10,7 +10,7 @@ import logging
 import re
 
 from main.models import BookedAppointment, BookedAppointmentImage, Notification, User, Address, BulkOrder
-from main.tasks import send_booking_confirmation_email, send_push_notification
+from main.tasks import send_booking_confirmation_email
 from main.utils.bulk_appointments import get_or_create_bulk_appointment_for_slot
 from main.utils.bulk_notifications import try_send_bulk_client_confirmation_notifications
 from main.services.NotificationServices import NotificationService
@@ -31,14 +31,31 @@ CONSUMER_NAME = "subscribe_redis"
 
 
 class Command(BaseCommand):
+    """
+    Long-running Redis consumer for detailer job lifecycle events.
+
+    Updates ``BookedAppointment`` status, syncs images, sends client notifications,
+    and handles bulk-order slot references (``BULK123-1`` style).
+    """
+
     help = "Read from Redis stream job_events (job_acceptance, job_started, job_completed) and process messages."
 
     def __init__(self, *args, **kwargs):
+        """Initialize command with a shared ``NotificationService`` instance."""
         super().__init__(*args, **kwargs)
         self.notification_service = NotificationService()
 
     def _sync_before_booking_images(self, booking, before_images):
-        """Persist before images from Redis payload; skip empty URLs and duplicates."""
+        """
+        Persist before images from Redis payload; skip empty URLs and duplicates.
+
+        Args:
+            booking: Target ``BookedAppointment``.
+            before_images: List of dicts with ``image_url`` and optional ``segment``.
+
+        Returns:
+            int: Count of newly created ``BookedAppointmentImage`` rows.
+        """
         if not before_images:
             return 0
         created = 0
@@ -72,7 +89,16 @@ class Command(BaseCommand):
         return created
 
     def _sync_after_booking_images(self, booking, after_images):
-        """Persist after images from Redis payload; skip empty URLs and duplicates."""
+        """
+        Persist after images from Redis payload; skip empty URLs and duplicates.
+
+        Args:
+            booking: Target ``BookedAppointment``.
+            after_images: List of dicts with ``image_url`` and optional ``segment``.
+
+        Returns:
+            int: Count of newly created image rows.
+        """
         if not after_images:
             return 0
         created = 0
@@ -106,6 +132,16 @@ class Command(BaseCommand):
         return created
 
     def handle(self, *args, **options):
+        """
+        Ensure consumer group exists, drain pending messages, then block-read forever.
+
+        Args:
+            *args: Unused positional args.
+            **options: Unused options dict.
+
+        Returns:
+            None (runs until KeyboardInterrupt).
+        """
         ensure_consumer_group(STREAM_JOB_EVENTS, CLIENT_GROUP)
         self.stdout.write(self.style.SUCCESS("Subscribed to job_events stream (client_group)"))
 
@@ -124,6 +160,16 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS("subscribe_redis stopped"))
 
     def _process_message(self, msg_id, fields, channel_layer):
+        """
+        Dispatch one Redis stream entry: parse payload, update booking, notify user.
+
+        Always ACKs the message (even on errors) to avoid poison-pill blocking.
+
+        Args:
+            msg_id: Redis stream message id.
+            fields: Stream field dict (``event``, ``payload``).
+            channel_layer: Django Channels layer (reserved for future WS fan-out).
+        """
         event = fields.get("event")
         raw = fields.get("payload", "{}")
         if event not in (
@@ -197,7 +243,7 @@ class Command(BaseCommand):
 
             if event == "job_acceptance":
                 from main.views.payment import assign_detailers_to_booking
-
+                
                 if isinstance(detailers_list, list) and len(detailers_list) > 0:
                     assign_detailers_to_booking(booking, detailers_list)
                     self.stdout.write(f"Assigned {len(detailers_list)} detailer(s) to booking {booking_reference}")
@@ -236,7 +282,7 @@ class Command(BaseCommand):
                             booking.total_amount,
                             booking.detailer.name,
                         )
-                    send_push_notification.delay(
+                    self.send_push_notification(
                         booking.user.id,
                         "Booking Confirmed! 🎉",
                         f"Your valet service is confirmed for {booking.appointment_date} at {booking.start_time}. Your detailer is {booking.detailer.name}",
@@ -268,7 +314,7 @@ class Command(BaseCommand):
                     )
                 self._sync_before_booking_images(booking, before_images)
                 if not skip_notify:
-                    send_push_notification.delay(
+                    self.send_push_notification(
                         booking.user.id,
                         "Service Started! 🚀",
                         _job_started_message(booking, vehicle_display),
@@ -319,7 +365,7 @@ class Command(BaseCommand):
                     except Exception as e:
                         self.stderr.write(f"Error saving fleet maintenance: {e}")
                 if not skip_notify:
-                    send_push_notification.delay(
+                    self.send_push_notification(
                         booking.user.id,
                         "Service Completed! ✨",
                         f"Your valet service has been completed! Thank you for choosing PRISMA VALET.",
@@ -359,7 +405,7 @@ class Command(BaseCommand):
                                 )
                             self._sync_before_booking_images(booking, before_images)
                             if not skip_notify:
-                                send_push_notification.delay(
+                                self.send_push_notification(
                                     booking.user.id,
                                     "Service Started! 🚀",
                                     _job_started_message(booking, vehicle_display),
@@ -409,7 +455,7 @@ class Command(BaseCommand):
                                 except Exception as e:
                                     self.stderr.write(f"Error saving fleet maintenance: {e}")
                             if not skip_notify:
-                                send_push_notification.delay(
+                                self.send_push_notification(
                                     booking.user.id,
                                     "Service Completed! ✨",
                                     f"Your valet service has been completed! Thank you for choosing PRISMA VALET.",
@@ -463,7 +509,7 @@ class Command(BaseCommand):
                                 bulk.save()
                                 self.stdout.write(f"Detailer {detailer.name} added to bulk order {base_ref}")
                                 if len(assigned) == 1:
-                                    send_push_notification.delay(
+                                    self.send_push_notification(
                                         bulk.user.id,
                                         "Bulk booking team assigned",
                                         "Your bulk booking team has been assigned.",
@@ -505,6 +551,7 @@ class Command(BaseCommand):
             return
 
         def already_applied(current, incoming):
+            """True when assigned detailer id lists match (skip redundant Redis replay writes)."""
             if not isinstance(current, list):
                 return False
             current_ids = sorted([str((d or {}).get("id") or "") for d in current])
@@ -536,7 +583,21 @@ class Command(BaseCommand):
         assign_detailers_to_booking(booking, detailers)
         self.stdout.write(f"{event}: updated booking {booking_reference}")
 
+    # Create a notification for the user   
     def create_notification(self, user, title, type, status, message):
+        """
+        Create an in-app ``Notification`` for the user.
+
+        Args:
+            user: Recipient ``User``.
+            title: Notification heading.
+            type: App routing type string.
+            status: UI status (success, info, etc.).
+            message: Body text.
+
+        Returns:
+            bool: True when ORM create succeeds.
+        """
         try:
             Notification.objects.create(user=user, title=title, type=type, status=status, message=message)
             return True
@@ -544,7 +605,60 @@ class Command(BaseCommand):
             self.stderr.write(f"Failed to create notification: {e}")
             return False
 
+
+    def send_push_notification(self, user_id, title, message, type):
+        """
+        Send a push notification to a user.
+        """
+        try:
+            from main.models import User
+            from main.tasks.notifications.push import _normalize_push_data
+            from exponent_server_sdk import PushClient, PushMessage
+
+            user = User.objects.get(id=user_id)
+
+            if not user.notification_token:
+                return f"Push notification not sent: User {user_id} has no notification token"
+
+            if not user.allow_push_notifications:
+                return f"Push notification not sent: User {user_id} has disabled push notifications"
+
+            push_data = _normalize_push_data(type, title, message)
+            push_client = PushClient()
+            response = push_client.publish(
+                PushMessage(
+                    to=user.notification_token,
+                    title=title,
+                    body=message,
+                    data=push_data,
+                )
+            )
+
+            # Validate ticket when the SDK exposes validate_response.
+            if response is not None:
+                validate = getattr(response, "validate_response", None)
+                if callable(validate):
+                    validate()
+
+            if response and hasattr(response, "data") and response.data:
+                return f"Push notification sent successfully to user {user_id}"
+            return f"Push notification failed for user {user_id}: Invalid response"
+
+        except Exception as e:
+            error_msg = f"Failed to send push notification to user {user_id}: {str(e)}"
+            return error_msg
+
+
     def get_currency_symbol(self, user_id):
+        """
+        Return £ or € based on the user's primary address country.
+
+        Args:
+            user_id: ``User`` primary key.
+
+        Returns:
+            str: Currency symbol (defaults to €).
+        """
         user = User.objects.get(id=user_id)
         address = Address.objects.filter(user=user).first()
         if address and address.country and (address.country == "United Kingdom" or address.country.lower() == "united kingdom"):

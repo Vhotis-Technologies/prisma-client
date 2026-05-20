@@ -12,6 +12,13 @@ from main.models import Notification
 
 
 class NotificationsView(APIView):
+    """
+    In-app notifications and FCM token storage for the authenticated user.
+
+    Action-routed via ``notifications/<action>/``. GET: list; PATCH: mark read;
+    DELETE: remove; POST is not used (save token uses PATCH path in client—see action map).
+    """
+
     permission_classes = [IsAuthenticated]
 
     action_handlers = {
@@ -31,7 +38,7 @@ class NotificationsView(APIView):
         return handler(request)
     
     def patch(self, request, *args, **kwargs):
-        """Route PATCH by action (e.g. mark_notification_as_read, mark_all_notifications_as_read). Returns 400 if action invalid."""
+        """Route PATCH by action (mark read, mark all read, save FCM token). Returns 400 if action invalid."""
         action = kwargs.get('action')
         if action not in self.action_handlers:
             return Response({'error': 'Invalid action'}, status=status.HTTP_400_BAD_REQUEST)
@@ -51,6 +58,7 @@ class NotificationsView(APIView):
     def _get_notifications(self, request):
         """Return all notifications for the authenticated user. Each with id, title, message, type, status, timestamp, is_read."""
         try:
+            # Scope to current user only
             notifications = Notification.objects.filter(user=request.user)
             notifications_data = []
             
@@ -73,6 +81,7 @@ class NotificationsView(APIView):
         """Mark one notification as read. Expects request.data.id (notification id). User must own the notification."""
         try:
             notification_id = request.data.get('id')
+            # Ownership enforced in query
             notification = Notification.objects.get(id=notification_id, user=request.user)
             notification.is_read = True
             notification.save()
@@ -114,6 +123,7 @@ class NotificationsView(APIView):
         """Save FCM/push token to user.notification_token. Expects request.data.token."""
         try:
             token = request.data.get('token')
+            # Persist device token on User for push delivery
             request.user.notification_token = token
             request.user.save()
             return Response({'success': True}, status=status.HTTP_200_OK)

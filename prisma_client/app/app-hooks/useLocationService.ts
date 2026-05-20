@@ -27,6 +27,8 @@ export interface LocationData {
  * - Calculate distance between points
  * - Handle location errors gracefully
  * - Integrates with permission system
+ *
+ * @returns Current location, error state, and geolocation helpers
  */
 export const useLocationService = () => {
   const [currentLocation, setCurrentLocation] = useState<LocationData | null>(

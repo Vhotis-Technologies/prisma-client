@@ -30,12 +30,14 @@ from main.models import (
     PartnerMetricsCache,
     PartnerPayoutRequest,
 )
+from main.utils.support_audit import get_support_actor_email
 from main.views.support.support_permission_access import SupportPermissionAccess
 
 logger = logging.getLogger(__name__)
 
 
 def _fmt_display_date(d) -> str:
+    """Human-readable date for support UI (``%d %b %Y``)."""
     if not d:
         return ""
     if hasattr(d, "strftime"):
@@ -44,6 +46,7 @@ def _fmt_display_date(d) -> str:
 
 
 def _iso(dt) -> str:
+    """ISO-8601 string for API payloads; empty string if falsy."""
     if not dt:
         return ""
     if hasattr(dt, "isoformat"):
@@ -130,6 +133,7 @@ class SupportPayoutsView(APIView):
     }
 
     def get(self, request, *args, **kwargs):
+        """Dispatch GET ``action`` to queue, partner summary, or balance verification."""
         action = kwargs.get("action")
         if action not in self.get_action_handler:
             return Response({"error": "Invalid action"}, status=status.HTTP_400_BAD_REQUEST)
@@ -137,6 +141,7 @@ class SupportPayoutsView(APIView):
         return handler(request, **kwargs)
 
     def post(self, request, *args, **kwargs):
+        """Dispatch POST ``action`` (currently ``mark_payout_paid`` only)."""
         action = kwargs.get("action")
         if action not in self.post_action_handler:
             return Response({"error": "Invalid action"}, status=status.HTTP_400_BAD_REQUEST)
@@ -281,7 +286,7 @@ class SupportPayoutsView(APIView):
         payout_request_id = (data.get("payout_request_id") or "").strip()
         admin_notes = (data.get("admin_notes") or "").strip()
         payment_reference = (data.get("payment_reference") or "").strip()
-        support_user_email = (data.get("support_user_email") or "").strip()
+        support_user_email = get_support_actor_email(request)
         confirmed_amount_raw = data.get("confirmed_amount")
 
         if not payout_request_id:

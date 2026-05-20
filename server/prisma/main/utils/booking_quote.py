@@ -36,6 +36,12 @@ def is_quick_sparkle_service_name(name: Optional[str]) -> bool:
 
     Normalises case and internal spacing, then matches if the canonical phrase
     appears (covers e.g. \"Prisma Quick Sparkle\", legacy \"The Quick Sparkle\").
+
+    Args:
+        name: Service display name from client or DB.
+
+    Returns:
+        bool: Whether complimentary Quick Sparkle rules apply.
     """
     if not name or not isinstance(name, str):
         return False
@@ -46,14 +52,41 @@ AmountBreakdown = Dict[str, float]
 
 
 def money(d: Decimal) -> Decimal:
+    """
+    Round a ``Decimal`` to two decimal places (half-up), for currency amounts.
+
+    Args:
+        d: Raw decimal value.
+
+    Returns:
+        Decimal: Quantised to 0.01.
+    """
     return d.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
 def float_money(d: Decimal) -> float:
+    """
+    Convert a currency ``Decimal`` to ``float`` for JSON API responses.
+
+    Args:
+        d: Amount to round and convert.
+
+    Returns:
+        float: Two-decimal float.
+    """
     return float(money(d))
 
 
 def line_total_inc_vat_to_parts(total_inc_vat: Decimal) -> Tuple[Decimal, Decimal, Decimal]:
+    """
+    Split a VAT-inclusive total into ex-VAT subtotal, VAT amount, and total (23% VAT).
+
+    Args:
+        total_inc_vat: VAT-inclusive line total.
+
+    Returns:
+        tuple: ``(sub_ex, vat_amt, total_inc_vat)`` each rounded to cents.
+    """
     total_inc_vat = money(total_inc_vat)
     sub_ex = (total_inc_vat / (Decimal("1") + VAT_RATE)).quantize(Decimal("0.01"), ROUND_HALF_UP)
     vat_amt = money(total_inc_vat - sub_ex)
@@ -61,6 +94,15 @@ def line_total_inc_vat_to_parts(total_inc_vat: Decimal) -> Tuple[Decimal, Decima
 
 
 def _user_excluded_from_promotions(user) -> bool:
+    """
+    True when loyalty/promo/partner booking discounts must not apply (fleet/partner roles).
+
+    Args:
+        user: Authenticated ``User``.
+
+    Returns:
+        bool: Whether promotional pricing is disabled for this account.
+    """
     from main.models import Partner
 
     if getattr(user, "is_fleet_owner", False) or getattr(user, "is_branch_admin", False):
@@ -73,6 +115,15 @@ def _user_excluded_from_promotions(user) -> bool:
 
 
 def _active_promotion_discount_pct(user) -> Decimal:
+    """
+    Percentage off from the user's newest active ``Promotions`` row, if any.
+
+    Args:
+        user: Booking user.
+
+    Returns:
+        Decimal: Discount percent (0 when excluded or no valid promotion).
+    """
     from main.models import Promotions
 
     if _user_excluded_from_promotions(user):
@@ -89,6 +140,15 @@ def _active_promotion_discount_pct(user) -> Decimal:
 
 
 def _loyalty_discount_pct(user) -> Decimal:
+    """
+    Tier discount percent from ``LoyaltyProgram`` for B2C users.
+
+    Args:
+        user: Booking user.
+
+    Returns:
+        Decimal: Tier ``discount`` benefit percent, or 0.
+    """
     from main.models import LoyaltyProgram
 
     if getattr(user, "is_fleet_owner", False) or getattr(user, "is_branch_admin", False):
@@ -103,11 +163,29 @@ def _loyalty_discount_pct(user) -> Decimal:
 
 
 def _service_unit_price(user, service) -> Decimal:
+    """
+    VAT-inclusive unit price for a service for this user (tier/fleet pricing).
+
+    Args:
+        user: Booking user.
+        service: ``ServiceType`` instance.
+
+    Returns:
+        Decimal: Rounded price from ``get_price_for_user``.
+    """
     return money(Decimal(str(service.get_price_for_user(user))))
 
 
 def _addon_total_with_four_plus_rule(addons: Sequence) -> Decimal:
-    """addons: iterable of AddOns with .price"""
+    """
+    Sum addon prices; when four or more addons, cheapest addon is free.
+
+    Args:
+        addons: Iterable of ``AddOns`` with ``.price``.
+
+    Returns:
+        Decimal: Total addon line (VAT-inclusive sticker logic).
+    """
     if not addons:
         return Decimal("0")
     prices = [money(Decimal(str(a.price))) for a in addons]
@@ -118,6 +196,12 @@ def _addon_total_with_four_plus_rule(addons: Sequence) -> Decimal:
 
 
 def _partner_booking_discount_pct_setting() -> Decimal:
+    """
+    Read partner referred-booking discount percent from Django settings.
+
+    Returns:
+        Decimal: Configured percent (default 35).
+    """
     raw = getattr(settings, "PARTNER_REFERRED_BOOKING_DISCOUNT_PERCENT", 35)
     try:
         return Decimal(str(int(raw)))
@@ -126,7 +210,15 @@ def _partner_booking_discount_pct_setting() -> Decimal:
 
 
 def _subscription_booking_discount_pct(user) -> Decimal:
-    """Active B2C tier discount on the sticker stack (Lite/Pro 5%, Spectrum/Spectacular 7%)."""
+    """
+    Active B2C subscription tier discount on the sticker stack (e.g. Lite/Pro 5%).
+
+    Args:
+        user: Booking user.
+
+    Returns:
+        Decimal: Plan ``get_service_discount_percent`` or 0.
+    """
     from main.models import B2CSubcription
 
     sub = (
@@ -154,7 +246,18 @@ def compute_price_breakdown_parts(
     exclude_service_price: bool,
     partner_booking_discount_pct: Decimal = Decimal("0"),
 ) -> Dict[str, Decimal]:
-    """Internal full stack: sticker (VAT-inc), tier/promo/partner € off, then ex-VAT breakdown."""
+    """
+    Internal full price stack: sticker (VAT-inc), discounts, then ex-VAT breakdown.
+
+    Args:
+        user, service, addons: Pricing inputs.
+        is_suv, is_express: Surcharge flags.
+        exclude_service_price: True for complimentary Quick Sparkle (addons only).
+        partner_booking_discount_pct: Extra % when user opts into partner offer.
+
+    Returns:
+        dict: sub_ex, vat_amt, total_inc_vat, sticker and per-discount inc-VAT amounts.
+    """
     base = Decimal("0") if exclude_service_price else _service_unit_price(user, service)
     addon_total = _addon_total_with_four_plus_rule(addons)
     sub = money(base + addon_total)
@@ -175,6 +278,7 @@ def compute_price_breakdown_parts(
     total_inc = money(
         total_before_discount - loyalty_amt - promo_amt - partner_amt - subscription_amt
     )
+    # Back out ex-VAT line items from final VAT-inclusive total after %-off discounts.
     sub_ex, vat_amt, total_inc_vat = line_total_inc_vat_to_parts(total_inc)
     return {
         "sub_ex": sub_ex,
@@ -190,6 +294,15 @@ def compute_price_breakdown_parts(
 
 
 def pricing_lines_meta(parts: Dict[str, Decimal]) -> Dict[str, float]:
+    """
+    Convert internal ``compute_price_breakdown_parts`` dict to float API metadata.
+
+    Args:
+        parts: Output from ``compute_price_breakdown_parts``.
+
+    Returns:
+        dict: Sticker and per-discount inc-VAT floats for client display.
+    """
     sub_pct = parts.get("subscription_discount_pct", Decimal("0"))
     return {
         "sticker_total_inc_vat": float_money(parts["sticker_inc_vat"]),
@@ -227,6 +340,15 @@ def compute_price_breakdown(
 
 
 def breakdown_to_response(sub_ex: Decimal, vat_amt: Decimal, total_inc: Decimal) -> AmountBreakdown:
+    """
+    Map decimal breakdown to API ``AmountBreakdown`` floats.
+
+    Args:
+        sub_ex, vat_amt, total_inc: Ex-VAT, VAT, and inc-VAT totals.
+
+    Returns:
+        dict: Keys ``subtotal``, ``vat``, ``total``.
+    """
     return {
         "subtotal": float_money(sub_ex),
         "vat": float_money(vat_amt),
@@ -235,6 +357,15 @@ def breakdown_to_response(sub_ex: Decimal, vat_amt: Decimal, total_inc: Decimal)
 
 
 def get_partner_eligible(user) -> bool:
+    """
+    True when the user may use the one-time partner complimentary Quick Sparkle.
+
+    Args:
+        user: Referred user.
+
+    Returns:
+        bool: Attribution exists, wash unused, and not expired.
+    """
     from main.models import ReferralAttribution
 
     try:
@@ -330,6 +461,15 @@ def get_loyalty_quick_sparkle_snapshot(user) -> Dict[str, Any]:
 
 
 def get_active_b2c_subscription(user):
+    """
+    Newest active or past_due B2C subscription for ``user``, with plan/tier loaded.
+
+    Args:
+        user: ``User`` instance.
+
+    Returns:
+        B2CSubcription | None: Active subscription row or None.
+    """
     from main.models import B2CSubcription
 
     return (
@@ -410,12 +550,30 @@ def get_loyalty_progress_snapshot(user) -> Dict[str, Any]:
 
 
 def _period_dates(sub) -> Tuple[timezone.datetime.date, timezone.datetime.date]:
+    """
+    Normalise subscription billing period to date objects.
+
+    Args:
+        sub: ``B2CSubcription`` with ``start_date`` and ``end_date``.
+
+    Returns:
+        tuple: ``(start_date, end_date)`` as ``date``.
+    """
     start = sub.start_date.date() if hasattr(sub.start_date, "date") else sub.start_date
     end = sub.end_date.date() if hasattr(sub.end_date, "date") else sub.end_date
     return start, end
 
 
 def get_subscription_quick_sparkle_snapshot(user) -> Dict[str, Any]:
+    """
+    Read-only subscription complimentary Quick Sparkle allowance for the current period.
+
+    Args:
+        user: B2C user.
+
+    Returns:
+        dict: eligible_subscription, remaining/max counts, period_start/end/label.
+    """
     sub = get_active_b2c_subscription(user)
     if not sub or not getattr(sub, "plan", None):
         return {
@@ -442,7 +600,15 @@ def get_subscription_quick_sparkle_snapshot(user) -> Dict[str, Any]:
 
 
 def eligible_complimentary_sources_list(qs: Dict[str, Any]) -> List[str]:
-    """Which complimentary Quick Sparkle sources are currently available."""
+    """
+    Which complimentary Quick Sparkle sources are currently available.
+
+    Args:
+        qs: Entitlements dict from ``build_quick_sparkle_entitlements``.
+
+    Returns:
+        list[str]: Subset of ``loyalty``, ``partner``, ``subscription``.
+    """
     if not qs.get("is_quick_sparkle"):
         return []
     out: List[str] = []
@@ -550,6 +716,7 @@ def quote_booking_for_user(
         "subscription": None,
     }
 
+    # Complimentary paths zero the service line but keep addons/SUV/express/partner %.
     if qs["is_quick_sparkle"]:
         for key in ("loyalty", "partner", "subscription"):
             eligible_key = f"eligible_{key}" if key != "partner" else "eligible_partner"
@@ -628,6 +795,16 @@ def _parse_booking_data_service_addons(
 
 
 def _partner_booking_discount_pct_for_booking_data(user, booking_data: dict) -> Decimal:
+    """
+    Partner referral booking discount percent when client opted in and offer is valid.
+
+    Args:
+        user: Booking user.
+        booking_data: Client payload with ``apply_partner_booking_discount``.
+
+    Returns:
+        Decimal: Offer percent or 0.
+    """
     if not booking_data.get("apply_partner_booking_discount"):
         return Decimal("0")
     offer = get_partner_referral_booking_offer(user)
@@ -728,6 +905,7 @@ def validate_bulk_booking_financials(user, booking_data: dict) -> Optional[str]:
     except Exception:
         return "Invalid total_amount"
 
+    # Allow 2 cent tolerance for float rounding between client and server.
     if abs(client_total - srv_total) > Decimal("0.02"):
         return "Booking total does not match server quote. Please refresh and try again."
     return None
@@ -761,7 +939,6 @@ def validate_booking_financials(user, booking_data: dict) -> Optional[str]:
     if abs(client_total - srv_total) > Decimal("0.02"):
         return "Booking total does not match server quote. Please refresh and try again."
 
-    # Optional: subtotal/vat check if both provided
     return None
 
 

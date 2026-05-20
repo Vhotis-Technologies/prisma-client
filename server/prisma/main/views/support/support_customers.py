@@ -57,6 +57,7 @@ from main.utils.booking_quote import (
     get_loyalty_progress_snapshot,
     get_subscription_quick_sparkle_snapshot,
 )
+from main.utils.support_audit import get_support_actor_email
 from main.views.support.support_permission_access import SupportPermissionAccess
 
 logger = logging.getLogger(__name__)
@@ -65,6 +66,7 @@ stripe.api_key = getattr(settings, "STRIPE_SECRET_KEY", "") or ""
 
 
 def _fmt_display_date(d) -> str:
+    """Format a date as %d %b %Y for support UI labels; empty string if falsy."""
     if not d:
         return ""
     if hasattr(d, "strftime"):
@@ -73,6 +75,7 @@ def _fmt_display_date(d) -> str:
 
 
 def _iso(dt) -> str:
+    """ISO-8601 string for datetimes; empty string if falsy."""
     if not dt:
         return ""
     if hasattr(dt, "isoformat"):
@@ -81,6 +84,7 @@ def _iso(dt) -> str:
 
 
 def _float_or_0(v) -> float:
+    """Coerce numeric values to float for JSON; return 0.0 on failure."""
     if v is None:
         return 0.0
     try:
@@ -109,6 +113,7 @@ def _vehicle_status_for_support(vehicle: Vehicle) -> str:
 
 
 def _serialize_vehicle(vehicle: Vehicle, last_service: str | None = None) -> dict:
+    """Minimal vehicle card for support lists (make, reg, image, status)."""
     return {
         "id": str(vehicle.id),
         "make": vehicle.make or "",
@@ -123,6 +128,7 @@ def _serialize_vehicle(vehicle: Vehicle, last_service: str | None = None) -> dic
 
 
 def _ownership_timeline_for_support(vehicle: Vehicle) -> list[dict]:
+    """Ownership history rows for a vehicle (newest first)."""
     rows = []
     for vo in (
         VehicleOwnership.objects.filter(vehicle=vehicle)
@@ -147,6 +153,7 @@ def _ownership_timeline_for_support(vehicle: Vehicle) -> list[dict]:
 
 
 def _vehicle_transfers_for_support(vehicle: Vehicle, limit: int = 25) -> list[dict]:
+    """Pending/historical transfer requests with approve/reject flags."""
     out = []
     for t in (
         VehicleTransfer.objects.filter(vehicle=vehicle)
@@ -175,6 +182,7 @@ def _vehicle_transfers_for_support(vehicle: Vehicle, limit: int = 25) -> list[di
 
 
 def _fleet_links_for_support(vehicle: Vehicle) -> list[dict]:
+    """Fleet/branch associations for a vehicle."""
     links = []
     for fv in FleetVehicle.objects.filter(vehicle=vehicle).select_related("fleet", "branch"):
         links.append(
@@ -190,6 +198,7 @@ def _fleet_links_for_support(vehicle: Vehicle) -> list[dict]:
 
 
 def _current_owner_for_support(vehicle: Vehicle) -> dict | None:
+    """Active owner summary from Vehicle.get_active_ownership."""
     ao = vehicle.get_active_ownership()
     if not ao:
         return None
@@ -284,10 +293,12 @@ def _vehicle_stats_payload_for_support(vehicle: Vehicle) -> dict:
 
 
 def _user_primary_address(user: User) -> Address | None:
+    """First saved address for a user, if any."""
     return Address.objects.filter(user=user).first()
 
 
 def _support_subscription_status(db_status: str) -> str:
+    """Map DB subscription status to support-app terminated/expired/active."""
     if db_status in ("cancelled",):
         return "terminated"
     if db_status in ("expired",):
@@ -296,6 +307,7 @@ def _support_subscription_status(db_status: str) -> str:
 
 
 def _latest_b2c_subscription(user: User) -> B2CSubcription | None:
+    """Most recent B2C subscription row for a user (by start_date)."""
     # B2CSubcription has no created_at; start_date is the best proxy for "most recent" row.
     return (
         B2CSubcription.objects.filter(user=user)
@@ -339,6 +351,7 @@ def _serialize_b2c_subscription(sub: B2CSubcription | None) -> dict:
 def _serialize_fleet_subscription(
     sub: FleetSubscription | None,
 ) -> dict:
+    """Fleet subscription block for support customer payloads."""
     if not sub:
         return {
             "subtype": "No plan",
@@ -385,6 +398,7 @@ def _b2c_user_query():
 
 
 def _b2c_booking_stats(user: User) -> tuple[int, Decimal, int, int, str | None]:
+    """Return (total, spend, completed, cancelled, last_booking_date) for a B2C user."""
     qs = BookedAppointment.objects.filter(user=user)
     total = qs.count()
     spend = (
@@ -398,6 +412,7 @@ def _b2c_booking_stats(user: User) -> tuple[int, Decimal, int, int, str | None]:
 
 
 def _serialize_b2c_list_item(user: User) -> dict:
+    """B2C row in segmented customer list."""
     loyalty = LoyaltyProgram.objects.filter(user=user).first()
     raw_tier = (loyalty.current_tier or "bronze") if loyalty else ""
     tier = raw_tier.title() if raw_tier else "Bronze"
@@ -450,6 +465,7 @@ def _vehicles_for_user(user: User) -> list[dict]:
 
 
 def _serialize_b2c_detail(user: User) -> dict:
+    """Full B2C customer detail including vehicles, loyalty, subscription perks."""
     base = _serialize_b2c_list_item(user)
     addr = _user_primary_address(user)
     total_bookings, total_spend, completed, cancelled, last_booking = _b2c_booking_stats(user)
@@ -481,6 +497,7 @@ def _serialize_b2c_detail(user: User) -> dict:
 
 
 def _fleet_booking_aggregate(fleet: Fleet) -> tuple[int, Decimal]:
+    """Booking count and spend across fleet vehicles and bulk orders."""
     v_ids = list(FleetVehicle.objects.filter(fleet=fleet).values_list("vehicle_id", flat=True))
     qs = BookedAppointment.objects.filter(
         Q(bulk_order__fleet=fleet) | Q(vehicle_id__in=v_ids)
@@ -493,6 +510,7 @@ def _fleet_booking_aggregate(fleet: Fleet) -> tuple[int, Decimal]:
 
 
 def _serialize_fleet_list_item(fleet: Fleet) -> dict:
+    """Fleet row in segmented customer list."""
     sub = (
         FleetSubscription.objects.filter(fleet=fleet)
         .select_related("plan", "plan__tier")
@@ -520,6 +538,7 @@ def _serialize_fleet_list_item(fleet: Fleet) -> dict:
 
 
 def _branch_counts(branch: Branch) -> tuple[int, int, int]:
+    """Return (vehicles, bookings, admins) counts for a branch."""
     vehicle_count = FleetVehicle.objects.filter(branch=branch).count()
     v_ids = FleetVehicle.objects.filter(branch=branch).values_list("vehicle_id", flat=True)
     booking_count = BookedAppointment.objects.filter(vehicle_id__in=v_ids).count()
@@ -528,6 +547,7 @@ def _branch_counts(branch: Branch) -> tuple[int, int, int]:
 
 
 def _serialize_branch_summary(branch: Branch) -> dict:
+    """Branch summary card for fleet detail screen."""
     vc, bc, ac = _branch_counts(branch)
     return {
         "id": str(branch.id),
@@ -540,6 +560,7 @@ def _serialize_branch_summary(branch: Branch) -> dict:
 
 
 def _serialize_fleet_detail(fleet: Fleet) -> dict:
+    """Full fleet customer detail with branches and admins."""
     base = _serialize_fleet_list_item(fleet)
     total_bookings, total_spend = _fleet_booking_aggregate(fleet)
     owner = fleet.owner
@@ -578,10 +599,12 @@ def _serialize_fleet_detail(fleet: Fleet) -> dict:
 
 
 def _partner_metrics_cache(partner: Partner) -> PartnerMetricsCache | None:
+    """Fetch cached partner metrics row if present."""
     return PartnerMetricsCache.objects.filter(partner=partner).first()
 
 
 def _serialize_partner_list_item(partner: Partner) -> dict:
+    """Partner row in segmented customer list."""
     u = partner.user
     referred = ReferralAttribution.objects.filter(partner=partner).count()
     cache = _partner_metrics_cache(partner)
@@ -603,6 +626,7 @@ def _serialize_partner_list_item(partner: Partner) -> dict:
 
 
 def _partner_referred_metrics(partner: Partner) -> dict:
+    """Aggregate referral/booking/revenue stats for partner detail."""
     attrs = ReferralAttribution.objects.filter(partner=partner).select_related("referred_user")
     total = attrs.count()
     active = attrs.filter(referred_user__is_active=True).count()
@@ -694,6 +718,7 @@ def _serialize_payout_request(pr: PartnerPayoutRequest) -> dict:
 
 
 def _serialize_partner_detail(partner: Partner) -> dict:
+    """Full partner detail including payouts and referred metrics."""
     base = _serialize_partner_list_item(partner)
     m = _partner_referred_metrics(partner)
     u = partner.user
@@ -740,6 +765,7 @@ def _serialize_partner_detail(partner: Partner) -> dict:
 
 
 def _serialize_referred_user_detail(attr: ReferralAttribution) -> dict:
+    """B2C detail shape for one referred user under a partner."""
     user = attr.referred_user
     detail = _serialize_b2c_detail(user)
     detail["partner_id"] = str(attr.partner_id)
@@ -753,6 +779,7 @@ def _serialize_referred_user_detail(attr: ReferralAttribution) -> dict:
 
 
 def _serialize_fleet_branch_detail(fleet: Fleet, branch: Branch) -> dict | None:
+    """Branch drill-down payload for support fleet UI."""
     if branch.fleet_id != fleet.id:
         return None
     summary = _serialize_branch_summary(branch)
@@ -827,8 +854,12 @@ class SupportCustomersView(APIView):
         "remove_branch": "_patch_remove_branch",
         "vehicle_transfer": "_patch_vehicle_transfer",
     }
+    post_action_handler = {
+        "delete_user_account": "_post_delete_user_account",
+    }
 
     def get(self, request, *args, **kwargs):
+        """Dispatch GET by URL action name to the matching _get_* handler."""
         action = kwargs.get("action")
         if action not in self.get_action_handler:
             return Response({"error": "Invalid action"}, status=status.HTTP_400_BAD_REQUEST)
@@ -836,13 +867,23 @@ class SupportCustomersView(APIView):
         return handler(request, **kwargs)
 
     def patch(self, request, *args, **kwargs):
+        """Dispatch PATCH by URL action name to the matching _patch_* handler."""
         action = kwargs.get("action")
         if action not in self.patch_action_handler:
             return Response({"error": "Invalid action"}, status=status.HTTP_400_BAD_REQUEST)
         handler = getattr(self, self.patch_action_handler[action])
         return handler(request, **kwargs)
 
+    def post(self, request, *args, **kwargs):
+        """Dispatch POST by URL action name to the matching _post_* handler."""
+        action = kwargs.get("action")
+        if action not in self.post_action_handler:
+            return Response({"error": "Invalid action"}, status=status.HTTP_400_BAD_REQUEST)
+        handler = getattr(self, self.post_action_handler[action])
+        return handler(request, **kwargs)
+
     def _get_customers_list(self, request, **kwargs):
+        """List customers for segment b2c, fleet, or partner (query param segment)."""
         segment = (request.query_params.get("segment") or "b2c").strip().lower()
         if segment == "b2c":
             qs_list = list(_b2c_user_query())
@@ -858,6 +899,7 @@ class SupportCustomersView(APIView):
         return Response({"data": {"customers": customers}}, status=status.HTTP_200_OK)
 
     def _get_b2c_detail(self, request, **kwargs):
+        """B2C customer detail by customer_id query param."""
         cid = request.query_params.get("customer_id")
         if not cid:
             return Response({"error": "customer_id required"}, status=status.HTTP_400_BAD_REQUEST)
@@ -868,6 +910,7 @@ class SupportCustomersView(APIView):
         return Response({"data": {"customer": _serialize_b2c_detail(user)}})
 
     def _get_fleet_detail(self, request, **kwargs):
+        """Fleet customer detail by customer_id (fleet pk)."""
         cid = request.query_params.get("customer_id")
         if not cid:
             return Response({"error": "customer_id required"}, status=status.HTTP_400_BAD_REQUEST)
@@ -878,6 +921,7 @@ class SupportCustomersView(APIView):
         return Response({"data": {"customer": _serialize_fleet_detail(fleet)}})
 
     def _get_partner_detail(self, request, **kwargs):
+        """Partner customer detail by customer_id (partner pk)."""
         cid = request.query_params.get("customer_id")
         if not cid:
             return Response({"error": "customer_id required"}, status=status.HTTP_400_BAD_REQUEST)
@@ -888,6 +932,7 @@ class SupportCustomersView(APIView):
         return Response({"data": {"customer": _serialize_partner_detail(partner)}})
 
     def _get_fleet_branch_detail(self, request, **kwargs):
+        """Branch drill-down; requires fleet_id and branch_id."""
         fleet_id = request.query_params.get("fleet_id")
         branch_id = request.query_params.get("branch_id")
         if not fleet_id or not branch_id:
@@ -906,6 +951,7 @@ class SupportCustomersView(APIView):
         return Response({"data": {"branch": payload}})
 
     def _get_vehicle_detail(self, request, **kwargs):
+        """Garage-style vehicle stats for support (no ownership check)."""
         vid = (request.query_params.get("vehicle_id") or "").strip()
         if not vid:
             return Response({"error": "vehicle_id required"}, status=status.HTTP_400_BAD_REQUEST)
@@ -916,6 +962,7 @@ class SupportCustomersView(APIView):
         return Response({"data": _vehicle_stats_payload_for_support(vehicle)}, status=status.HTTP_200_OK)
 
     def _get_partner_referred_users(self, request, **kwargs):
+        """List referred B2C users for a partner_id."""
         partner_id = request.query_params.get("partner_id")
         if not partner_id:
             return Response({"error": "partner_id required"}, status=status.HTTP_400_BAD_REQUEST)
@@ -932,6 +979,7 @@ class SupportCustomersView(APIView):
         return Response({"data": {"users": users}}, status=status.HTTP_200_OK)
 
     def _patch_terminate_fleet_subscription(self, request, **kwargs):
+        """Cancel active fleet sub in DB and Stripe if configured."""
         fleet_id = request.data.get("fleet_id")
         reason = (request.data.get("reason") or "Support termination").strip()
         if not fleet_id:
@@ -965,6 +1013,7 @@ class SupportCustomersView(APIView):
         )
 
     def _patch_renew_fleet_subscription(self, request, **kwargs):
+        """Reactivate fleet subscription with a new local period window."""
         fleet_id = request.data.get("fleet_id")
         if not fleet_id:
             return Response({"error": "fleet_id required"}, status=status.HTTP_400_BAD_REQUEST)
@@ -1002,6 +1051,7 @@ class SupportCustomersView(APIView):
         )
 
     def _patch_terminate_b2c_subscription(self, request, **kwargs):
+        """Cancel active B2C sub in DB and Stripe if configured."""
         uid = request.data.get("user_id")
         reason = (request.data.get("reason") or "Support termination").strip()
         if not uid:
@@ -1038,6 +1088,7 @@ class SupportCustomersView(APIView):
         )
 
     def _patch_renew_b2c_subscription(self, request, **kwargs):
+        """Reactivate B2C subscription with a new local period window."""
         uid = request.data.get("user_id")
         if not uid:
             return Response({"error": "user_id required"}, status=status.HTTP_400_BAD_REQUEST)
@@ -1077,6 +1128,7 @@ class SupportCustomersView(APIView):
         )
 
     def _patch_vehicle_transfer(self, request, **kwargs):
+        """Approve or reject a pending vehicle transfer (support override)."""
         transfer_id = request.data.get("transfer_id")
         vehicle_id = (request.data.get("vehicle_id") or "").strip()
         action = (request.data.get("action") or "").strip().lower()
@@ -1132,6 +1184,7 @@ class SupportCustomersView(APIView):
         )
 
     def _patch_remove_vehicle(self, request, **kwargs):
+        """Remove vehicle from fleet or end user ownership."""
         vehicle_id = request.data.get("vehicle_id")
         fleet_id = request.data.get("fleet_id")
         user_id = request.data.get("user_id")
@@ -1160,6 +1213,7 @@ class SupportCustomersView(APIView):
         )
 
     def _patch_remove_branch(self, request, **kwargs):
+        """Delete empty branch (must have zero fleet vehicles)."""
         fleet_id = request.data.get("fleet_id")
         branch_id = request.data.get("branch_id")
         if not fleet_id or not branch_id:
@@ -1182,3 +1236,71 @@ class SupportCustomersView(APIView):
             )
         branch.delete()
         return Response({"data": {"message": "Branch removed"}}, status=status.HTTP_200_OK)
+
+    def _post_delete_user_account(self, request, **kwargs):
+        """
+        Deactivate a customer account (GDPR-style erasure). Does not hard-delete rows with
+        financial history; anonymizes PII and blocks login.
+        """
+        user_id = (request.data.get("user_id") or "").strip()
+        reason = (request.data.get("reason") or "Support account deletion").strip()[:500]
+        if not user_id:
+            return Response({"error": "user_id required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user = User.objects.get(pk=user_id)
+        except User.DoesNotExist:
+            return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        if user.is_staff or user.is_superuser:
+            return Response(
+                {"error": "Staff accounts cannot be deleted via support"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if Partner.objects.filter(user=user).exists():
+            return Response(
+                {"error": "Partner accounts must be deactivated via partner tooling"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not user.is_active:
+            return Response(
+                {"data": {"message": "Account already deactivated", "user_id": str(user.id)}},
+                status=status.HTTP_200_OK,
+            )
+
+        actor = get_support_actor_email(request) or "support"
+        original_email = user.email
+        user.is_active = False
+        user.email = f"deleted+{user.id}@prisma.invalid"
+        if hasattr(user, "phone") and user.phone:
+            user.phone = f"deleted-{user.id}"
+        user.save(update_fields=["is_active", "email", "phone"])
+
+        open_bookings = BookedAppointment.objects.filter(
+            user=user, status__in=["pending", "confirmed", "in_progress", "scheduled"]
+        ).count()
+        if open_bookings:
+            logger.warning(
+                "Deleted user %s had %s open bookings; account deactivated anyway by %s",
+                user_id,
+                open_bookings,
+                actor,
+            )
+
+        logger.info(
+            "Support deleted user account id=%s former_email=%s by=%s reason=%s",
+            user_id,
+            original_email,
+            actor,
+            reason,
+        )
+        return Response(
+            {
+                "data": {
+                    "message": "Account deactivated",
+                    "user_id": str(user.id),
+                    "deleted_by": actor,
+                }
+            },
+            status=status.HTTP_200_OK,
+        )

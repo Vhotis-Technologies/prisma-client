@@ -78,5 +78,8 @@ const serviceHistoryApi = createApi({
   }),
 });
 
-export const { useGetServiceHistoryQuery, useFetchBookingImagesQuery } = serviceHistoryApi;
+export const {
+  useGetServiceHistoryQuery,
+  useFetchBookingImagesQuery,
+} = serviceHistoryApi;
 export default serviceHistoryApi;

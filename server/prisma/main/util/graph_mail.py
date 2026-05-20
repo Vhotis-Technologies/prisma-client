@@ -1,8 +1,8 @@
 """
 Microsoft Graph API client for sending email (e.g. support@prismavalet.com).
 
-Uses MSAL for client credentials; get_access_token, send_mail via Graph API.
-Requires GRAPH_CLIENT_ID, GRAPH_CLIENT_SECRET, GRAPH_TENANT_ID, GRAPH_USER env vars.
+Uses MSAL client-credentials flow; ``get_access_token`` and ``send_mail`` call Graph.
+Requires ``GRAPH_CLIENT_ID``, ``GRAPH_CLIENT_SECRET``, ``GRAPH_TENANT_ID``, ``GRAPH_USER``.
 """
 import os
 import requests
@@ -16,11 +16,21 @@ USER = os.getenv("GRAPH_USER")  # support@prismavalet.com
 
 
 def get_access_token():
+    """
+    Acquire a Microsoft Graph access token via MSAL (silent cache or client credentials).
+
+    Returns:
+        str: Bearer token for Graph API requests.
+
+    Raises:
+        Exception: When token acquisition fails (includes MSAL error description).
+    """
     authority = f"https://login.microsoftonline.com/{TENANT_ID}"
     app = msal.ConfidentialClientApplication(
         CLIENT_ID, authority=authority, client_credential=CLIENT_SECRET
     )
 
+    # Prefer cached token from a prior acquisition in-process.
     result = app.acquire_token_silent(
         ["https://graph.microsoft.com/.default"], account=None
     )
@@ -33,14 +43,26 @@ def get_access_token():
     if "access_token" in result:
         return result["access_token"]
     else:
-        # Provide more helpful error message
         raise Exception(
             f"Failed to acquire access token: {result.get('error')}, {result.get('error_description')}"
         )
 
 
-
 def send_mail(subject, body_html, recipient):
+    """
+    Send an HTML email as the configured Graph mailbox user.
+
+    Args:
+        subject: Email subject line.
+        body_html: HTML body content.
+        recipient: To-address string.
+
+    Returns:
+        bool: True when Graph returns HTTP 202 Accepted.
+
+    Raises:
+        Exception: On non-202 Graph API responses (includes response body).
+    """
     access_token = get_access_token()
     headers = {"Authorization": f"Bearer {access_token}"}
     email_msg = {

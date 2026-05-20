@@ -1,3 +1,8 @@
+"""
+Celery tasks: fleet subscription lifecycle emails (trial, renewal, payment, cancel).
+
+All messages are sent via Microsoft Graph from HTML templates.
+"""
 from celery import shared_task
 from datetime import timedelta
 from django.template.loader import render_to_string
@@ -16,8 +21,19 @@ def send_subscription_renewal_reminder_email(
     hosted_invoice_url=None,
 ):
     """
-    Sent when Stripe emits invoice.upcoming for a fleet subscription — backup if Stripe
-    customer invoice emails are disabled. Optional Stripe hosted invoice URL when available.
+    Fleet ``invoice.upcoming`` reminder when Stripe customer emails may be disabled.
+
+    Args:
+        user_email: Fleet owner email.
+        fleet_name: Fleet display name.
+        plan_name: Subscription plan label.
+        renewal_date_iso: ISO datetime for next charge.
+        amount_due: Amount due on upcoming invoice.
+        currency: ISO currency code.
+        hosted_invoice_url: Optional Stripe hosted invoice link.
+
+    Returns:
+        str: Celery result message.
     """
     try:
         if isinstance(renewal_date_iso, str):
@@ -43,7 +59,12 @@ def send_subscription_renewal_reminder_email(
 
 @shared_task
 def send_trial_ending_soon_email(user_email, fleet_name, trial_end_date, plan_name, billing_amount):
-    """Send email notification 7 days before trial ends."""
+    """
+    Email fleet owner 7 days before trial ends.
+
+    Returns:
+        str: Celery result message.
+    """
     try:
         if isinstance(trial_end_date, str):
             trial_end_dt = parse_datetime(trial_end_date)
@@ -72,7 +93,12 @@ def send_trial_ending_soon_email(user_email, fleet_name, trial_end_date, plan_na
 
 @shared_task
 def send_trial_ended_email(user_email, fleet_name, plan_name, billing_amount, next_billing_date):
-    """Send email notification when trial ends and billing starts."""
+    """
+    Email fleet owner when trial ends and paid billing begins.
+
+    Returns:
+        str: Celery result message.
+    """
     try:
         if isinstance(next_billing_date, str):
             next_billing_dt = parse_datetime(next_billing_date)
@@ -95,7 +121,12 @@ def send_trial_ended_email(user_email, fleet_name, plan_name, billing_amount, ne
 
 @shared_task
 def send_subscription_cancelled_email(user_email, fleet_name, plan_name, cancellation_date, access_until_date):
-    """Send email notification when subscription is cancelled."""
+    """
+    Email fleet owner when subscription is cancelled.
+
+    Returns:
+        str: Celery result message.
+    """
     try:
         if isinstance(cancellation_date, str):
             cancellation_dt = parse_datetime(cancellation_date)
@@ -153,7 +184,12 @@ def send_payment_failed_email(user_email, fleet_name, plan_name, failed_amount, 
 
 @shared_task
 def send_payment_method_updated_email(user_email, fleet_name):
-    """Send email notification when payment method is updated."""
+    """
+    Confirm fleet payment method update.
+
+    Returns:
+        str: Celery result message.
+    """
     try:
         subject = "Payment method updated successfully"
         html_message = render_to_string('payment_method_updated.html', {
@@ -168,7 +204,12 @@ def send_payment_method_updated_email(user_email, fleet_name):
 
 @shared_task
 def send_trial_subscription_welcome_email(user_email, fleet_name, plan_name, trial_days, trial_end_date):
-    """Send welcome email when trial subscription is activated."""
+    """
+    Welcome email when a fleet trial subscription is activated.
+
+    Returns:
+        str: Celery result message.
+    """
     try:
         if isinstance(trial_end_date, str):
             trial_end_dt = parse_datetime(trial_end_date)

@@ -14,7 +14,15 @@ from main.util.graph_mail import send_mail as graph_send_mail
 
 
 def _voucher_email_window_context(voucher) -> dict:
-    """Build display fields for valid-from, expiry, and approximate days in the use window."""
+    """
+    Build display fields for valid-from, expiry, and approximate days in the use window.
+
+    Args:
+        voucher: ``WinnerVoucher`` or ``GiftVoucher`` instance.
+
+    Returns:
+        dict: ``valid_from_display``, ``expires_at_display``, ``days_to_use`` keys.
+    """
     now = timezone.now()
     vf = voucher.valid_from
     exp = voucher.expires_at
@@ -39,6 +47,12 @@ def _voucher_email_window_context(voucher) -> dict:
 def send_winner_voucher_email(voucher_id: str):
     """
     Email the assigned address with voucher code, credit, validity window, rules, and app links.
+
+    Args:
+        voucher_id: ``WinnerVoucher`` UUID/string primary key.
+
+    Returns:
+        str: Skip reason, success, or error message.
     """
     try:
         voucher = WinnerVoucher.objects.get(pk=voucher_id)
@@ -79,8 +93,15 @@ def send_winner_voucher_email(voucher_id: str):
 @shared_task
 def send_gift_voucher_email(voucher_id: str):
     """
-    Email recipient after Stripe payment confirms. Idempotent callers may invoke multiple times:
-    skips if voucher missing, unpaid, redeemed, inactive, or already emailed.
+    Email gift recipient after Stripe payment confirms.
+
+    Idempotent: skips if already sent, unpaid, redeemed, or inactive.
+
+    Args:
+        voucher_id: ``GiftVoucher`` primary key.
+
+    Returns:
+        str: Skip reason, success, or error message.
     """
     try:
         voucher = GiftVoucher.objects.select_related("purchased_by").get(pk=voucher_id)

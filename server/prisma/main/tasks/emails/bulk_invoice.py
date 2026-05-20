@@ -19,10 +19,22 @@ def send_bulk_invoice_payment_reminder_email(
     reminder_kind,
 ):
     """
-    Send app-owned reminder for a fleet/partner bulk Stripe invoice with the hosted payment link.
-    Sets invoice_*_email_sent_at on success (idempotent per kind).
+    Send app-owned reminder for a fleet/partner bulk Stripe invoice with hosted payment link.
 
-    reminder_kind: 'due_soon' | 'overdue'
+    Sets ``invoice_due_soon_email_sent_at`` or ``invoice_overdue_email_sent_at`` on success.
+
+    Args:
+        bulk_order_id: ``BulkOrder`` primary key.
+        user_email: Recipient address.
+        booking_reference: Reference for subject/body.
+        hosted_invoice_url: Stripe hosted invoice URL.
+        amount_due_display: Formatted amount string.
+        currency: ISO currency code.
+        due_date_display: Human-readable due date.
+        reminder_kind: ``'due_soon'`` or ``'overdue'``.
+
+    Returns:
+        str: Success, skip, or error message.
     """
     try:
         bulk_order = BulkOrder.objects.get(pk=bulk_order_id)

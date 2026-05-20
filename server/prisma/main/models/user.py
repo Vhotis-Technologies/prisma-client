@@ -1,4 +1,9 @@
-"""User, referral, address, loyalty, promotions, notifications - user and notification related models."""
+"""
+Authentication, profile, loyalty, promotions, and legal document models.
+
+``User`` is the custom email-based auth model. Side effects on save create welcome promotions,
+loyalty rows for B2C users, and fleet shells when ``is_fleet_owner`` is set.
+"""
 import random
 import string
 import uuid
@@ -10,7 +15,10 @@ from django.utils import timezone
 
 
 class UserManager(BaseUserManager):
+    """Creates users and superusers with normalized email as username."""
+
     def create_user(self, email, password=None, **extra_fields):
+        """Create a standard user with hashed password."""
         if not email:
             raise ValueError("Email is required")
         email = self.normalize_email(email)
@@ -20,12 +28,15 @@ class UserManager(BaseUserManager):
         return user
 
     def create_superuser(self, email, password=None, **extra_fields):
+        """Create an admin user with staff and superuser flags."""
         extra_fields.setdefault('is_staff', True)
         extra_fields.setdefault('is_superuser', True)
         return self.create_user(email, password, **extra_fields)
 
 
 class User(AbstractUser):
+    """Prisma client account: B2C consumer, fleet owner, branch admin, or partner-linked user."""
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=155)
     email = models.EmailField(unique=True)
@@ -56,9 +67,11 @@ class User(AbstractUser):
         return f"{self.name} - {self.email}"
 
     def create_referral_code(self):
+        """Generate a 10-character alphanumeric user referral code."""
         return ''.join(random.choices(string.ascii_uppercase + string.digits, k=10))
 
     def get_current_vehicles(self):
+        """Vehicles with an open (no end_date) ownership row for this user."""
         from main.models import Vehicle
         return Vehicle.objects.filter(
             ownerships__owner=self,
@@ -66,10 +79,12 @@ class User(AbstractUser):
         ).distinct()
 
     def get_all_vehicles(self):
+        """All vehicles this user has ever owned (including ended ownerships)."""
         from main.models import Vehicle
         return Vehicle.objects.filter(ownerships__owner=self).distinct()
 
     def is_fleet_admin_or_manager(self):
+        """True if user is a fleet admin or manager member."""
         from main.models import FleetMember
         return FleetMember.objects.filter(
             user=self,
@@ -77,6 +92,7 @@ class User(AbstractUser):
         ).exists()
 
     def get_managed_branch(self):
+        """Branch instance for branch admins; ``None`` for non-admins."""
         from main.models import FleetMember
         if not self.is_branch_admin:
             return None
@@ -87,6 +103,7 @@ class User(AbstractUser):
         return fleet_membership.branch if fleet_membership else None
 
     def is_fleet_user(self):
+        """True for fleet owners and branch administrators."""
         return self.is_fleet_owner or self.is_branch_admin
 
     def is_b2c_user(self):
@@ -101,6 +118,7 @@ class User(AbstractUser):
         return True
 
     def can_view_vehicle_details(self, vehicle=None):
+        """Fleet users need an active subscription to view vehicle detail in the app."""
         from main.models import Fleet, FleetMember
         if not (self.is_fleet_owner or self.is_branch_admin):
             return True
@@ -116,6 +134,7 @@ class User(AbstractUser):
         return subscription is not None
 
     def create_fleet(self, business_name=None, business_address=None):
+        """Create or update the owner's fleet and optional head-office branch from signup data."""
         from main.models import Fleet, Branch
         from decimal import Decimal
         if not self.is_fleet_owner:
@@ -146,6 +165,7 @@ class User(AbstractUser):
         return fleet
 
     def save(self, *args, **kwargs):
+        """Sync username from email; bootstrap promotions, loyalty, fleet, and referral code."""
         from datetime import datetime
         self.username = self.email
         is_new_user = self.pk is None
@@ -180,6 +200,8 @@ class User(AbstractUser):
 
 
 class Referral(models.Model):
+    """Peer referral link between two consumer users (distinct from partner attribution)."""
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     referrer = models.ForeignKey(User, on_delete=models.CASCADE, related_name='referrer')
     referred = models.ForeignKey(User, on_delete=models.CASCADE, related_name='referred')
@@ -191,6 +213,8 @@ class Referral(models.Model):
 
 
 class Address(models.Model):
+    """Saved service address for bookings and profile."""
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     address = models.CharField(max_length=255)
@@ -205,6 +229,8 @@ class Address(models.Model):
 
 
 class LoyaltyProgram(models.Model):
+    """B2C loyalty tier, completed booking count, and platinum free Quick Sparkle ledger."""
+
     TIER_CHOICES = [
         ('bronze', 'Bronze'),
         ('silver', 'Silver'),
@@ -222,6 +248,12 @@ class LoyaltyProgram(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def get_tier_benefits(self):
+        """
+        Return discount % and complimentary service labels for the user's current tier.
+
+        Non-B2C users (fleet/partner) always get empty benefits; B2C tiers map to
+        configured perks used at checkout and in the app loyalty UI.
+        """
         # Only regular (B2C) consumers receive loyalty perks; fleets/partners use subscriptions etc.
         if not self.user.is_b2c_user():
             return {
@@ -240,6 +272,7 @@ class LoyaltyProgram(models.Model):
         return benefits.get(self.current_tier, benefits['bronze'])
 
     def get_free_wash_limit(self):
+        """Max complimentary Quick Sparkles per 30-day window (1 for platinum B2C, else 0)."""
         if self.current_tier != 'platinum':
             return 0
         if not self.user.is_b2c_user():
@@ -247,6 +280,7 @@ class LoyaltyProgram(models.Model):
         return 1
 
     def can_use_free_quick_sparkle(self):
+        """Whether the user may redeem a free Quick Sparkle this rolling 30-day window."""
         if self.current_tier != 'platinum':
             return False
         if not self.user.is_b2c_user():
@@ -265,10 +299,12 @@ class LoyaltyProgram(models.Model):
         return self.free_quick_sparkle_used < limit
 
     def use_free_quick_sparkle(self):
+        """Increment usage counter after a complimentary Quick Sparkle booking."""
         self.free_quick_sparkle_used += 1
         self.save()
 
     def get_remaining_free_quick_sparkles(self):
+        """Remaining free Quick Sparkles in the current period."""
         limit = self.get_free_wash_limit()
         remaining = limit - self.free_quick_sparkle_used
         return max(0, remaining)
@@ -293,6 +329,7 @@ class Promotions(models.Model):
         return f"{self.title} - {self.discount_percentage}%"
 
     def save(self, *args, **kwargs):
+        """Auto-deactivate when expired, older than 30 days, or already used."""
         today = timezone.now().date()
         if (self.valid_until and self.valid_until < today) or \
            (self.created_at and timezone.now() - self.created_at > timedelta(days=30)) or \
@@ -301,6 +338,7 @@ class Promotions(models.Model):
         super().save(*args, **kwargs)
 
     def mark_as_used(self, booking):
+        """Record promotion consumption against a booking."""
         self.is_used = True
         self.used_in_booking = booking
         self.used_at = timezone.now()
@@ -309,6 +347,8 @@ class Promotions(models.Model):
 
 
 class Notification(models.Model):
+    """In-app notification row for a user (booking lifecycle, marketing, etc.)."""
+
     NOTIFICATION_TYPE_CHOICES = [
         ('booking_confirmed', 'Booking Confirmed'),
         ('booking_cancelled', 'Booking Cancelled'),
@@ -337,6 +377,8 @@ class Notification(models.Model):
 
 
 class TermsAndConditions(models.Model):
+    """Versioned terms HTML served on legal pages and linked from emails."""
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     version = models.CharField(max_length=20, unique=True)
     content = models.TextField()
@@ -357,6 +399,8 @@ class PrivacyPolicy(models.Model):
 
 
 class PasswordResetToken(models.Model):
+    """Single-use token for password reset email links."""
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     token = models.CharField(max_length=255, unique=True)
@@ -368,9 +412,11 @@ class PasswordResetToken(models.Model):
         db_table = 'password_reset_tokens'
 
     def is_expired(self):
+        """True when ``expires_at`` is in the past."""
         return timezone.now() > self.expires_at
 
     def is_valid(self):
+        """True when the token has not been used and is not expired."""
         return not self.used and not self.is_expired()
 
     def __str__(self):

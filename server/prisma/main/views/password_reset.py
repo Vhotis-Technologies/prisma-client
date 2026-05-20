@@ -25,6 +25,7 @@ from rest_framework.exceptions import ValidationError
 
 
 def _password_reset_rate_limit_block(request):
+    """django-ratelimit callback: return 429 JSON when reset request rate is exceeded."""
     return JsonResponse({'detail': 'Too many requests. Try again later.'}, status=429)
 
 
@@ -33,6 +34,8 @@ def _password_reset_rate_limit_block(request):
     name='post',
 )
 class RequestPasswordResetView(APIView):
+    """Start password reset: email → token + async reset email. Rate-limited; no email enumeration."""
+
     permission_classes = [AllowAny]
 
     def post(self, request):
@@ -79,6 +82,8 @@ class RequestPasswordResetView(APIView):
     name='post',
 )
 class ValidateResetTokenView(APIView):
+    """Validate a reset token before showing the password form (mobile/API). Rate-limited."""
+
     permission_classes = [AllowAny]
 
     def post(self, request):
@@ -119,6 +124,8 @@ class ValidateResetTokenView(APIView):
     name='post',
 )
 class ResetPasswordView(APIView):
+    """Complete password reset via API; returns JWT pair for immediate login. Rate-limited."""
+
     permission_classes = [AllowAny]
 
     def post(self, request):
@@ -193,6 +200,8 @@ class ResetPasswordView(APIView):
             )
 
 class WebResetPasswordView(APIView):
+    """Browser HTML flow for password reset (form + success/invalid templates). AllowAny."""
+
     permission_classes = [AllowAny]
     
     def get(self, request):

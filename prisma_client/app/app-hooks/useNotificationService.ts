@@ -18,6 +18,8 @@ import { APP_CONFIG } from "@/constants/Config";
  * - Handles notification responses
  * - Schedules local notifications
  * - Integrates with permission system
+ *
+ * @returns Push token, last notification, and local notification helpers
  */
 export const useNotificationService = () => {
   const [expoPushToken, setExpoPushToken] = useState<string | undefined>();

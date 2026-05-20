@@ -34,6 +34,11 @@ import * as SecureStore from "expo-secure-store";
 import * as Location from "expo-location";
 const image = require("@/assets/images/user_image.jpg");
 
+/**
+ * Profile hook: addresses CRUD, notification preferences, profile fetch/update.
+ *
+ * @returns Profile data, address handlers, loading/error states, and refetch helpers
+ */
 const useProfile = () => {
   const dispatch = useAppDispatch();
   const user = useAppSelector((state: RootState) => state.auth.user);
@@ -224,7 +229,7 @@ const useProfile = () => {
   } = useFetchAllUserAddressesQuery();
 
 
-  // Load user data from storage if not available in state
+  /** Hydrate auth user from SecureStore when Redux state is empty. */
   useEffect(() => {
     const loadUserFromStorage = async () => {
       if (!user && !userFromStorage) {

@@ -5,6 +5,11 @@ import { useMemo } from "react";
 import { useGetMyVehiclesQuery } from "../store/api/garageApi";
 import { MyVehiclesProps, BranchVehiclesGroup } from "../interfaces/GarageInterface";
 
+/**
+ * Vehicles list hook with fleet branch flattening when applicable.
+ *
+ * @returns Flat vehicle list, loading/error states, and refetch
+ */
 const useVehicles = () => {
   const {
     data: vehiclesData,

@@ -382,7 +382,7 @@ const createBookingApi = createApi({
       }),
     }),
 
-    /* Get the promotions for the user */
+    /** Active promotion for the user (if any). */
     fetchPromotions: builder.query<PromotionsProps | null, void>({
       query: () => ({
         url: "/api/v1/events/get_promotions/",

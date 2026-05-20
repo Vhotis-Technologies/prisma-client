@@ -8,9 +8,25 @@ from django.db import transaction
 from main.models import PaymentTransaction, RefundRecord
 
 class Command(BaseCommand):
+    """
+    Verify ``PaymentTransaction`` and ``RefundRecord`` models are reachable after migrations.
+
+    Does not create schema; prints next steps when tables are missing.
+    """
+
     help = 'Setup refund system - creates database tables and verifies setup'
 
     def handle(self, *args, **options):
+        """
+        Run lightweight ORM counts inside a transaction to confirm refund tables exist.
+
+        Args:
+            *args: Unused positional args from Django.
+            **options: Unused command options.
+
+        Returns:
+            None
+        """
         self.stdout.write(self.style.SUCCESS('Setting up refund system...'))
         
         try:

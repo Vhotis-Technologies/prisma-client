@@ -11,7 +11,11 @@ from django.utils import timezone
 def send_b2c_subscription_expiry_reminders():
     """
     Email B2C subscribers whose plan benefits end within the next 7 days.
-    Sends at most once per subscription end-date (tracked on the model).
+
+    Sends at most once per subscription end-date (``expiring_notice_sent_for_end_date``).
+
+    Returns:
+        str: Count of reminder emails queued.
     """
     from main.models import B2CSubcription
     from main.tasks.b2c.subscription_emails import send_b2c_subscription_expiring_soon_email
@@ -59,8 +63,17 @@ def send_b2c_subscription_expiry_reminders():
 @shared_task(name='main.tasks.b2c.b2c_subscription_task.create_subscription')
 def create_subscription(user_id, tier_id, billing_cycle):
     """
-    Optionally used by admins or migrations: create B2C rows with catalog plan pricing via get_or_create.
-    Does not integrate Stripe by itself.
+    Admin/migration helper: create B2C subscription rows from catalog tier pricing.
+
+    Does not create Stripe subscriptions.
+
+    Args:
+        user_id: ``User`` primary key.
+        tier_id: ``B2CSubcriptionTier`` primary key.
+        billing_cycle: ``'monthly'`` or ``'yearly'``.
+
+    Returns:
+        B2CSubcription: Newly created active subscription instance.
     """
     from main.models import B2CSubcription, B2CSubcriptionPlan, User, B2CSubcriptionTier
 

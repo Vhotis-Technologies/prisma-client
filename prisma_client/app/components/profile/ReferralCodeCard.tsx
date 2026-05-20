@@ -8,9 +8,14 @@ import { useSnackbar } from "@/app/contexts/SnackbarContext";
 
 interface ReferralCodeCardProps {
   referral: string;
+  /** Partner codes (DP*) use partner signup perks; consumer codes use peer referral perks. */
+  variant?: "consumer" | "partner";
 }
 
-const ReferralCodeCard: React.FC<ReferralCodeCardProps> = ({ referral }) => {
+const ReferralCodeCard: React.FC<ReferralCodeCardProps> = ({
+  referral,
+  variant = "consumer",
+}) => {
   const { showSnackbarWithConfig } = useSnackbar();
   const [copied, setCopied] = useState(false);
 
@@ -22,7 +27,10 @@ const ReferralCodeCard: React.FC<ReferralCodeCardProps> = ({ referral }) => {
 
   const copyReferralCode = async () => {
     try {
-      const promotionalMessage = `Join Prisma Valet, the best mobile detailing tech integrated service and get 10% off your first wash! Use code: ${referral}`;
+      const promotionalMessage =
+        variant === "partner"
+          ? `Get one free basic wash and 40% off washes for 60 days! Use my partner code: ${referral}`
+          : `Join Prisma Valet, the best mobile detailing tech integrated service and get 10% off your first wash! Use code: ${referral}`;
       await Clipboard.setStringAsync(promotionalMessage);
       setCopied(true);
       showSnackbarWithConfig({
@@ -49,7 +57,9 @@ const ReferralCodeCard: React.FC<ReferralCodeCardProps> = ({ referral }) => {
         <View style={styles.codeRow}>
           <View style={styles.codeInfo}>
             <StyledText style={[styles.codeLabel, { color: textColor }]}>
-              Your Referral Code
+              {variant === "partner"
+                ? "Your Partner Referral Code"
+                : "Your Referral Code"}
             </StyledText>
             <StyledText style={[styles.codeText, { color: textColor }]}>
               {referral}

@@ -27,6 +27,13 @@ stripe.api_key = settings.STRIPE_SECRET_KEY
 
 
 class SubscriptionView(APIView):
+    """
+    Fleet subscription lifecycle for fleet owners (Stripe trials, plans, billing).
+
+    Action-routed via ``subscription/<action>/``. Fleet must exist and user must be
+    ``is_fleet_owner``. Early-adopter trial logic applies to new subscriptions.
+    """
+
     permission_classes = [IsAuthenticated]
     authentication_classes = [JWTAuthentication]
 

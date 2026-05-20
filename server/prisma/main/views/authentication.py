@@ -8,7 +8,7 @@ Authentication API for Prisma Car Care: user registration, JWT token obtain/refr
 from rest_framework.generics import CreateAPIView
 from rest_framework.permissions import AllowAny
 from ..serializer import UserSerializer
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView as BaseTokenRefreshView
 from rest_framework_simplejwt.tokens import RefreshToken
 from datetime import timedelta
 from django.utils import timezone
@@ -21,10 +21,12 @@ from ..serializer import CustomTokenObtainPairSerializer
 from rest_framework.response import Response
 from rest_framework import status
 from main.tasks import send_welcome_email, send_promotional_email
+from main.utils.ratelimit_helpers import rate_limit_json_response
 from time import sleep
 
 
 def _auth_rate_limit_block(request):
+    """Rate-limit exceeded callback: return 429 JSON for auth endpoints."""
     return JsonResponse({'detail': 'Too many requests. Try again later.'}, status=429)
 
 
@@ -33,8 +35,25 @@ def _auth_rate_limit_block(request):
     name='post',
 )
 class CustomTokenObtainPairView(TokenObtainPairView):
+    """
+  JWT login: email/password → access + refresh tokens.
+
+  Uses CustomTokenObtainPairSerializer for user payload in the token response.
+  Rate-limited (5/min per IP). Public (AllowAny).
+  """
+
     permission_classes = [AllowAny]
     serializer_class = CustomTokenObtainPairSerializer
+
+
+@method_decorator(
+    ratelimit(key="ip", rate="30/m", method="POST", block=rate_limit_json_response),
+    name="post",
+)
+class TokenRefreshView(BaseTokenRefreshView):
+    """Refresh an access token from a valid refresh token. Rate-limited (30/min per IP). Public."""
+
+    permission_classes = [AllowAny]
 
 
 @method_decorator(
@@ -42,13 +61,21 @@ class CustomTokenObtainPairView(TokenObtainPairView):
     name='post',
 )
 class AuthenticationView(CreateAPIView):
+    """
+  Onboarding API: action-based registration (no JWT required until success).
+
+  Routed via ``onboard/<action>/`` (see main.urls). Currently supports
+  ``create_new_account`` → ``register``.
+  """
+
     permission_classes = [AllowAny]
     action_handlers = {
         'create_new_account': 'register'
     }
 
     def post(self, request, *args, **kwargs):
-        """Route POST by action (e.g. create_new_account -> register). Returns 400 if action invalid."""
+        """Route POST by URL action (e.g. create_new_account → register). Returns 400 if action invalid."""
+        # Dispatch to handler named in action_handlers
         action = kwargs.get('action')
         if action not in self.action_handlers:
             return Response({'error': 'Invalid action'}, status=status.HTTP_400_BAD_REQUEST)
@@ -67,6 +94,7 @@ class AuthenticationView(CreateAPIView):
         """
         try:
             data = request.data.get('credentials')
+            # Optional referral and business signup flags from mobile client
             referral_code = data.get('referred_code') or data.get('referredCode')
             is_fleet_owner = data.get('isFleetOwner', False)
             is_dealership = data.get('isDealership', False)
@@ -183,11 +211,11 @@ class AuthenticationView(CreateAPIView):
                     is_active=True,
                     terms_conditions="Valid for 60 days from signup. Partner referral. Cannot be combined with other offers.",
                 )
-            # Send the welcome and promotional emails to the user even if they have not allowed them as this is a new user
+            # Side effects: onboarding emails (allowed for new users regardless of prefs)
             send_welcome_email.apply_async(args=[user.email], countdown=60)
             send_promotional_email.apply_async(args=[user.email, user.name], countdown=300)
             
-            # Generate tokens for the newly created user
+            # Issue JWT so client can log in without a second login request
             refresh = RefreshToken.for_user(user)
             access_token = str(refresh.access_token)
             refresh_token = str(refresh)

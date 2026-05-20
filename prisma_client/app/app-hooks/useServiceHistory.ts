@@ -1,3 +1,6 @@
+/**
+ * Service history hook: past bookings and services via serviceHistoryApi.
+ */
 import { useGetServiceHistoryQuery } from "@/app/store/api/serviceHistoryApi";
 
 /**

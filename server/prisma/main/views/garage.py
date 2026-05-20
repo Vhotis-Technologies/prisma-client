@@ -39,10 +39,12 @@ VEHICLE_REGISTRATION_LOOKUP_RATELIMIT_RATE = '1/5m'
 
 
 def lookup_cache_key(token: str) -> str:
+    """Redis/cache key for a short-lived registration lookup preview token."""
     return f'vehicle_reg_lookup:{token}'
 
 
 def canonical_garage_country(value) -> str:
+    """Normalize country input; default Ireland for IE/empty variants."""
     v = (value or '').strip()
     if not v:
         return 'Ireland'
@@ -53,6 +55,7 @@ def canonical_garage_country(value) -> str:
 
 
 def find_existing_vehicle_for_add(registration_number: str, country: str):
+    """Return Vehicle if reg+country already exists (used before add_vehicle)."""
     try:
         return Vehicle.objects.get(
             registration_number=registration_number,
@@ -63,6 +66,7 @@ def find_existing_vehicle_for_add(registration_number: str, country: str):
 
 
 def vehicle_customer_payload(vehicle: Vehicle):
+    """Serialize vehicle for client garage list (includes full image URL when present)."""
     img = None
     if vehicle.image:
         try:
@@ -86,10 +90,15 @@ def vehicle_customer_payload(vehicle: Vehicle):
 
 
 class GarageView(APIView):
+    """
+    Vehicle garage: CRUD, Ireland reg lookup, transfers, events, stats, S3 diagnostics.
+
+    Action-routed via ``garage/<action>/`` with optional ``vehicle_id`` in URL for
+    update/delete/stats on a single vehicle.
+    """
+
     permission_classes = [IsAuthenticated]
 
-
-    """ Define a set of action handlers that would be used to route the url to the appropriate function """
     action_handlers = {
         'lookup_vehicle_registration': 'lookup_vehicle_registration',
         'add_vehicle': 'add_vehicle',
@@ -150,8 +159,6 @@ class GarageView(APIView):
             return handler(request, vehicle_id)
         return handler(request)
     
-    """ Here we will define the methods that would handle the jobs that are to be done on the server """
-
     def lookup_vehicle_registration(self, request):
         """
         Ireland RegCheck lookup. POST JSON { licence|registration_number, country? } → preview + lookup_token.
@@ -1169,6 +1176,7 @@ class GarageView(APIView):
             ).select_related('vehicle', 'from_owner').order_by('-requested_at')
             
             def format_transfer(transfer, direction):
+                """Shape a ``VehicleTransfer`` for the garage incoming/outgoing list API."""
                 return {
                     'id': str(transfer.id),
                     'direction': direction,

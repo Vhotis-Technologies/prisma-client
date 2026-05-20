@@ -8,6 +8,14 @@ from main.tasks import send_trial_subscription_welcome_email
 
 @receiver(post_save, sender=FleetSubscription)
 def handle_trial_subscription_activation(sender, instance, created, **kwargs):
+    """
+    Email the fleet owner when a new trialing subscription is created.
+
+    Args:
+        sender: ``FleetSubscription`` model class.
+        instance: The subscription row.
+        created: Only on insert with status ``trialing``.
+    """
     if created and instance.status == 'trialing':
         fleet_owner = instance.fleet.owner
         if fleet_owner.allow_email_notifications:
@@ -24,6 +32,13 @@ def handle_trial_subscription_activation(sender, instance, created, **kwargs):
 
 @receiver(post_delete, sender=FleetMember)
 def clear_branch_admin_flag_on_removal(sender, instance, **kwargs):
+    """
+    Clear ``User.is_branch_admin`` when the user is no longer admin on any fleet.
+
+    Args:
+        sender: ``FleetMember`` model class.
+        instance: The deleted membership row (still has user_id/role).
+    """
     if instance.role != 'admin':
         return
     user_id = instance.user_id

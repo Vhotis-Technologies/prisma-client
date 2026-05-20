@@ -1,6 +1,7 @@
 """
-Redis Streams helper for job_events stream.
-Uses consumer groups for at-least-once delivery and no message loss during restarts.
+Redis Streams helper for ``job_events`` stream.
+
+Uses consumer groups for at-least-once delivery and recovery after restarts.
 """
 import os
 import redis
@@ -14,7 +15,15 @@ MAXLEN_DEFAULT = 10000
 
 
 def get_redis(decode_responses=True):
-    """Return Redis connection using environment/settings."""
+    """
+    Return a new Redis connection using environment host/port/db.
+
+    Args:
+        decode_responses: When True, stream field values are str; False for bytes.
+
+    Returns:
+        redis.Redis: Connected client (caller should ``close()`` when done).
+    """
     return redis.Redis(
         host=REDIS_HOST,
         port=REDIS_PORT,
@@ -25,11 +34,19 @@ def get_redis(decode_responses=True):
 
 def stream_add(stream_key, data_dict, maxlen=MAXLEN_DEFAULT):
     """
-    Append a message to a stream. Flattens dict to Redis field/value (strings).
-    Returns message id.
+    Append a message to a stream with approximate maxlen trimming.
+
+    Flattens dict values to strings (JSON for dict/list) for Redis XADD field pairs.
+
+    Args:
+        stream_key: Redis stream name.
+        data_dict: Field names to values (mixed types coerced to str).
+        maxlen: Approximate max stream length passed to XADD.
+
+    Returns:
+        str: Redis message id for the new entry.
     """
     r = get_redis(decode_responses=False)
-    # Redis XADD expects field-value pairs; values must be strings
     import json
     flat = {}
     for k, v in data_dict.items():
@@ -48,8 +65,14 @@ def stream_add(stream_key, data_dict, maxlen=MAXLEN_DEFAULT):
 
 def ensure_consumer_group(stream_key, group_name):
     """
-    Create consumer group if it does not exist. Idempotent: catches BUSYGROUP.
-    Uses 0 as start id so new group reads from beginning; MKSTREAM creates stream if missing.
+    Create a consumer group if it does not exist (idempotent).
+
+    Uses start id ``0`` and ``MKSTREAM`` so a missing stream is created. Ignores
+    ``BUSYGROUP`` when the group already exists.
+
+    Args:
+        stream_key: Redis stream name.
+        group_name: Consumer group name (e.g. per deployable service).
     """
     r = get_redis(decode_responses=True)
     try:
@@ -63,8 +86,18 @@ def ensure_consumer_group(stream_key, group_name):
 
 def read_group_blocking(stream_key, group_name, consumer_name, block_ms=5000):
     """
-    Block until new messages arrive. Returns list of (message_id, fields_dict).
-    fields_dict has string keys and string values (decode_responses=True).
+    Block until new messages arrive for this consumer group member.
+
+    Reads only entries never delivered to the group (stream id ``>``).
+
+    Args:
+        stream_key: Redis stream name.
+        group_name: Consumer group name.
+        consumer_name: Unique consumer name within the group.
+        block_ms: Max block time in milliseconds.
+
+    Returns:
+        list[tuple[str, dict]]: ``(message_id, fields_dict)`` with string keys/values.
     """
     r = get_redis(decode_responses=True)
     try:
@@ -79,14 +112,23 @@ def read_group_blocking(stream_key, group_name, consumer_name, block_ms=5000):
         r.close()
     if not reply:
         return []
-    # reply is [(stream_key, [(id, {k:v}), ...])]
     entries = reply[0][1] if reply else []
     return [(eid, dict(fields)) for eid, fields in entries]
 
 
 def read_pending(stream_key, group_name, consumer_name):
     """
-    Read pending messages for this consumer (e.g. on startup). Returns list of (message_id, fields_dict).
+    Read pending (unacked) messages for this consumer on startup.
+
+    Uses stream id ``0`` to claim historical pending entries for the consumer.
+
+    Args:
+        stream_key: Redis stream name.
+        group_name: Consumer group name.
+        consumer_name: Consumer name to recover pending work for.
+
+    Returns:
+        list[tuple[str, dict]]: ``(message_id, fields_dict)`` pending entries.
     """
     r = get_redis(decode_responses=True)
     try:
@@ -105,7 +147,14 @@ def read_pending(stream_key, group_name, consumer_name):
 
 
 def ack(stream_key, group_name, message_id):
-    """Acknowledge a message so it is not redelivered."""
+    """
+    Acknowledge a message so it is not redelivered to the consumer group.
+
+    Args:
+        stream_key: Redis stream name.
+        group_name: Consumer group name.
+        message_id: Id returned from ``read_group_blocking`` / ``read_pending``.
+    """
     r = get_redis(decode_responses=True)
     try:
         r.xack(stream_key, group_name, message_id)

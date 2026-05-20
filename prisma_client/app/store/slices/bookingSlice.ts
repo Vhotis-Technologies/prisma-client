@@ -80,5 +80,5 @@ const bookingSlice = createSlice({
         },
     }
 })
-export const { setServiceType, setValetType, setBookingDate } = bookingSlice.actions
-export default bookingSlice.reducer
+export const { setServiceType, setValetType, setBookingDate } = bookingSlice.actions;
+export default bookingSlice.reducer;

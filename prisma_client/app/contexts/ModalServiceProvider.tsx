@@ -1,3 +1,6 @@
+/**
+ * Modal queue context: fullscreen, sheet, and center modals via ModalServices.
+ */
 import React, {
   createContext,
   useContext,
@@ -58,16 +61,18 @@ interface ModalServiceProviderProps {
   children: React.ReactNode;
 }
 
+/** Provider that manages a modal queue and renders the active modal. */
 const ModalServiceProvider = ({ children }: ModalServiceProviderProps) => {
   const [modalQueue, setModalQueue] = useState<ModalConfig[]>([]);
   const [currentModal, setCurrentModal] = useState<ModalConfig | null>(null);
 
   // Generate unique ID for modals
+  /** Generate a unique id for a queued modal. */
   const generateModalId = useCallback(() => {
     return `modal_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }, []);
 
-  // Show modal - main method
+  /** Enqueue a modal; shows immediately if none is active. Returns modal id. */
   const showModal = useCallback(
     (config: Omit<ModalConfig, "id">): string => {
       const id = generateModalId();
@@ -88,7 +93,7 @@ const ModalServiceProvider = ({ children }: ModalServiceProviderProps) => {
     [currentModal, generateModalId],
   );
 
-  // Convenience methods for different modal types
+  /** Show a fullscreen modal; returns modal id. */
   const showFullscreenModal = useCallback(
     (component: ReactNode, title?: string, onClose?: () => void): string => {
       return showModal({
@@ -101,6 +106,7 @@ const ModalServiceProvider = ({ children }: ModalServiceProviderProps) => {
     [showModal],
   );
 
+  /** Show a bottom sheet modal; returns modal id. */
   const showSheetModal = useCallback(
     (component: ReactNode, title?: string, onClose?: () => void): string => {
       return showModal({
@@ -113,6 +119,7 @@ const ModalServiceProvider = ({ children }: ModalServiceProviderProps) => {
     [showModal],
   );
 
+  /** Show a centered dialog modal; returns modal id. */
   const showCenterModal = useCallback(
     (component: ReactNode, title?: string, onClose?: () => void): string => {
       return showModal({
@@ -125,7 +132,7 @@ const ModalServiceProvider = ({ children }: ModalServiceProviderProps) => {
     [showModal],
   );
 
-  // Close modal
+  /** Close by id or dismiss the current modal. */
   const closeModal = useCallback(
     (id?: string) => {
       if (!id) {
@@ -149,13 +156,13 @@ const ModalServiceProvider = ({ children }: ModalServiceProviderProps) => {
     [currentModal],
   );
 
-  // Close all modals
+  /** Clear the entire modal queue. */
   const closeAllModals = useCallback(() => {
     setCurrentModal(null);
     setModalQueue([]);
   }, []);
 
-  // Update modal configuration
+  /** Patch title, component, or options for a queued modal. */
   const updateModal = useCallback(
     (id: string, updates: Partial<ModalConfig>) => {
       setModalQueue((prev) =>
@@ -173,6 +180,7 @@ const ModalServiceProvider = ({ children }: ModalServiceProviderProps) => {
   );
 
   // Handle modal close with callback
+  /** Run onClose callback then close the current modal. */
   const handleModalClose = useCallback(() => {
     if (currentModal?.onClose) {
       currentModal.onClose();
@@ -181,6 +189,7 @@ const ModalServiceProvider = ({ children }: ModalServiceProviderProps) => {
   }, [currentModal, closeModal]);
 
   // Show next modal in queue when current modal closes
+  /** Advance to the next modal in the queue after close animation. */
   const handleModalCloseComplete = useCallback(() => {
     setModalQueue((prev) => {
       const next = prev.slice(1);

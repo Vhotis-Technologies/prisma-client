@@ -17,11 +17,8 @@ import { useLoginMutation } from "../store/api/authApi";
 import { UserProfileProps } from "../interfaces/ProfileInterfaces";
 import { router } from "expo-router";
 
-/* Save the user data to the secure store.
- * Also save the access and refresh tokens to the secure store.
- * This will be used to authenticate the user when the user is logged in.
- * The access token will be used to authenticate the user when the user is logged in.
- * The refresh token will be used to refresh the access token when the access token is expired.
+/**
+ * Persist user profile and JWT tokens to SecureStore (remember-me login).
  */
 const saveUserToSecureStore = async (
   user: UserProfileProps,
@@ -56,6 +53,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+/** Restores session from SecureStore, exposes login/logout handlers. */
 const AuthContextProvider = ({ children }: { children: React.ReactNode }) => {
   const dispatch: AppDispatch = useAppDispatch();
   const { setIsVisible, setAlertConfig } = useAlertContext();
@@ -68,6 +66,7 @@ const AuthContextProvider = ({ children }: { children: React.ReactNode }) => {
    * If the data is correct, set data to the redux store and navigate to the dashboard page.
    */
   React.useEffect(() => {
+    /** Restore user and tokens from SecureStore on app launch. */
     const reauthenticateUser = async () => {
       const user = await SecureStore.getItemAsync("user");
       const storedAccess = await SecureStore.getItemAsync("access");
@@ -84,7 +83,7 @@ const AuthContextProvider = ({ children }: { children: React.ReactNode }) => {
     reauthenticateUser();
   }, []);
 
-  /* Handle the users logout functionality */
+  /** Confirm and clear SecureStore, Redux auth, then navigate to sign-in. */
   const handleLogout = () => {
     setAlertConfig({
       title: "Logout",
@@ -179,6 +178,7 @@ const AuthContextProvider = ({ children }: { children: React.ReactNode }) => {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
+/** Login/logout and auth mutation state; requires AuthContextProvider. */
 export const useAuthContext = (): AuthContextType => {
   const context = useContext(AuthContext);
   if (!context) {

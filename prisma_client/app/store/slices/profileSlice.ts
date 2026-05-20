@@ -14,11 +14,11 @@ const profileSlice = createSlice({
   name: "profile",
   initialState,
   reducers: {
-    /* Sets a new address to the state for when the user is trying to add a new address  */
+    /** Stash in-progress address for the add-address flow. */
     setNewAddress: (state, action: PayloadAction<MyAddressProps>) => {
       state.new_address = action.payload;
     },
-    /* Clear the new address state when the user is done updating the address */
+    /** Clear draft address after save or cancel. */
     clearNewAddress: (state) => {
       state.new_address = null;
     },

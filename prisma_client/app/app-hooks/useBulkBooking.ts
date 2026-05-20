@@ -32,6 +32,11 @@ export interface BulkBookingState {
 const BULK_DISCOUNT_THRESHOLD = 10;
 const BULK_DISCOUNT_PERCENT = 10;
 
+/**
+ * Bulk fleet booking hook: capacity check, pricing, and payload builder for payment.
+ *
+ * @returns Bulk booking state, pricing breakdown, and capacity/payload handlers
+ */
 export function useBulkBooking() {
   const [selectedServiceType, setSelectedServiceType] =
     useState<ServiceTypeProps | null>(null);
@@ -79,6 +84,12 @@ export function useBulkBooking() {
     0
   );
 
+  /**
+   * Resolve per-vehicle service price (user_price, fleet_price, or list price).
+   *
+   * @param service - Service type with pricing fields
+   * @returns Price in euros for one vehicle
+   */
   const getFleetPrice = useCallback((service: ServiceTypeProps): number => {
     if (service.user_price != null) return service.user_price;
     if (service.fleet_price != null) return service.fleet_price;
@@ -101,6 +112,11 @@ export function useBulkBooking() {
   const suvSurcharge = isSUV ? amountAfterDiscount * 0.15 : 0;
   const total = amountAfterDiscount + suvSurcharge;
 
+  /**
+   * Navigate the bulk booking calendar month forward or backward.
+   *
+   * @param direction - "prev" or "next"
+   */
   const handleCalendarMonthNavigation = useCallback(
     (direction: "prev" | "next") => {
       setCurrentCalendarMonth((prev) =>
@@ -112,6 +128,10 @@ export function useBulkBooking() {
     []
   );
 
+  /**
+   * Query detailer availability for bulk workload on the selected date/address.
+   * Populates capacity window options or sets capacityError.
+   */
   const checkBulkCapacity = useCallback(async () => {
     if (
       !selectedServiceType ||
@@ -192,6 +212,12 @@ export function useBulkBooking() {
     workloadMinutes,
   ]);
 
+  /**
+   * Build the bulk booking payload sent to Stripe/webhook after payment.
+   *
+   * @param bookingReference - Unique booking reference string
+   * @returns Bulk order metadata for client and detailer servers
+   */
   const buildBulkBookingData = useCallback(
     (bookingReference: string): Record<string, unknown> => {
       const option = selectedOption || capacityOptions?.[0];
@@ -262,6 +288,7 @@ export function useBulkBooking() {
     ]
   );
 
+  /** Reset all bulk booking form and capacity state to initial values. */
   const resetBulkBooking = useCallback(() => {
     setSelectedServiceType(null);
     setSelectedValetType(null);

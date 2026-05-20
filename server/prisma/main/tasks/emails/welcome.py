@@ -1,3 +1,4 @@
+"""Celery task: new-user welcome email via Microsoft Graph."""
 from celery import shared_task
 from django.template.loader import render_to_string
 from main.util.graph_mail import send_mail as graph_send_mail
@@ -5,6 +6,15 @@ from main.util.graph_mail import send_mail as graph_send_mail
 
 @shared_task
 def send_welcome_email(user_email):
+    """
+    Send the standard onboarding welcome email after registration.
+
+    Args:
+        user_email: Recipient address.
+
+    Returns:
+        str: Success or failure message.
+    """
     subject = "Welcome to Prisma - Let's Get Started! 🎉"
     html_message = render_to_string('welcome_email.html')
     try:

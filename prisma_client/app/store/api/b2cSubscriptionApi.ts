@@ -23,6 +23,7 @@ const b2cSubscriptionApi = createApi({
   baseQuery: axiosBaseQuery(),
   tagTypes: ["B2cSubscription", "B2cPlans", "B2cBilling"],
   endpoints: (builder) => ({
+    /** Active consumer subscription tiers/plans. */
     getB2cSubscriptionPlans: builder.query<SubscriptionTierProps[], void>({
       query: () => ({
         url: "/api/v1/b2c-subscription/get_plans/",
@@ -32,6 +33,7 @@ const b2cSubscriptionApi = createApi({
       transformResponse: (response: GetPlansResponse) => response.plans,
     }),
 
+    /** Current B2C subscription for the authenticated user (or null). */
     getB2cCurrentSubscription: builder.query<GetB2cCurrentSubscriptionResponse, void>({
       query: () => ({
         url: "/api/v1/b2c-subscription/get_current_subscription/",
@@ -40,6 +42,7 @@ const b2cSubscriptionApi = createApi({
       providesTags: ["B2cSubscription"],
     }),
 
+    /** Start or upgrade a B2C subscription (returns Stripe payment sheet when due). */
     createB2cSubscription: builder.mutation<
       CreateSubscriptionResponse,
       CreateSubscriptionRequest
@@ -52,6 +55,7 @@ const b2cSubscriptionApi = createApi({
       invalidatesTags: ["B2cSubscription", "B2cBilling"],
     }),
 
+    /** Past B2C subscription invoices/charges. */
     getB2cBillingHistory: builder.query<SubscriptionBillingProps[], void>({
       query: () => ({
         url: "/api/v1/b2c-subscription/get_subscription_billing_history/",
@@ -62,6 +66,7 @@ const b2cSubscriptionApi = createApi({
         response.billing_history,
     }),
 
+    /** Cancel B2C subscription (immediate or at period end). */
     cancelB2cSubscription: builder.mutation<
       { message: string },
       { cancel_at_period_end?: boolean; cancellationReason?: string }
@@ -74,6 +79,7 @@ const b2cSubscriptionApi = createApi({
       invalidatesTags: ["B2cSubscription", "B2cBilling"],
     }),
 
+    /** Discard incomplete checkout subscription after canceled payment. */
     abandonIncompleteB2cSubscription: builder.mutation<
       { message: string },
       { subscriptionId?: string } | void
@@ -86,6 +92,7 @@ const b2cSubscriptionApi = createApi({
       invalidatesTags: ["B2cSubscription", "B2cBilling"],
     }),
 
+    /** Attach a new default payment method to the B2C subscription. */
     updateB2cPaymentMethod: builder.mutation<
       { message: string },
       { payment_method_id: string }
@@ -98,6 +105,7 @@ const b2cSubscriptionApi = createApi({
       invalidatesTags: ["B2cSubscription"],
     }),
 
+    /** Stripe SetupIntent for updating B2C subscription payment method. */
     getB2cSetupIntent: builder.query<
       { setupIntent: string; ephemeralKey: string; customer: string },
       void

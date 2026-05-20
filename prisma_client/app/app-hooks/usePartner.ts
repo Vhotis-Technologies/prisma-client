@@ -12,14 +12,23 @@ import {
 } from "@/app/store/api/partnerApi";
 import { useSnackbar } from "@/app/contexts/SnackbarContext";
 
-export const usePartner = (options?: { skipPayout?: boolean }) => {
+export type UsePartnerOptions = {
+  /** When true, skips payout detail and history queries. */
+  skipPayout?: boolean;
+};
+
+/**
+ * Partner dashboard hook: metrics, payout details/history, bank details, payout requests.
+ *
+ * @param options - Optional flags to skip payout queries
+ * @returns Partner dashboard, payout, and form state with action handlers
+ */
+export const usePartner = (options?: UsePartnerOptions) => {
   const { showSnackbarWithConfig } = useSnackbar();
   const user = useAppSelector((state: RootState) => state.auth.user);
   const isPartner = Boolean(user?.is_dealership || user?.partner_referral_code);
 
-  const [editingStripe, setEditingStripe] = useState(false);
   const [editingBank, setEditingBank] = useState(false);
-  const [stripeValue, setStripeValue] = useState("");
   const [accountHolder, setAccountHolder] = useState("");
   const [iban, setIban] = useState("");
 
@@ -53,39 +62,12 @@ export const usePartner = (options?: { skipPayout?: boolean }) => {
   const [createPayoutRequest, { isLoading: isRequesting }] = useCreatePayoutRequestMutation();
 
   const pendingCommission = payoutData?.pending_commission ?? 0;
-  const hasStripe = Boolean(payoutData?.stripe_connect_account_id);
   const hasBank = payoutData?.bank_account?.has_bank_account ?? false;
   const userCountry = user?.address?.country;
 
-  const saveStripe = useCallback(async () => {
-    const value = (stripeValue || "").trim();
-    if (!value) {
-      showSnackbarWithConfig({
-        message: "Enter a Stripe Connect Account ID",
-        type: "error",
-        duration: 3000,
-      });
-      return;
-    }
-    try {
-      await updatePayout({ stripe_connect_account_id: value }).unwrap();
-      setEditingStripe(false);
-      setStripeValue("");
-      showSnackbarWithConfig({
-        message: "Stripe Connect ID saved",
-        type: "success",
-        duration: 3000,
-      });
-    } catch (err: unknown) {
-      const e = err as { data?: { error?: string } };
-      showSnackbarWithConfig({
-        message: e?.data?.error || "Failed to save Stripe ID",
-        type: "error",
-        duration: 4000,
-      });
-    }
-  }, [stripeValue, updatePayout, showSnackbarWithConfig]);
-
+  /**
+   * Persist partner bank account (holder name + IBAN) to the server.
+   */
   const saveBank = useCallback(async () => {
     const holder = (accountHolder || "").trim();
     const ibanVal = (iban || "").trim().replace(/\s/g, "");
@@ -120,6 +102,9 @@ export const usePartner = (options?: { skipPayout?: boolean }) => {
     }
   }, [accountHolder, iban, updatePayout, showSnackbarWithConfig]);
 
+  /**
+   * Submit a payout request for pending partner commission.
+   */
   const requestPayment = useCallback(async () => {
     try {
       const res = await createPayoutRequest().unwrap();
@@ -138,11 +123,7 @@ export const usePartner = (options?: { skipPayout?: boolean }) => {
     }
   }, [createPayoutRequest, showSnackbarWithConfig]);
 
-  const clearStripeForm = useCallback(() => {
-    setEditingStripe(false);
-    setStripeValue("");
-  }, []);
-
+  /** Reset bank edit form and close editing mode. */
   const clearBankForm = useCallback(() => {
     setEditingBank(false);
     setAccountHolder("");
@@ -168,7 +149,6 @@ export const usePartner = (options?: { skipPayout?: boolean }) => {
       error: payoutError,
       refetch: refetchPayout,
       pendingCommission,
-      hasStripe,
       hasBank,
     },
 
@@ -180,21 +160,15 @@ export const usePartner = (options?: { skipPayout?: boolean }) => {
     },
 
     payoutForm: {
-      editingStripe,
-      setEditingStripe,
       editingBank,
       setEditingBank,
-      stripeValue,
-      setStripeValue,
       accountHolder,
       setAccountHolder,
       iban,
       setIban,
-      clearStripeForm,
       clearBankForm,
     },
 
-    saveStripe,
     saveBank,
     requestPayment,
     isUpdating,

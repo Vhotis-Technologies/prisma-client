@@ -10,6 +10,12 @@ from rest_framework.permissions import AllowAny
 from main.models import TermsAndConditions, PrivacyPolicy
 
 class TermsView(APIView):
+    """
+    In-app legal content API (JSON + styled HTML).
+
+    Public (AllowAny). Action-routed via ``terms/<action>/``: get_terms, get_privacy_policy.
+    """
+
     permission_classes = [AllowAny]
 
     action_handler = {

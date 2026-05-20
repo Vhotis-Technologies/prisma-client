@@ -1,3 +1,6 @@
+/**
+ * Shared addresses hook: cached user addresses via RTK Query profileApi.
+ */
 import { useFetchAllUserAddressesQuery } from "../store/api/profileApi";
 import { MyAddressProps } from "../interfaces/ProfileInterfaces";
 

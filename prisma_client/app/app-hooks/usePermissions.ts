@@ -34,7 +34,7 @@ export interface PermissionStatus {
  * - Persists permission preferences in SecureStore
  * - Provides real-time permission status updates
  * - Handles platform-specific permission flows
- * - Graceful degradation when permissions are denied
+ * @returns Permission status, loading flag, and request/toggle helpers
  */
 export const usePermissions = () => {
   const { setAlertConfig, setIsVisible } = useAlertContext();

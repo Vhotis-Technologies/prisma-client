@@ -11,9 +11,15 @@ from rest_framework import status
 from main.models import Address, BookedAppointment, User, Fleet, Branch, FleetMember
 
 class ProfileView(APIView):
+    """
+    User profile and saved addresses; notification preference tokens.
+
+    Action-routed via ``profile/<action>/``. Includes fleet/branch context in get_profile
+    when applicable.
+    """
+
     permission_classes = [IsAuthenticated]
 
-    """ Define a set of action handlers that would be used to route the url to the appropriate function """
     action_handlers = {
         "get_addresses": "get_addresses",
         "add_new_address": "add_address",
@@ -63,8 +69,6 @@ class ProfileView(APIView):
         handler = getattr(self, self.action_handlers[action])
         return handler(request)
     
-    """ The functions defined here are the functions that will be used to hanlde different actions that are defined in the action handlers """
-
     def add_address(self, request):
         """ Add a new address to the user's profile.
         ARGS

@@ -1,1 +1,1 @@
-# Garage/regcheck service modules live here.
+"""Service-layer helpers: notifications (Expo/email) and Ireland vehicle lookup (RegCheck)."""

@@ -18,8 +18,14 @@ from main.utils.branch_spend import get_branch_spend_for_period
 def get_branch_performance(fleet: Fleet, start_date: datetime, end_date: datetime):
     """
     Calculate branch performance metrics: spend, bookings, average booking value per branch.
-    
-    Returns list of dicts with branch performance data.
+
+    Args:
+        fleet: ``Fleet`` whose branches are analysed.
+        start_date, end_date: Inclusive datetime window for payments and appointments.
+
+    Returns:
+        list[dict]: Per-branch rows sorted by ``total_spend`` descending (branch_id, name,
+        total_spend, booking_count, avg_booking_value).
     """
     branches = Branch.objects.filter(fleet=fleet)
     performance_data = []
@@ -95,10 +101,16 @@ def get_branch_performance(fleet: Fleet, start_date: datetime, end_date: datetim
 
 def get_spend_trends(fleet: Fleet, start_date: datetime, end_date: datetime, granularity='daily'):
     """
-    Get time-series spend data per branch.
-    
-    granularity: 'daily', 'weekly', or 'monthly'
-    Returns dict with branch_id as key and list of {date, value} as value.
+    Get time-series net spend data per branch (payments minus refunds).
+
+    Args:
+        fleet: ``Fleet`` to aggregate.
+        start_date, end_date: Datetime bounds for transactions.
+        granularity: ``'daily'``, ``'weekly'``, or ``'monthly'`` truncation for buckets.
+
+    Returns:
+        dict: Keys are branch id strings; values have ``branch_name`` and ``data`` list of
+        ``{date, value}`` points.
     """
     branches = Branch.objects.filter(fleet=fleet)
     trends_data = {}
@@ -149,7 +161,7 @@ def get_spend_trends(fleet: Fleet, start_date: datetime, end_date: datetime, gra
             payments_grouped = payments_qs.annotate(date=TruncMonth('created_at')).values('date').annotate(total=Sum('amount'))
             refunds_grouped = refunds_qs.annotate(date=TruncMonth('effective_date')).values('date').annotate(total=Sum('requested_amount'))
         
-        # Combine payments and refunds
+        # Net spend per bucket: aggregate payments and refunds separately, then subtract.
         spend_by_date = defaultdict(lambda: {'payments': Decimal('0'), 'refunds': Decimal('0')})
         
         for item in payments_grouped:
@@ -181,7 +193,13 @@ def get_spend_trends(fleet: Fleet, start_date: datetime, end_date: datetime, gra
 
 def calculate_health_score(inspection):
     """
-    Calculate health score (0-100) from inspection data.
+    Calculate vehicle health score (0-100) from inspection checklist fields.
+
+    Args:
+        inspection: ``EventDataManagement`` (or compatible) with status fields.
+
+    Returns:
+        int | None: Percentage of non-empty fields in a good state; None when no data.
     """
     if not inspection:
         return None
@@ -201,9 +219,10 @@ def calculate_health_score(inspection):
     if len(valid_statuses) == 0:
         return None
     
+    # needs_change counts as acceptable for fluids (scheduled maintenance, not failure).
     good_statuses = [
         s for s in valid_statuses
-        if s in ('good', 'working', 'needs_change')  # needs_change is acceptable for fluids
+        if s in ('good', 'working', 'needs_change')
     ]
     
     score = round((len(good_statuses) / len(valid_statuses)) * 100)
@@ -212,8 +231,14 @@ def calculate_health_score(inspection):
 
 def get_vehicle_health_scores(fleet: Fleet, start_date: datetime, end_date: datetime):
     """
-    Get aggregated vehicle health scores per branch and per vehicle.
-    Returns dict with branch_id and vehicle_id as keys.
+    Aggregate inspection health scores per branch and per vehicle.
+
+    Args:
+        fleet: ``Fleet`` scope.
+        start_date, end_date: Appointment date window (completed bookings only).
+
+    Returns:
+        dict: ``by_branch`` and ``by_vehicle`` maps with avg_score and inspection_count.
     """
     branches = Branch.objects.filter(fleet=fleet)
     health_data = {
@@ -268,6 +293,13 @@ def get_vehicle_health_scores(fleet: Fleet, start_date: datetime, end_date: date
 def get_booking_activity(fleet: Fleet, start_date: datetime, end_date: datetime):
     """
     Get booking counts by status and service type per branch.
+
+    Args:
+        fleet: ``Fleet`` scope.
+        start_date, end_date: Appointment date bounds.
+
+    Returns:
+        dict: Branch id → ``branch_name``, ``by_status``, ``by_service_type``, ``total``.
     """
     branches = Branch.objects.filter(fleet=fleet)
     activity_data = {}
@@ -302,8 +334,14 @@ def get_booking_activity(fleet: Fleet, start_date: datetime, end_date: datetime)
 
 def get_common_issues(fleet: Fleet, start_date: datetime, end_date: datetime):
     """
-    Get most frequent inspection issues across fleet.
-    Returns dict with issue type and count.
+    Count the most frequent inspection issue categories across the fleet.
+
+    Args:
+        fleet: ``Fleet`` scope.
+        start_date, end_date: Completed appointment date window.
+
+    Returns:
+        list[dict]: ``{type, count}`` sorted by count descending (battery, tire, fluid, etc.).
     """
     branches = Branch.objects.filter(fleet=fleet)
     all_vehicle_ids = []

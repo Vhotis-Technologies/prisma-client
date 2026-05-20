@@ -58,6 +58,15 @@ BOOKING_UPDATE_MIN_AGE = timedelta(minutes=2)
 
 
 def _parse_since_param(raw: str | None):
+    """
+    Parse optional ``since`` query param as timezone-aware datetime.
+
+    Args:
+        raw: ISO 8601 string from query params, or empty.
+
+    Returns:
+        Aware ``datetime`` or ``None`` if missing/invalid.
+    """
     if not raw or not str(raw).strip():
         return None
     dt = parse_datetime(str(raw).strip())
@@ -69,6 +78,20 @@ def _parse_since_param(raw: str | None):
 
 
 def _activity_row(*, id_str: str, activity_type: str, title: str, summary: str, ts, entity_id):
+    """
+    Build one activity feed row for the support app ``ActivityInterface``.
+
+    Args:
+        id_str: Stable unique id (e.g. ``booking:{uuid}``).
+        activity_type: Category key (customer, booking, fleet, …).
+        title: Short headline.
+        summary: One-line detail.
+        ts: Event timestamp (serialized to ISO).
+        entity_id: Related entity pk for deep links, or ``None``.
+
+    Returns:
+        Dict with ``id``, ``activity_type``, ``title``, ``summary``, ``timestamp``, ``entity_id``.
+    """
     return {
         "id": id_str,
         "activity_type": activity_type,
@@ -80,6 +103,7 @@ def _activity_row(*, id_str: str, activity_type: str, title: str, summary: str, 
 
 
 def _booking_summary_line(b: BookedAppointment) -> str:
+    """One-line booking context for activity summaries (vehicle, slot, service, status)."""
     vehicle_snippet = ""
     if b.vehicle_id and b.vehicle:
         vehicle_snippet = f"{b.vehicle.make or ''} {b.vehicle.model or ''}".strip()
@@ -91,6 +115,7 @@ def _booking_summary_line(b: BookedAppointment) -> str:
 
 
 def _vehicle_snippet(vehicle: Vehicle | None) -> str:
+    """Compact make/model + registration label for vehicle-related activities."""
     if vehicle is None:
         return ""
     reg = (vehicle.registration_number or "").strip()
@@ -107,12 +132,26 @@ class SupportActivitiesView(APIView):
     action_handler = {"get_activity_feed": "_get_activity_feed"}
 
     def get(self, request, *args, **kwargs):
+        """
+        Dispatch GET by URL ``action`` (``get_activity_feed`` only).
+
+        Returns:
+            DRF ``Response`` from the handler, or 400 for unknown actions.
+        """
         action = kwargs.get("action")
         if action not in self.action_handler:
             return Response({"error": "Invalid action"}, status=status.HTTP_400_BAD_REQUEST)
         return getattr(self, self.action_handler[action])(request)
 
     def _get_activity_feed(self, request):
+        """
+        Merge recent domain events into a single time-ordered activity list.
+
+        Query params: ``limit`` (default 50, max 100), optional ``since`` (ISO datetime).
+
+        Returns:
+            ``{'data': {'activities': [...], 'meta': {...}}}``; 400 if ``since`` is invalid.
+        """
         try:
             limit = int(request.query_params.get("limit") or DEFAULT_LIMIT)
         except (TypeError, ValueError):
@@ -129,6 +168,7 @@ class SupportActivitiesView(APIView):
                 )
             window_start = since
         else:
+            # Default window: last N days when caller does not pin ``since``.
             window_start = timezone.now() - timedelta(days=DEFAULT_LOOKBACK_DAYS)
 
         now = timezone.now()
@@ -374,6 +414,7 @@ class SupportActivitiesView(APIView):
                 )
             )
 
+        # Global sort after per-source caps; each source may contribute up to ``limit`` rows.
         rows.sort(key=lambda r: r["timestamp"], reverse=True)
         trimmed = rows[:limit]
 

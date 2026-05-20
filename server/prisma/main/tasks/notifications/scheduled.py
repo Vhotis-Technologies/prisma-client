@@ -1,3 +1,7 @@
+"""
+Scheduled Celery tasks: service reminders, 6h email reminders, promotion expiry,
+loyalty decay, pending-booking cleanup, and transfer expiration.
+"""
 from celery import shared_task
 from datetime import timedelta
 from django.utils import timezone
@@ -7,9 +11,19 @@ from main.tasks.notifications.push import send_push_notification
 
 @shared_task(name='main.tasks.send_service_reminders')
 def send_service_reminders():
+    """
+    Push ~30 minutes before confirmed appointments (single and bulk).
+
+    Uses atomic ``service_reminder_push_sent_at`` claims to avoid duplicate sends.
+    Bulk orders send one push per order, then mark all child appointments.
+
+    Returns:
+        str: Summary counts of single vs bulk reminders sent.
+    """
     from main.models import BookedAppointment, BulkOrder
 
     now = timezone.now()
+    # 10-minute window centered on T-30 minutes from now.
     reminder_start = now + timedelta(minutes=25)
     reminder_end = now + timedelta(minutes=35)
 
@@ -79,7 +93,12 @@ def send_service_reminders():
 def send_six_hour_booking_reminder_emails():
     """
     Email clients ~6 hours before appointment start (10-minute send window).
-    Bulk orders: one email per BulkOrder; standard bookings: one per BookedAppointment.
+
+    Bulk orders: one email per ``BulkOrder``; standard bookings: one per ``BookedAppointment``.
+    Uses ``reminder_email_6h_sent_at`` claims; rolls back on send failure.
+
+    Returns:
+        str: Counts of single vs bulk emails sent (and up to 5 errors).
     """
     from datetime import datetime, time as time_cls
 
@@ -94,6 +113,7 @@ def send_six_hour_booking_reminder_emails():
     w1 = now + timedelta(hours=6, minutes=10)
 
     def start_dt(apt):
+        """Combine appointment date + start_time into a timezone-aware datetime for window checks."""
         d = apt.appointment_date
         t = apt.start_time or time_cls.min
         naive = datetime.combine(d, t)
@@ -179,7 +199,14 @@ def send_six_hour_booking_reminder_emails():
 
 @shared_task(name='main.tasks.send_promotion_expiration')
 def send_promotion_expiration():
-    """Send a notification to all users with promotions expiring in the next 24 hours."""
+    """
+    Notify users whose active promotions expire within the next calendar day.
+
+    Sends push (if enabled) and always creates an in-app ``Notification``.
+
+    Returns:
+        str: Summary of push notifications queued.
+    """
     from main.models import Promotions
 
     now = timezone.now()
@@ -223,7 +250,14 @@ def send_promotion_expiration():
 
 @shared_task(name='main.tasks.check_loyalty_decay')
 def check_loyalty_decay():
-    """Reset loyalty for users inactive for 60+ days."""
+    """
+    Reset B2C loyalty to bronze when last completed booking was 60+ days ago.
+
+    Notifies users via push and in-app notification when tier is reset.
+
+    Returns:
+        str: Number of loyalty accounts reset.
+    """
     from main.models import LoyaltyProgram, Notification
 
     sixty_days_ago = timezone.now().date() - timedelta(days=60)
@@ -270,7 +304,12 @@ def check_loyalty_decay():
 
 @shared_task(name='main.tasks.cleanup_expired_pending_bookings')
 def cleanup_expired_pending_bookings():
-    """Clean up expired pending bookings (older than 24 hours)."""
+    """
+    Delete ``PendingBooking`` rows past ``expires_at`` with pending or failed payment.
+
+    Returns:
+        str: Count of deleted rows.
+    """
     from main.models import PendingBooking
 
     try:
@@ -289,7 +328,14 @@ def cleanup_expired_pending_bookings():
 
 @shared_task(name='main.tasks.expire_old_transfers')
 def expire_old_transfers():
-    """Expire transfer requests that are older than 7 days."""
+    """
+    Mark pending ``VehicleTransfer`` rows as expired when past ``expires_at``.
+
+    Notifies the requester via push for each expired transfer.
+
+    Returns:
+        str: Count of transfers expired.
+    """
     from main.models import VehicleTransfer
 
     try:

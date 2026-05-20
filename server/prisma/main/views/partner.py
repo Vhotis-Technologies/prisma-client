@@ -1,7 +1,7 @@
 """
 Partner API: partner onboarding, bank account, payout requests, commission earnings/payouts, referral attributions.
 
-Helper functions _mask_stripe_account_id, _mask_sort_code, _mask_iban for masking sensitive data in responses.
+Helper functions _mask_sort_code, _mask_iban for masking sensitive data in responses.
 """
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
@@ -13,13 +13,6 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 
 from main.models import Partner, PartnerBankAccount, PartnerPayoutRequest, ReferralAttribution, CommissionEarning, CommissionPayout, BookedAppointment, Vehicle, VehicleOwnership, BulkOrder
-
-
-def _mask_stripe_account_id(value):
-    """Mask Stripe account ID for display: show only last 4 chars, prefix with acct_***."""
-    if not value or len(value) <= 4:
-        return value
-    return 'acct_***' + value[-4:]
 
 
 def _mask_sort_code(value):
@@ -41,6 +34,13 @@ def _mask_iban(value):
 
 
 class PartnerView(APIView):
+    """
+    Dealership partner API: dashboard metrics, invoices, bank details, payout requests.
+
+    Requires an active ``Partner`` profile on the user. Action-routed via
+    ``partner/<action>/``. Sensitive bank fields are masked in responses.
+    """
+
     permission_classes = [IsAuthenticated]
 
     action_handlers = {
@@ -91,6 +91,7 @@ class PartnerView(APIView):
         if not partner:
             return Response({'error': 'Partner profile not found or inactive'}, status=status.HTTP_403_FORBIDDEN)
 
+        # Time windows for active (90d) vs churned (180d) referred users
         now = timezone.now()
         ninety_days_ago = now - timedelta(days=90)
         one_eighty_days_ago = now - timedelta(days=180)
@@ -241,7 +242,7 @@ class PartnerView(APIView):
         }, status=status.HTTP_200_OK)
 
     def get_payout_details(self, request):
-        """Return masked payout details (Stripe Connect ID + bank account) and pending commission."""
+        """Return masked bank account details and pending commission (manual payouts)."""
         partner = self._get_partner(request)
         if not partner:
             return Response({'error': 'Partner profile not found or inactive'}, status=status.HTTP_403_FORBIDDEN)
@@ -249,10 +250,6 @@ class PartnerView(APIView):
         pending_commission = CommissionEarning.objects.filter(
             partner=partner, status='pending'
         ).aggregate(s=Sum('commission_amount'))['s'] or Decimal('0')
-
-        stripe_masked = None
-        if partner.stripe_connect_account_id:
-            stripe_masked = _mask_stripe_account_id(partner.stripe_connect_account_id)
 
         bank_account = None
         try:
@@ -272,7 +269,6 @@ class PartnerView(APIView):
 
         return Response({
             'pending_commission': float(pending_commission),
-            'stripe_connect_account_id': stripe_masked,
             'bank_account': bank_account,
         }, status=status.HTTP_200_OK)
 
@@ -302,17 +298,12 @@ class PartnerView(APIView):
         )
 
     def update_payout_details(self, request):
-        """Create/update Stripe Connect ID and/or bank account. Accepts full values, returns masked."""
+        """Create/update partner bank account for manual commission payouts. Returns masked values."""
         partner = self._get_partner(request)
         if not partner:
             return Response({'error': 'Partner profile not found or inactive'}, status=status.HTTP_403_FORBIDDEN)
 
         data = request.data if hasattr(request.data, 'get') else {}
-
-        if 'stripe_connect_account_id' in data:
-            raw = data.get('stripe_connect_account_id')
-            partner.stripe_connect_account_id = (raw or '').strip() or None
-            partner.save()
 
         account_holder = data.get('account_holder_name')
         iban = data.get('iban')
@@ -386,6 +377,7 @@ class PartnerView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # Side effect: support team processes pending payout requests manually
         PartnerPayoutRequest.objects.create(
             partner=partner,
             amount_requested=approved_balance,

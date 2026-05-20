@@ -42,6 +42,18 @@ TRANSACTION_LABEL = dict(PaymentTransaction.TRANSACTION_TYPES)
 
 
 def _vat_rate_for_type(transaction_type: str) -> Decimal | None:
+    """
+    Map a ``PaymentTransaction.transaction_type`` to the Irish VAT rate used in reports.
+
+    Returns reduced rate (13.5%) for valet-style services, standard (23%) for
+    subscriptions/VIN, or ``None`` when VAT should not be split (e.g. refunds).
+
+    Args:
+        transaction_type: Value from ``PaymentTransaction.TRANSACTION_TYPES``.
+
+    Returns:
+        Decimal rate as a fraction (e.g. 0.135), or ``None``.
+    """
     if transaction_type in ('payment', 'b2c_subscription', 'reschedule_fee'):
         return VAT_RATE_REDUCED
     if transaction_type in ('vin_lookup', 'fleet_subscription'):
@@ -67,6 +79,7 @@ def _extract_vat_from_gross(gross: Decimal, rate: Decimal) -> tuple[Decimal, Dec
 
 
 def _month_start(year: int, month: int) -> datetime:
+    """Return timezone-aware midnight on the first day of the given calendar month."""
     tz = timezone.get_current_timezone()
     d = date(year, month, 1)
     naive = datetime.combine(d, time.min)
@@ -74,12 +87,20 @@ def _month_start(year: int, month: int) -> datetime:
 
 
 def _next_month_start(year: int, month: int) -> datetime:
+    """Return the first instant of the month after ``(year, month)`` (for half-open ranges)."""
     if month == 12:
         return _month_start(year + 1, 1)
     return _month_start(year, month + 1)
 
 
 def _parse_year_month(request):
+    """
+    Parse ``year`` and ``month`` query params from a support accounting request.
+
+    Returns:
+        Tuple ``(year, month, error_response)``. On success ``error_response`` is ``None``;
+        on validation failure the first two values are ``None`` and the third is a DRF Response.
+    """
     try:
         year = int(request.query_params.get('year', ''))
         month = int(request.query_params.get('month', ''))
@@ -91,10 +112,18 @@ def _parse_year_month(request):
 
 
 def _serialize_decimal(d: Decimal) -> str:
+    """Format a ``Decimal`` as a fixed two-decimal-place string for JSON/PDF output."""
     return format(d.quantize(Decimal('0.01')), 'f')
 
 
 class SupportAccountingView(APIView):
+    """
+    Support-facing accounting summaries and PDF export.
+
+    **Auth:** ``SupportPermissionAccess`` (internal key).
+
+    **Actions:** monthly summaries, month detail breakdown, PDF export for a month.
+    """
     permission_classes = [SupportPermissionAccess]
     action_handler = {
         'get_monthly_summaries': '_get_monthly_summaries',
@@ -109,6 +138,16 @@ class SupportAccountingView(APIView):
         return super().perform_content_negotiation(request, force)
 
     def get(self, request, *args, **kwargs):
+        """
+        Route URL ``action`` to a handler in :attr:`action_handler`.
+
+        Args:
+            request: DRF request; query params vary by action.
+            **kwargs: Must include ``action`` (e.g. ``get_monthly_summaries``).
+
+        Returns:
+            DRF ``Response`` or Django ``HttpResponse`` (PDF export).
+        """
         action = kwargs.get('action')
         if action not in self.action_handler:
             return Response({'error': 'Invalid action'}, status=status.HTTP_400_BAD_REQUEST)
@@ -116,6 +155,16 @@ class SupportAccountingView(APIView):
         return handler(request)
 
     def _status_kw(self, request) -> str:
+        """
+        Normalize ``status`` query param for payment transaction filtering.
+
+        Args:
+            request: Incoming GET request.
+
+        Returns:
+            ``'all'``, ``'succeeded'``, ``'failed'``, or ``'pending'``; unknown values default to
+            ``'succeeded'``.
+        """
         raw = (request.query_params.get('status') or 'succeeded').strip().lower()
         if raw == 'all':
             return 'all'
@@ -124,6 +173,17 @@ class SupportAccountingView(APIView):
         return 'succeeded'
 
     def _filter_qs_for_month(self, year: int, month: int, status_kw: str):
+        """
+        ``PaymentTransaction`` rows whose ``created_at`` falls in the calendar month.
+
+        Args:
+            year: Calendar year (e.g. 2025).
+            month: Calendar month 1–12.
+            status_kw: From :meth:`_status_kw`; ``'all'`` skips status filter.
+
+        Returns:
+            Filtered queryset (half-open interval ``[month_start, next_month_start)``).
+        """
         start = _month_start(year, month)
         end = _next_month_start(year, month)
         qs = PaymentTransaction.objects.filter(created_at__gte=start, created_at__lt=end)
@@ -132,9 +192,22 @@ class SupportAccountingView(APIView):
         return qs
 
     def _aggregate_month(self, year: int, month: int, status_kw: str) -> dict:
+        """
+        Build JSON-serializable totals for one month: per-type counts/sums, currency grand totals,
+        and VAT split.
+
+        Args:
+            year: Calendar year.
+            month: Calendar month 1–12.
+            status_kw: Payment status filter (see :meth:`_status_kw`).
+
+        Returns:
+            Dict with ``year_month``, ``currency_totals``, ``by_transaction_type``, ``vat_by_currency``.
+        """
         qs = self._filter_qs_for_month(year, month, status_kw)
 
         by_type: dict[str, dict] = {}
+        # Fixed type order so JSON/PDF tables match PaymentTransaction.TRANSACTION_TYPES.
         for tt in TRANSACTION_TYPES_ORDER:
             sub = qs.filter(transaction_type=tt)
             agg = sub.aggregate(count=Count('id'), sum_amount=Sum('amount'))
@@ -194,6 +267,14 @@ class SupportAccountingView(APIView):
         return out
 
     def _get_monthly_summaries(self, request):
+        """
+        List aggregate summaries for the most recent months that have transactions.
+
+        Query params: ``months_back`` (1–120, default 24), ``status`` (see :meth:`_status_kw`).
+
+        Returns:
+            ``{'data': {'summaries': [...]}}`` ordered newest month first.
+        """
         try:
             months_back = int(request.query_params.get('months_back', 24))
         except (TypeError, ValueError):
@@ -222,6 +303,14 @@ class SupportAccountingView(APIView):
         return Response({'data': {'summaries': summaries}})
 
     def _get_month_detail(self, request):
+        """
+        Single-month breakdown including ``transaction_count``.
+
+        Query params: ``year``, ``month``, ``status``.
+
+        Returns:
+            ``{'data': summary}`` or 400 if year/month invalid.
+        """
         year, month, err = _parse_year_month(request)
         if err:
             return err
@@ -233,6 +322,14 @@ class SupportAccountingView(APIView):
         return Response({'data': summary})
 
     def _export_month_pdf(self, request):
+        """
+        Generate a VAT-oriented PDF report for one calendar month.
+
+        Query params: ``year``, ``month``, ``status``.
+
+        Returns:
+            Django ``HttpResponse`` with ``application/pdf`` and attachment disposition.
+        """
         year, month, err = _parse_year_month(request)
         if err:
             return err

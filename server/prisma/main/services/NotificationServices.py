@@ -15,11 +15,28 @@ from main.models import Notification
 logger = logging.getLogger(__name__)
 
 class NotificationService:
+    """
+    Synchronous notification facade for bookings and marketing.
+
+    Creates in-app ``Notification`` rows and optionally sends Expo push and/or
+    HTML email based on user preferences.
+    """
+
     def __init__(self):
+        """Initialize Expo ``PushClient`` for instance methods."""
         self.push_client = PushClient()
-    
+
     def send_booking_confirmation(self, user, booking):
-        """Send booking confirmation via push notification and email"""
+        """
+        Send booking confirmation via in-app record, push, and email.
+
+        Args:
+            user: Recipient ``User``.
+            booking: ``BookedAppointment`` being confirmed.
+
+        Returns:
+            dict: Keys ``push_notification``, ``email_notification``, ``errors`` (list).
+        """
         results = {
             'push_notification': None,
             'email_notification': None,
@@ -76,7 +93,16 @@ class NotificationService:
         return results
     
     def send_service_reminder(self, user, booking):
-        """Send service reminder via push notification and email"""
+        """
+        Send a 30-minute service reminder push (email path not used here).
+
+        Args:
+            user: Recipient ``User``.
+            booking: Upcoming ``BookedAppointment``.
+
+        Returns:
+            dict: ``push_notification`` result and ``errors`` list.
+        """
         results = {
             'push_notification': None,
             'errors': []
@@ -104,7 +130,16 @@ class NotificationService:
 
     
     def send_service_completed(self, user, booking):
-        """Send service completed notification via push notification and email"""
+        """
+        Notify the customer that valet service has completed.
+
+        Args:
+            user: Recipient ``User``.
+            booking: Completed ``BookedAppointment``.
+
+        Returns:
+            dict: Push/email results and ``errors``.
+        """
         results = {
             'push_notification': None,
             'email_notification': None,
@@ -147,9 +182,18 @@ class NotificationService:
         
         return results
     
-    """ Send a booking cancellation notification to users. Send emails if they have email notification enabled, and then send a in app notification too."""
     def send_booking_cancelled(self, user, booking, message=None):
-        """Send booking cancellation notification"""
+        """
+        Notify the customer that a booking was cancelled (in-app, push, email).
+
+        Args:
+            user: Recipient ``User``.
+            booking: Cancelled ``BookedAppointment``.
+            message: Optional override body; default mentions refund timeline.
+
+        Returns:
+            dict: Push/email results and ``errors``.
+        """
         results = {
             'push_notification': None,
             'email_notification': None,
@@ -202,7 +246,17 @@ class NotificationService:
         return results
 
     def send_booking_rescheduled(self, user, booking, message=None):
-        """Send booking reschedule notification: in-app, push (if enabled), email (if enabled)."""
+        """
+        Notify the customer of a new appointment date/time.
+
+        Args:
+            user: Recipient ``User``.
+            booking: Rescheduled ``BookedAppointment``.
+            message: Optional override body.
+
+        Returns:
+            dict: Push/email results and ``errors``.
+        """
         results = {
             "push_notification": None,
             "email_notification": None,
@@ -253,7 +307,18 @@ class NotificationService:
         return results
 
     def send_marketing_notification(self, users, subject, message, data=None):
-        """Send marketing notification to multiple users"""
+        """
+        Broadcast marketing push/email to users who opted into marketing emails.
+
+        Args:
+            users: Iterable of ``User`` instances.
+            subject: Push title and email subject.
+            message: Body text / email content context.
+            data: Optional extra push payload dict.
+
+        Returns:
+            dict: Per-user push/email result lists and ``errors``.
+        """
         results = {
             'push_notifications': [],
             'email_notifications': [],
@@ -306,7 +371,21 @@ class NotificationService:
 
 
     def _send_push_notification(self, user, title, body, data=None):
-        """Internal method to send push notification"""
+        """
+        Publish one Expo push message and validate the ticket.
+
+        Args:
+            user: ``User`` with ``notification_token``.
+            title: Push title.
+            body: Push body.
+            data: Optional JSON-serializable dict for deep linking.
+
+        Returns:
+            Expo publish response object.
+
+        Raises:
+            ValueError: When token is missing or blank.
+        """
         if not user.notification_token or not user.notification_token.strip():
             raise ValueError("No valid notification token")
         
@@ -324,7 +403,21 @@ class NotificationService:
 
     
     def _send_email_notification(self, user, subject, template, context=None):
-        """Internal method to send email notification"""
+        """
+        Render an HTML email template and send via Django ``send_mail``.
+
+        Args:
+            user: Recipient ``User`` (must have email).
+            subject: Email subject line.
+            template: Filename under ``emails/`` templates folder.
+            context: Template context dict.
+
+        Returns:
+            int: Django send_mail result (number of messages sent).
+
+        Raises:
+            ValueError: When user has no email address.
+        """
         if not user.email:
             raise ValueError("No email address")
         
@@ -344,11 +437,22 @@ class NotificationService:
         return result
 
     
-    # This method create a notification in the database
     def _create_notification(
         self, user, title, message, notification_type, status="info"
     ) -> bool:
-        """Create a notification in the database"""
+        """
+        Persist an in-app ``Notification`` row for the user.
+
+        Args:
+            user: Owner of the notification.
+            title: Short heading.
+            message: Body text.
+            notification_type: App routing type string.
+            status: UI status hint (e.g. success, info).
+
+        Returns:
+            bool: True on success; False when ORM create fails.
+        """
         try:
             Notification.objects.create(
                 user=user,

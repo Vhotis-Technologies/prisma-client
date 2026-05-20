@@ -1,3 +1,4 @@
+"""Celery tasks: support ticket created / resolved customer emails."""
 from celery import shared_task
 from django.template.loader import render_to_string
 
@@ -13,7 +14,14 @@ def send_ticket_created_email(
     booking_reference,
     description_preview,
 ):
-    """Notify customer when a support ticket is opened. Subject is the 8-digit ticket code."""
+    """
+    Notify customer when a support ticket is opened.
+
+    Subject is the 8-digit ticket code for easy inbox search.
+
+    Returns:
+        str: Success or failure message.
+    """
     subject = ticket_code
     html_message = render_to_string(
         "ticket_created_email.html",
@@ -39,7 +47,12 @@ def send_ticket_resolved_email(
     ticket_code,
     resolution_message="",
 ):
-    """Notify customer when support marks the ticket resolved or closed."""
+    """
+    Notify customer when support marks the ticket resolved or closed.
+
+    Returns:
+        str: Success or failure message.
+    """
     subject = f"Ticket {ticket_code} resolved"
     html_message = render_to_string(
         "ticket_resolved_email.html",

@@ -21,6 +21,12 @@ export type UseDashboardOptions = {
   upcomingScope?: "my_bookings";
 };
 
+/**
+ * Dashboard hook: upcoming appointments, stats, refresh, cancel, and detailer call.
+ *
+ * @param options - Optional scope for upcoming appointments query
+ * @returns Appointments, stats, refresh handlers, and cancellation helpers
+ */
 const useDashboard = (options?: UseDashboardOptions) => {
   const buttonColor = useThemeColor({}, "button");
   const primaryColor = useThemeColor({}, "primary");
@@ -136,6 +142,11 @@ const useDashboard = (options?: UseDashboardOptions) => {
     setIsRefreshing(false);
   }, [refetchAppointments, refetchRecentServices, refetchUserStats]);
 
+  /**
+   * Callback for real-time booking updates; triggers a full dashboard refresh.
+   *
+   * @param data - Booking update payload (unused; refresh is unconditional)
+   */
   const handleBookingUpdate = useCallback(
     (data: any) => {
       // Trigger dashboard refresh

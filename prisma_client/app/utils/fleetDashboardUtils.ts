@@ -117,6 +117,7 @@ export async function checkBulkCapacityAvailability(
 }
 
 
+/** Chart series: spend per branch (non-zero only). */
 export const processBranchPerformanceData = (
   analytics: FleetDashboardStats["analytics"]
 ): Array<{ label: string; value: number; color?: string }> => {
@@ -133,6 +134,7 @@ export const processBranchPerformanceData = (
   return data.some((item) => item.value > 0) ? data : [];
 };
 
+/** Multi-series line chart data: spend trends per branch over time. */
 export const processSpendTrendsData = (
   analytics: FleetDashboardStats["analytics"]
 ): Array<{ label: string; data: Array<{ label: string; value: number }>; color?: string }> => {
@@ -181,6 +183,7 @@ export const processSpendTrendsData = (
   return filteredSeries.length > 0 ? filteredSeries : [];
 };
 
+/** Bar chart data: average vehicle health score per branch. */
 export const processHealthScoresData = (
   analytics: FleetDashboardStats["analytics"]
 ): Array<{ label: string; value: number; color?: string }> => {
@@ -205,6 +208,7 @@ export const processHealthScoresData = (
   return data.length > 0 ? data : [];
 };
 
+/** Pie/bar data: booking counts grouped by status. */
 export const processBookingActivityData = (
   analytics: FleetDashboardStats["analytics"]
 ): Array<{ label: string; value: number; color: string }> => {
@@ -240,6 +244,7 @@ export const processBookingActivityData = (
   return data.length > 0 ? data : [];
 };
 
+/** Chart data: top common vehicle issues by count. */
 export const processCommonIssuesData = (
   analytics: FleetDashboardStats["analytics"]
 ): Array<{ label: string; value: number; color?: string }> => {

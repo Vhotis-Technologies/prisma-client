@@ -72,6 +72,7 @@ export const dashboardApi = createApi({
       transformResponse: (response: RecentServicesProps | null) => response,
     }),
 
+    /** Submit star rating and optional comment for a completed booking. */
     submitReview: builder.mutation<
       { message?: string; booking_reference?: string },
       {

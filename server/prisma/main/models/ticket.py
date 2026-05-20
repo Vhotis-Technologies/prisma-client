@@ -1,4 +1,9 @@
-"""Client-side support ticket and ticket update models."""
+"""
+Support tickets mirrored on the client server for the consumer app.
+
+Tickets are created locally and synced with the support platform via Redis;
+``support_ticket_id`` links to the canonical row on the support server.
+"""
 import uuid
 from django.db import models
 from django.conf import settings
@@ -34,6 +39,7 @@ class Ticket(models.Model):
         ordering = ["-created_at"]
 
     def save(self, *args, **kwargs):
+        """Generate a unique human-readable ``ticket_code`` before first persist."""
         if not self.ticket_code:
             from main.utils.ticket_code import generate_unique_ticket_code
 

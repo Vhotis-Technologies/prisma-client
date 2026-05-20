@@ -1,7 +1,8 @@
 """
-Create synthetic BookedAppointment rows for each vehicle in a BulkOrder,
-so that job_started/job_completed from the detailer can sync status and images
-to the client and each bulk vehicle appears in service history.
+Create synthetic BookedAppointment rows for each vehicle in a BulkOrder.
+
+Lets detailer job_started/job_completed events sync status and images to the client
+and exposes each bulk slot in service history.
 """
 from datetime import datetime
 from decimal import Decimal
@@ -10,7 +11,20 @@ from main.models import BookedAppointment, BulkOrder, ServiceType, ValetType, Ad
 
 
 def _resolve_service_type_and_valet_type(order_data):
-    """Resolve ServiceType and ValetType from order_data. Returns (service_type, valet_type)."""
+    """
+    Resolve ``ServiceType`` and ``ValetType`` from bulk ``order_data``.
+
+    Accepts dict or string names; falls back to first DB row when name missing.
+
+    Args:
+        order_data: Bulk order JSON (``service_type``, ``valet_type`` keys).
+
+    Returns:
+        tuple: ``(service_type, valet_type)`` model instances.
+
+    Raises:
+        ValueError: When no ``ServiceType`` or ``ValetType`` exists in the database.
+    """
     service_type = None
     st = order_data.get('service_type')
     if isinstance(st, dict):
@@ -41,7 +55,15 @@ def _resolve_service_type_and_valet_type(order_data):
 
 
 def _parse_appointment_date_and_time(order_data):
-    """Parse appointment_date and start_time from order_data. Returns (date, time or None)."""
+    """
+    Parse appointment date and start time from bulk ``order_data``.
+
+    Args:
+        order_data: Dict with ``date``/``appointment_date`` and ``start_time``/``best_start_time``.
+
+    Returns:
+        tuple: ``(date, time | None)`` — time None when unparseable.
+    """
     date_str = order_data.get('date') or order_data.get('appointment_date', '')
     if isinstance(date_str, str) and len(date_str) >= 10:
         date_str = date_str[:10]
@@ -66,7 +88,15 @@ def _parse_appointment_date_and_time(order_data):
 
 
 def _resolve_addons(order_data):
-    """Resolve AddOns from order_data.addons. Returns AddOns queryset."""
+    """
+    Resolve ``AddOns`` queryset from ``order_data.addons`` (ids as dicts or scalars).
+
+    Args:
+        order_data: Bulk order JSON.
+
+    Returns:
+        list: ``AddOns`` instances (empty list when no addons).
+    """
     addons_data = order_data.get('addons') or []
     if not addons_data:
         return []
@@ -82,7 +112,21 @@ def _resolve_addons(order_data):
 
 
 def _build_bulk_appointment_defaults(bulk_order, service_type, valet_type, appointment_date, start_time, total_amount):
-    """Build the common defaults for a single bulk slot appointment."""
+    """
+    Build ``get_or_create`` defaults for a single bulk slot appointment.
+
+    Args:
+        bulk_order: Parent ``BulkOrder`` (must have ``address_id``).
+        service_type, valet_type: Resolved service models.
+        appointment_date, start_time: Scheduled slot timing.
+        total_amount: Per-vehicle share of bulk total.
+
+    Returns:
+        dict: Field defaults for ``BookedAppointment``.
+
+    Raises:
+        ValueError: When ``bulk_order`` has no address.
+    """
     if not bulk_order.address_id:
         raise ValueError("BulkOrder must have an address to create appointments")
     return {
@@ -104,9 +148,13 @@ def _build_bulk_appointment_defaults(bulk_order, service_type, valet_type, appoi
 
 def create_bulk_appointments(bulk_order):
     """
-    Create one BookedAppointment per vehicle for the given BulkOrder.
-    Idempotent: uses get_or_create keyed by booking_reference so safe to call twice.
-    Sets add_ons from order_data.addons when present.
+    Create one ``BookedAppointment`` per vehicle for the given ``BulkOrder``.
+
+    Idempotent via ``get_or_create`` on ``booking_reference`` (``{ref}-{i}``).
+    Attaches add-ons from ``order_data`` when present.
+
+    Args:
+        bulk_order: ``BulkOrder`` with ``number_of_vehicles`` and ``order_data``.
     """
     if not bulk_order.address_id:
         return
@@ -135,10 +183,16 @@ def create_bulk_appointments(bulk_order):
 
 def get_or_create_bulk_appointment_for_slot(bulk_order, booking_reference):
     """
-    Get or create the single BookedAppointment for a bulk slot (e.g. BULKxxx-3).
-    Used by subscribe_redis when it receives job_started/job_completed for a ref
-    that might not have been created yet by create_bulk_appointments.
-    Returns (appointment, created).
+    Get or create the ``BookedAppointment`` for one bulk slot reference.
+
+    Used by ``subscribe_redis`` when job events arrive before ``create_bulk_appointments``.
+
+    Args:
+        bulk_order: Parent bulk order.
+        booking_reference: Slot ref (e.g. ``BULKxxx-3``).
+
+    Returns:
+        tuple: ``(appointment, created)`` or ``(None, False)`` when bulk invalid.
     """
     order_data = getattr(bulk_order, 'order_data', None) or {}
     n = int(bulk_order.number_of_vehicles or 0)

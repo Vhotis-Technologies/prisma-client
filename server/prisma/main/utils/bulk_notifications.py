@@ -1,6 +1,7 @@
 """
 One-shot client confirmation for bulk orders (email, push, in-app).
-Uses BulkOrder.client_confirmation_notifications_sent_at so only the first
+
+Uses ``BulkOrder.client_confirmation_notifications_sent_at`` so only the first
 successful claim sends, whether job_acceptance arrives on slot -1 first or not.
 """
 from django.utils import timezone
@@ -10,12 +11,21 @@ from main.models import BulkOrder, Notification
 
 def try_send_bulk_client_confirmation_notifications(bulk_order, sample_appointment):
     """
-    Send bulk confirmation email + push + Notification row once per BulkOrder.
-    sample_appointment: any BookedAppointment linked to this bulk (for date/time in push body).
-    Returns True if this call sent the package; False if already sent or nothing to do.
+    Send bulk confirmation email + push + in-app Notification row once per BulkOrder.
+
+    Atomically sets ``client_confirmation_notifications_sent_at``; concurrent callers
+    see ``updated == 0`` and skip sending.
+
+    Args:
+        bulk_order: The ``BulkOrder`` being confirmed.
+        sample_appointment: Any ``BookedAppointment`` on this bulk (date/time in push body).
+
+    Returns:
+        bool: True if this call sent the package; False if already sent or inputs invalid.
     """
     if not bulk_order or not sample_appointment:
         return False
+    # Claim send rights: only one worker wins the null→timestamp update.
     updated = BulkOrder.objects.filter(
         id=bulk_order.id,
         client_confirmation_notifications_sent_at__isnull=True,

@@ -1,3 +1,6 @@
+/**
+ * Stripe payment hook: payment sheet init, booking/reschedule/gift voucher flows, webhook polling.
+ */
 import { useCallback } from "react";
 import { useStripe } from "@stripe/stripe-react-native";
 import {

@@ -1,13 +1,14 @@
 """
 Bookings and fleet bulk orders for support tooling.
 
-**Auth:** internal support key.
+**Auth:** ``SupportPermissionAccess`` (internal key via support server proxy).
 
-**Features:** list with appointment summaries (single rows + rolled-up bulk orders), rich detail
-for reschedule/cancel flows, image groups, payment rollup, and PATCH handlers that notify clients
-via tasks (push, events).
+**GET actions:** list (single + bulk rollup), booking/bulk detail, reschedule slot lookup,
+reassignment candidates/history (proxied to detailer API).
 
-**Status mapping:** raw DB statuses are normalized for the app via :func:`_display_status`
+**PATCH actions:** cancel/reschedule (single and bulk), reschedule-fee intent, crew reassignment.
+
+**Status mapping:** raw DB statuses are normalized via :func:`_display_status`
 (e.g. ``scheduled`` → ``confirmed``).
 """
 from __future__ import annotations
@@ -62,12 +63,14 @@ def _display_status(raw: str) -> str:
 
 
 def _fmt_date(d) -> str:
+    """Format a date as ``%d %b %Y`` for support UI labels; empty string if falsy."""
     if not d:
         return ""
     return d.strftime("%d %b %Y")
 
 
 def _fmt_appointment(booking: BookedAppointment) -> str:
+    """Human-readable appointment date plus optional ``HH:MM`` start time."""
     base = _fmt_date(booking.appointment_date)
     if booking.start_time:
         return f"{base}, {booking.start_time.strftime('%H:%M')}"
@@ -75,6 +78,15 @@ def _fmt_appointment(booking: BookedAppointment) -> str:
 
 
 def _service_description(booking: BookedAppointment) -> str:
+    """
+    Extract display text from ``service_type.description`` (str, dict, or JSON).
+
+    Args:
+        booking: Appointment with related ``service_type``.
+
+    Returns:
+        Trimmed description string (max ~500 chars).
+    """
     raw = booking.service_type.description
     if raw is None:
         return ""
@@ -172,6 +184,11 @@ def _original_succeeded_payment(booking: BookedAppointment):
 
 
 def _roll_up_bulk_status(appointments: list) -> str:
+    """
+    Derive a single list-row status from all line appointments in a bulk order.
+
+    Priority: all cancelled → all completed → any pending → any active → first raw status.
+    """
     if not appointments:
         return "pending"
     raw = [getattr(a, "status", "") or "" for a in appointments]
@@ -187,6 +204,16 @@ def _roll_up_bulk_status(appointments: list) -> str:
 
 
 def _serialize_bulk_order_summary(bulk_order: BulkOrder, appointments: list) -> dict:
+    """
+    List-row payload for a fleet bulk order (uses earliest child appointment for slot display).
+
+    Args:
+        bulk_order: Parent ``BulkOrder``.
+        appointments: All ``BookedAppointment`` rows for this bulk (for status rollup).
+
+    Returns:
+        Dict with ``kind: bulk_order``, reference, client, vehicle count, rolled-up status.
+    """
     user = bulk_order.user
     rep = min(
         appointments,
@@ -211,6 +238,12 @@ def _serialize_bulk_order_summary(bulk_order: BulkOrder, appointments: list) -> 
 
 
 def _bulk_order_payment_summary(bulk_order: BulkOrder) -> dict:
+    """
+    Payment rollup for bulk-order detail (mirrors :func:`_payment_status` bulk branch).
+
+    Returns:
+        Dict with ``payment_status`` label, order/payment/refund totals, raw ``bulk_payment_status``.
+    """
     succeeded = PaymentTransaction.objects.filter(bulk_order=bulk_order, status="succeeded")
     payments = (
         succeeded.filter(transaction_type="payment").aggregate(s=Sum("amount"))["s"]
@@ -248,12 +281,19 @@ def _bulk_order_payment_summary(bulk_order: BulkOrder) -> dict:
 
 
 def _client_type(user) -> str:
+    """``Corporate`` for fleet accounts, else ``Individual``."""
     if user.is_fleet_user():
         return "Corporate"
     return "Individual"
 
 
 def _loyalty(user):
+    """
+    Loyalty tier label and benefit strings for booking detail.
+
+    Returns:
+        Tuple ``(tier_name, benefits_list)``; defaults to Bronze with no benefits.
+    """
     loyalty = LoyaltyProgram.objects.filter(user=user).first()
     if not loyalty:
         return "Bronze", []
@@ -267,6 +307,12 @@ def _loyalty(user):
 
 
 def _team_members(booking: BookedAppointment):
+    """
+    Assigned detailer team for support UI (from ``assigned_detailers`` JSON or legacy lead).
+
+    Returns:
+        List of dicts with ``id``, ``name``, ``role``, ``phone``, ``email``.
+    """
     team = []
     for i, m in enumerate(booking.assigned_detailers or []):
         if not isinstance(m, dict):
@@ -296,6 +342,7 @@ def _team_members(booking: BookedAppointment):
 
 
 def _address_payload(addr) -> dict:
+    """Normalize an ``Address`` model row for JSON responses."""
     lat = addr.latitude
     lng = addr.longitude
     return {
@@ -309,6 +356,12 @@ def _address_payload(addr) -> dict:
 
 
 def _booking_images(booking: BookedAppointment) -> dict:
+    """
+    Group job images into before/after × interior/exterior buckets for the support app.
+
+    Returns:
+        Dict keyed ``{before|after}_images_{interior|exterior}`` → list of image metadata.
+    """
     groups = {
         "before_images_interior": [],
         "before_images_exterior": [],
@@ -334,6 +387,7 @@ def _booking_images(booking: BookedAppointment) -> dict:
 
 
 def _serialize_booking_summary(booking: BookedAppointment) -> dict:
+    """Lightweight list-row fields for a single appointment."""
     user = booking.user
     return {
         "kind": "appointment",
@@ -348,6 +402,11 @@ def _serialize_booking_summary(booking: BookedAppointment) -> dict:
 
 
 def _serialize_booking_detail(booking: BookedAppointment) -> dict:
+    """
+    Full booking payload for support detail/reschedule screens.
+
+    Includes address, team, payment/loyalty, addons, review fields, and optional image groups.
+    """
     user = booking.user
     tier, benefits = _loyalty(user)
     addons = [a.name for a in booking.add_ons.all()]
@@ -392,6 +451,12 @@ def _serialize_booking_detail(booking: BookedAppointment) -> dict:
 
 
 def _booking_by_reference(booking_reference: str):
+    """
+    Load one appointment by ``booking_reference`` with relations needed for PATCH flows.
+
+    Raises:
+        ``BookedAppointment.DoesNotExist`` when not found.
+    """
     return BookedAppointment.objects.select_related(
         "user", "address", "service_type", "valet_type", "detailer", "vehicle"
     ).get(booking_reference=booking_reference)
@@ -406,6 +471,7 @@ def _detailer_support_url(action: str) -> str:
 
 
 def _detailer_support_headers() -> dict:
+    """JSON headers plus ``X-Support-Internal-Key`` when configured."""
     headers = {"Accept": "application/json", "Content-Type": "application/json"}
     key = (getattr(settings, "SUPPORT_INTERNAL_API_KEY", "") or "").strip()
     if key:
@@ -440,6 +506,7 @@ def _proxy_to_detailer(method: str, action: str, *, params=None, body=None):
 
 
 def _bulk_appointments_for_order(bulk: BulkOrder):
+    """All line appointments for a bulk order (reassignment/cancel helpers)."""
     return list(
         BookedAppointment.objects.select_related("user", "address", "service_type", "detailer")
         .filter(bulk_order=bulk)
@@ -447,6 +514,12 @@ def _bulk_appointments_for_order(bulk: BulkOrder):
 
 
 def _reject_bulk_booking(booking: BookedAppointment):
+    """
+    Block single-booking cancel/reschedule when the row belongs to a bulk order.
+
+    Returns:
+        400 ``Response`` if ``bulk_order_id`` is set, else ``None`` (caller may proceed).
+    """
     if booking.bulk_order_id:
         return Response(
             {
@@ -459,7 +532,11 @@ def _reject_bulk_booking(booking: BookedAppointment):
 
 class SupportBookingsView(APIView):
     """
-    GET for read models; PATCH for cancel/reschedule (with fee intent where applicable).
+    Support booking list/detail and staff-driven lifecycle changes.
+
+    Routed by URL ``action``; see module docstring for GET/PATCH action names.
+    Bulk fleet orders use dedicated handlers; single appointments cannot cancel/reschedule
+    when ``bulk_order_id`` is set (:func:`_reject_bulk_booking`).
     """
 
     permission_classes = [SupportPermissionAccess]
@@ -485,6 +562,7 @@ class SupportBookingsView(APIView):
     }
 
     def get(self, request, *args, **kwargs):
+        """Dispatch GET by URL ``action`` to :attr:`get_action_handler`."""
         action = kwargs.get("action")
         if action not in self.get_action_handler:
             return Response({"error": "Invalid action"}, status=status.HTTP_400_BAD_REQUEST)
@@ -492,6 +570,7 @@ class SupportBookingsView(APIView):
         return handler(request, **kwargs)
 
     def patch(self, request, *args, **kwargs):
+        """Dispatch PATCH by URL ``action`` to :attr:`patch_action_handler`."""
         action = kwargs.get("action")
         if action not in self.patch_action_handler:
             return Response({"error": "Invalid action"}, status=status.HTTP_400_BAD_REQUEST)
@@ -499,6 +578,12 @@ class SupportBookingsView(APIView):
         return handler(request, **kwargs)
 
     def _get_bookings_list(self, request, **kwargs):
+        """
+        Recent bookings list: one row per appointment or per bulk order (deduped).
+
+        Returns:
+            Up to 250 underlying rows, collapsed so each bulk order appears once.
+        """
         qs = (
             BookedAppointment.objects.select_related(
                 "user",
@@ -515,6 +600,7 @@ class SupportBookingsView(APIView):
         bulk_appointments_cache: dict = {}
 
         def appointments_for_bulk(bulk_id):
+            """Cached fetch of all appointments for a bulk order id (list building)."""
             if bulk_id not in bulk_appointments_cache:
                 bulk_appointments_cache[bulk_id] = list(
                     BookedAppointment.objects.filter(bulk_order_id=bulk_id)
@@ -524,6 +610,7 @@ class SupportBookingsView(APIView):
         bookings = []
         for b in qs:
             if b.bulk_order_id:
+                # Emit one summary row per bulk order, not per line appointment.
                 bid = b.bulk_order_id
                 if bid in seen_bulk:
                     continue
@@ -541,6 +628,15 @@ class SupportBookingsView(APIView):
         return Response({"data": {"bookings": bookings}})
 
     def _get_booking_detail(self, request, **kwargs):
+        """
+        Full single-appointment detail.
+
+        Query params:
+            booking_id: Primary key.
+
+        Returns:
+            ``{'data': {'booking': ...}}`` or 400/404.
+        """
         booking_id = request.query_params.get("booking_id")
         if not booking_id:
             return Response({"error": "booking_id required"}, status=status.HTTP_400_BAD_REQUEST)
@@ -561,6 +657,15 @@ class SupportBookingsView(APIView):
         return Response({"data": {"booking": _serialize_booking_detail(booking)}})
 
     def _get_bulk_order_detail(self, request, **kwargs):
+        """
+        Bulk order header plus all line appointments and payment summary.
+
+        Query params:
+            bulk_order_id: Primary key.
+
+        Returns:
+            ``{'data': {bulk_order, appointments, payment_summary}}`` or 400/404.
+        """
         bulk_order_id = request.query_params.get("bulk_order_id")
         if not bulk_order_id:
             return Response({"error": "bulk_order_id required"}, status=status.HTTP_400_BAD_REQUEST)
@@ -603,6 +708,15 @@ class SupportBookingsView(APIView):
         return Response({"data": data})
 
     def _get_reschedule_slots(self, request, **kwargs):
+        """
+        Available start times on a given date for one appointment (detailer slot API).
+
+        Query params:
+            booking_id, date (``YYYY-MM-DD``).
+
+        Returns:
+            ``{'data': {'slots': [...]}}`` or 400/404/502.
+        """
         booking_id = request.query_params.get("booking_id")
         date_str = request.query_params.get("date")
         if not booking_id or not date_str:
@@ -714,6 +828,7 @@ class SupportBookingsView(APIView):
         return Response({"data": {"slots": slots}})
 
     def _patch_cancel_bulk_order(self, request, **kwargs):
+        """Cancel entire bulk order via shared fleet cancellation helper."""
         data = request.data.get("data") or request.data or {}
         bulk_order_id = (data.get("bulk_order_id") or "").strip()
         if not bulk_order_id:
@@ -728,6 +843,7 @@ class SupportBookingsView(APIView):
         return perform_bulk_order_cancellation(bulk)
 
     def _patch_reschedule_bulk_order(self, request, **kwargs):
+        """Reschedule bulk order; accepts ``new_time`` alias for ``start_time`` in body."""
         data = request.data.get("data") or request.data or {}
         bulk_order_id = (data.get("bulk_order_id") or "").strip()
         if not bulk_order_id:
@@ -745,6 +861,14 @@ class SupportBookingsView(APIView):
         return perform_bulk_order_reschedule(bulk, payload)
 
     def _patch_reschedule_intent(self, request, **kwargs):
+        """
+        Pre-check reschedule: fee required if <12h until appointment, slot still valid.
+
+        Body: ``booking_reference``, ``new_date``, ``new_time``.
+
+        Returns:
+            ``requires_fee``, ``fee_amount_cents``, ``slot_valid``.
+        """
         data = request.data.get("data") or request.data
         booking_reference = data.get("booking_reference")
         new_date = data.get("new_date")
@@ -778,6 +902,7 @@ class SupportBookingsView(APIView):
             hours_until = (apt_dt - now).total_seconds() / 3600
         except Exception:
             hours_until = 24
+        # Within 12 hours of start → client would owe reschedule fee in self-serve flow.
         requires_fee = hours_until < 12
         fee_cents = int(getattr(settings, "RESCHEDULE_FEE_CENTS", 1000))
         fee_amount_cents = fee_cents if requires_fee else 0
@@ -799,6 +924,14 @@ class SupportBookingsView(APIView):
         )
 
     def _patch_reschedule_booking(self, request, **kwargs):
+        """
+        Apply new date/time to a single booking (support bypass of payment intent when provided).
+
+        Body: ``booking_reference`` (or ``booking_id``), ``new_date``, ``new_time``, optional ``total_cost``.
+
+        Returns:
+            Success message; publishes reschedule event and notifies user.
+        """
         data = request.data.get("data") or request.data
         booking_reference = data.get("booking_reference") or data.get("booking_id")
         new_date = data.get("new_date")
@@ -862,6 +995,14 @@ class SupportBookingsView(APIView):
         )
 
     def _patch_cancel_booking(self, request, **kwargs):
+        """
+        Cancel single booking with tiered refund policy (full / half / none by hours until start).
+
+        Body: ``booking_reference``.
+
+        Returns:
+            Message, refund metadata, and hours until appointment.
+        """
         booking_reference = (request.data.get("booking_reference") or "").strip()
         if not booking_reference:
             return Response(
@@ -903,6 +1044,7 @@ class SupportBookingsView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
+        # Refund policy: none ≤12h, 50% ≤24h, full beyond 24h (support-initiated cancel).
         if hours_until_appointment <= 12:
             refund_tier = "none"
         elif hours_until_appointment <= 24:
@@ -1018,6 +1160,12 @@ class SupportBookingsView(APIView):
         return booking, None
 
     def _resolve_bulk_order_for_reassignment(self, bulk_order_id):
+        """
+        Load bulk order and line appointments if none are in a terminal/in-progress state.
+
+        Returns:
+            Tuple ``(bulk, appointments, error_response)``; error set when blocked or missing.
+        """
         if not bulk_order_id:
             return None, None, Response(
                 {"error": "bulk_order_id is required"},
@@ -1044,6 +1192,7 @@ class SupportBookingsView(APIView):
         return bulk, appointments, None
 
     def _get_reassignment_candidates(self, request, **kwargs):
+        """Proxy available detailers for a single booking to the detailer support API."""
         booking_id = request.query_params.get("booking_id")
         booking, err = self._resolve_booking_for_reassignment(booking_id)
         if err:
@@ -1055,6 +1204,7 @@ class SupportBookingsView(APIView):
         )
 
     def _get_bulk_reassignment_candidates(self, request, **kwargs):
+        """Proxy available detailers for a bulk order (``bulk=true`` on detailer API)."""
         bulk_order_id = request.query_params.get("bulk_order_id")
         bulk, _appts, err = self._resolve_bulk_order_for_reassignment(bulk_order_id)
         if err:
@@ -1066,6 +1216,7 @@ class SupportBookingsView(APIView):
         )
 
     def _get_reassignment_history(self, request, **kwargs):
+        """Proxy reassignment audit log for a booking reference."""
         booking_reference = (request.query_params.get("booking_reference") or "").strip()
         if not booking_reference:
             return Response(
@@ -1079,6 +1230,17 @@ class SupportBookingsView(APIView):
         )
 
     def _build_reassign_payload(self, request, booking_reference, *, is_bulk):
+        """
+        Normalize PATCH body for detailer ``reassign`` endpoint.
+
+        Args:
+            request: DRF request (nested ``data`` or flat body).
+            booking_reference: Bulk or single reference string.
+            is_bulk: Whether this is a fleet bulk reassignment.
+
+        Returns:
+            Dict passed as JSON body to detailer API.
+        """
         data = request.data.get("data") if isinstance(request.data, dict) else None
         data = data if isinstance(data, dict) else (request.data or {})
         return {
@@ -1092,6 +1254,14 @@ class SupportBookingsView(APIView):
         }
 
     def _patch_reassign_booking(self, request, **kwargs):
+        """
+        Reassign crew on detailer API then persist ``assigned_detailers`` on client booking.
+
+        Body (in ``data``): ``booking_id``, ``new_detailer_ids``, reason fields, support actor ids.
+
+        Returns:
+            Success message or proxied/500 error from detailer or local update failure.
+        """
         data = request.data.get("data") if isinstance(request.data, dict) else None
         data = data if isinstance(data, dict) else (request.data or {})
         booking_id = (data.get("booking_id") or "").strip()
@@ -1138,6 +1308,11 @@ class SupportBookingsView(APIView):
         )
 
     def _patch_reassign_bulk_order(self, request, **kwargs):
+        """
+        Reassign bulk crew: update ``BulkOrder.assigned_detailers`` and every line appointment.
+
+        Body (in ``data``): ``bulk_order_id``, ``new_detailer_ids``, reason fields, support actor ids.
+        """
         data = request.data.get("data") if isinstance(request.data, dict) else None
         data = data if isinstance(data, dict) else (request.data or {})
         bulk_order_id = (data.get("bulk_order_id") or "").strip()

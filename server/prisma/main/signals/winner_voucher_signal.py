@@ -12,6 +12,14 @@ logger = logging.getLogger(__name__)
 
 @receiver(post_save, sender=WinnerVoucher)
 def send_winner_voucher_email_on_create(sender, instance, created, **kwargs):
+    """
+    Queue winner-voucher email and optional push when a new active voucher is created.
+
+    Args:
+        sender: ``WinnerVoucher`` model class.
+        instance: The voucher row.
+        created: Only on insert.
+    """
     if not created:
         return
     if not instance.is_active:
@@ -37,6 +45,15 @@ def send_winner_voucher_email_on_create(sender, instance, created, **kwargs):
 
 @receiver(post_save, sender=User)
 def link_winner_vouchers_on_user_create(sender, instance, created, raw, **kwargs):
+    """
+    Attach unredeemed winner vouchers (by email) to a newly created active user.
+
+    Args:
+        sender: ``User`` model class.
+        instance: The new user.
+        created: Only on insert.
+        raw: Skips fixture loads.
+    """
     if not created or raw:
         return
     if not instance.is_active:

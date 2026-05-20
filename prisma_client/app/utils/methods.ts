@@ -3,6 +3,7 @@
  */
 import { RootState, useAppSelector } from "@/app/store/main_store";
 
+/** Hex color for a booking/status slug (completed, inprogress, etc.). */
 export const getStatusColor = (status: string) => {
   switch (status) {
     case "completed":
@@ -18,6 +19,7 @@ export const getStatusColor = (status: string) => {
   }
 };
 
+/** Format ISO date for en-IE display; returns N/A or Invalid Date on bad input. */
 export const formatDate = (dateString: string) => {
   if (!dateString || dateString.trim() === "") {
     return "N/A";
@@ -62,6 +64,7 @@ export const formatCurrency = (amount: number, country?: string) => {
 };
 
 
+/** Format minutes as `Nm` or `Nh Mm`. */
 export const formatDuration = (duration: number) => {
   if (duration < 60) {
     return `${duration}m`;
@@ -70,7 +73,7 @@ export const formatDuration = (duration: number) => {
   }
 };
 
-// Satisfy Expo Router: this file is a util module under app/, not a screen.
+/** Expo Router no-op route (util module, not a screen). */
 export default function MethodsRoute() {
   return null;
 }

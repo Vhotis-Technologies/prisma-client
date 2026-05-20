@@ -30,6 +30,7 @@ interface AlertContextType {
 
 const AlertContext = createContext<AlertContextType | undefined>(undefined);
 
+/** Renders AlertModal and exposes alert config setters. */
 export const AlertProvider = ({ children }: { children: React.ReactNode }) => {
   const [isVisible, setIsVisible] = useState(false);
   const [alertConfig, setAlertConfig] = useState<AlertState | undefined>(
@@ -37,6 +38,7 @@ export const AlertProvider = ({ children }: { children: React.ReactNode }) => {
   );
 
   // Stable setter so consumers can safely use it in useEffect deps (avoids maximum update depth)
+  /** Apply alert config and sync visibility in one update. */
   const handleSetAlertConfig = useCallback((config: AlertState) => {
     setAlertConfig(config);
     setIsVisible(config.isVisible);
@@ -72,6 +74,7 @@ export const AlertProvider = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
+/** Control global alert modal visibility and content. */
 export const useAlertContext = () => {
   const context = useContext(AlertContext);
   if (!context) {

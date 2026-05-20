@@ -90,10 +90,12 @@ export const useFleetSubscription = () => {
     return hasActiveSubscription;
   }, [isFleetUser, hasActiveSubscription]);
 
+  /** Select subscription tier in plan picker UI. */
   const handleTierSelect = useCallback((tierId: string) => {
     setSelectedTierId(tierId);
   }, []);
 
+  /** Set monthly/yearly billing for the selected tier. */
   const handleBillingCycleChange = useCallback(
     (tierId: string, cycle: "monthly" | "yearly") => {
       if (selectedTierId === tierId) {
@@ -103,6 +105,7 @@ export const useFleetSubscription = () => {
     [selectedTierId]
   );
 
+  /** Configure Stripe Payment Sheet (payment or setup intent for trial). */
   const initializeSubscriptionPaymentSheet = useCallback(
     async (
       paymentIntentOrSetupIntent: string,
@@ -166,6 +169,7 @@ export const useFleetSubscription = () => {
     [initPaymentSheet, addresses, showSnackbarWithConfig]
   );
 
+  /** Create fleet subscription and run Stripe checkout or trial setup. */
   const handleSubscribe = useCallback(async () => {
     if (!selectedTierId) {
       showSnackbarWithConfig({
@@ -314,6 +318,7 @@ export const useFleetSubscription = () => {
     waitForPaymentConfirmation,
   ]);
 
+  /** Cancel fleet subscription (end of period or immediately). */
   const handleCancelSubscription = useCallback(
     async (cancelAtPeriodEnd: boolean = true) => {
       setIsCanceling(true);
@@ -342,6 +347,7 @@ export const useFleetSubscription = () => {
     [cancelSubscription, refetchSubscription, showSnackbarWithConfig]
   );
 
+  /** Update fleet subscription default payment method via SetupIntent. */
   const handleUpdatePaymentMethod = useCallback(async () => {
     setIsUpdatingPayment(true);
     try {

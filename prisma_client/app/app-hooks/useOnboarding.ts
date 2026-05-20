@@ -18,6 +18,11 @@ import { router } from "expo-router";
 import { saveDataToStorage } from "@/app/utils/helpers/storage";
 import { useState } from "react";
 
+/**
+ * Onboarding/sign-up hook: collects sign-up fields, validates terms, registers user.
+ *
+ * @returns Sign-up state, field collector, register handler, and terms acceptance
+ */
 const useOnboarding = () => {
   const dispatch = useAppDispatch();
   const { signUpData } = useAppSelector((state: RootState) => state.auth);
@@ -33,6 +38,12 @@ const useOnboarding = () => {
   const [termsAccepted, setTermsAccepted] = useState(false);
 
   /* Handle the collection of the users data to create an account */
+  /**
+   * Update a single sign-up form field in Redux auth state.
+   *
+   * @param field - SignUpScreenProps key to update
+   * @param value - New value for the field
+   */
   const collectSignupData = (
     field: keyof SignUpScreenProps,
     value: string | boolean | BusinessAddress | undefined
@@ -43,6 +54,8 @@ const useOnboarding = () => {
   /**
    * Register the new user with their data of type {UserProfileProps}.
    * if successful, show an alert to the user and save the user data to storage
+   *
+   * @returns Promise that resolves when registration completes or validation fails
    */
   const registerUser = async () => {
     if (!signUpData) return;

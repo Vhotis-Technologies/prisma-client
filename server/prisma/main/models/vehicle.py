@@ -1,4 +1,9 @@
-"""Vehicle, booking, service, payment - vehicle and booking related models."""
+"""
+Vehicles, bookings, services, payments, and garage history.
+
+Core flow: :class:`Vehicle` + :class:`VehicleOwnership` → :class:`BookedAppointment` →
+:class:`PaymentTransaction` / :class:`VehicleEvent` / :class:`EventDataManagement`.
+"""
 import time
 import uuid
 
@@ -9,6 +14,8 @@ from .user import User, Address
 
 
 class Vehicle(models.Model):
+    """Registered vehicle identity (make/model/reg); ownership tracked separately."""
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     registration_number = models.CharField(max_length=50)
     country = models.CharField(max_length=100)
@@ -43,20 +50,26 @@ class Vehicle(models.Model):
         return f"{self.make} {self.model} {self.year} ({self.registration_number}, {self.country})"
 
     def get_current_owner(self):
+        """User who currently holds open ownership, if any."""
         current_ownership = self.ownerships.filter(end_date__isnull=True).first()
         return current_ownership.owner if current_ownership else None
 
     def has_active_owner(self):
+        """True when at least one ownership row has no end_date."""
         return self.ownerships.filter(end_date__isnull=True).exists()
 
     def get_active_ownership(self):
+        """Open :class:`VehicleOwnership` row, if any."""
         return self.ownerships.filter(end_date__isnull=True).first()
 
     def get_all_owners(self):
+        """Distinct users who have ever owned this vehicle."""
         return User.objects.filter(vehicle_ownerships__vehicle=self).distinct()
 
 
 class VehicleOwnership(models.Model):
+    """Time-bounded link between a user and a vehicle (private, fleet, or lease)."""
+
     OWNERSHIP_TYPE_CHOICES = [
         ('private', 'Private'),
         ('fleet', 'Fleet'),
@@ -72,6 +85,7 @@ class VehicleOwnership(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def save(self, *args, **kwargs):
+        """Close any other open ownership on the same vehicle when this row is current."""
         if self.end_date is None:
             VehicleOwnership.objects.filter(
                 vehicle=self.vehicle,
@@ -93,6 +107,8 @@ class VehicleOwnership(models.Model):
 
 
 class ServiceType(models.Model):
+    """Bookable wash/detail service with B2C and optional fleet pricing."""
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=100)
     description = models.JSONField()
@@ -106,12 +122,15 @@ class ServiceType(models.Model):
         return f"{self.name} - ${self.price}"
 
     def get_price_for_user(self, user):
+        """Return fleet_price for fleet users when set, else standard price."""
         if user and (user.is_fleet_owner or user.is_branch_admin):
             return self.fleet_price if self.fleet_price is not None else self.price
         return self.price
 
 
 class ValetType(models.Model):
+    """On-site vs mobile valet modality for a booking."""
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=100)
     description = models.TextField()
@@ -123,6 +142,8 @@ class ValetType(models.Model):
 
 
 class DetailerProfile(models.Model):
+    """Assigned detailer metadata synced from the detailer service."""
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=100)
     phone = models.CharField(max_length=15, unique=True)
@@ -134,6 +155,7 @@ class DetailerProfile(models.Model):
         return f"{self.name} - {self.phone}"
 
     def save(self, *args, **kwargs):
+        """Normalize phone to E.164-style storage before persist."""
         from main.util.phone_utils import normalize_phone
         if self.phone:
             self.phone = normalize_phone(self.phone)
@@ -141,6 +163,8 @@ class DetailerProfile(models.Model):
 
 
 class AddOns(models.Model):
+    """Optional add-on line item (price + extra duration) attached to bookings."""
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=100)
     description = models.TextField()
@@ -154,6 +178,8 @@ class AddOns(models.Model):
 
 
 class BookedAppointment(models.Model):
+    """Single-vehicle booking (or line item under a :class:`BulkOrder`)."""
+
     STATUS_CHOICES = [
         ('pending', 'Pending'),
         ('confirmed', 'Confirmed'),
@@ -217,12 +243,15 @@ class BookedAppointment(models.Model):
         return f"{self.user.name} - {vehicle_info} - {self.appointment_date}"
 
     def save(self, *args, **kwargs):
+        """Assign a unique ``APT…`` reference on first save."""
         if not self.booking_reference:
             self.booking_reference = f"APT{int(time.time() * 1000)}{str(uuid.uuid4())[:8].upper()}"
         super().save(*args, **kwargs)
 
 
 class VehicleEvent(models.Model):
+    """Garage timeline event (wash, inspection, damage, etc.) for a vehicle."""
+
     EVENT_TYPE_CHOICES = [
         ('wash', 'Wash'),
         ('inspection', 'Inspection'),
@@ -258,6 +287,8 @@ class VehicleEvent(models.Model):
 
 
 class BookedAppointmentImage(models.Model):
+    """Before/after job photo URL stored against a booking or vehicle event."""
+
     IMAGE_TYPE_CHOICES = [
         ('before', 'Before'),
         ('after', 'After'),
@@ -286,6 +317,8 @@ class BookedAppointmentImage(models.Model):
 
 
 class VehicleTransfer(models.Model):
+    """Peer-to-peer ownership transfer request between two users."""
+
     STATUS_CHOICES = [
         ('pending', 'Pending'),
         ('approved', 'Approved'),
@@ -314,13 +347,16 @@ class VehicleTransfer(models.Model):
         return f"Transfer {self.vehicle.registration_number} from {self.from_owner.name} to {self.to_owner.name} ({self.status})"
 
     def is_expired(self):
+        """True after ``expires_at`` (pending transfers auto-expire in business logic)."""
         return timezone.now() > self.expires_at
 
     def can_be_approved(self):
+        """True when status is pending and the request has not expired."""
         return self.status == 'pending' and not self.is_expired()
 
 
 class EventDataManagement(models.Model):
+    """Digital vehicle health check captured at the end of a completed booking."""
     WIPER_STATUS_CHOICES = [('good', 'Good'), ('needs_work', 'Needs Work'), ('bad', 'Bad')]
     FLUID_LEVEL_CHOICES = [('good', 'Good'), ('low', 'Low'), ('needs_change', 'Needs Change'), ('needs_refill', 'Needs Refill')]
     BATTERY_CONDITION_CHOICES = [('good', 'Good'), ('weak', 'Weak'), ('replace', 'Replace')]
@@ -351,6 +387,8 @@ class EventDataManagement(models.Model):
 
 
 class PaymentTransaction(models.Model):
+    """Stripe payment/refund/subscription charge record."""
+
     TRANSACTION_TYPES = [
         ('payment', 'Payment'),
         ('refund', 'Refund'),
@@ -387,6 +425,8 @@ class PaymentTransaction(models.Model):
 
 
 class RefundRecord(models.Model):
+    """Refund attempt and dispute state for a booking."""
+
     STATUS_CHOICES = [
         ('pending', 'Pending'),
         ('succeeded', 'Succeeded'),
@@ -412,6 +452,8 @@ class RefundRecord(models.Model):
 
 
 class PendingBooking(models.Model):
+    """Holds booking JSON between checkout start and payment confirmation."""
+
     PAYMENT_STATUS_CHOICES = [
         ('pending', 'Pending Payment'),
         ('processing', 'Processing Payment'),
@@ -442,6 +484,7 @@ class PendingBooking(models.Model):
         return f"Pending: {self.booking_reference} - {self.payment_status}"
 
     def is_expired(self):
+        """True when the checkout session passed ``expires_at`` without payment."""
         return timezone.now() > self.expires_at
 
 

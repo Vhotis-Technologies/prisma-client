@@ -27,11 +27,13 @@ TERMINAL_STATUSES = frozenset({"resolved", "closed"})
 
 
 def _ticket_subject_line(ticket: Ticket) -> str:
+    """Short one-line subject for list rows (description or issue type, truncated)."""
     text = ticket.description or ticket.issue_type or "Ticket"
     return (text[:50] + "…") if len(text) > 50 else text
 
 
 def _serialize_list_item(ticket: Ticket) -> dict[str, Any]:
+    """Shape a ``Ticket`` for the support app ticket queue list."""
     user = ticket.user
     return {
         "id": str(ticket.id),
@@ -45,6 +47,7 @@ def _serialize_list_item(ticket: Ticket) -> dict[str, Any]:
 
 
 def _serialize_update_row(u: TicketUpdate) -> dict[str, Any]:
+    """Serialize one row from the ticket activity timeline."""
     return {
         "id": str(u.id),
         "kind": u.kind,
@@ -55,6 +58,7 @@ def _serialize_update_row(u: TicketUpdate) -> dict[str, Any]:
 
 
 def _serialize_detail(ticket: Ticket) -> dict[str, Any]:
+    """Full ticket payload for the support detail screen (includes update history)."""
     user = ticket.user
     updates = [
         _serialize_update_row(u)
@@ -76,6 +80,12 @@ def _serialize_detail(ticket: Ticket) -> dict[str, Any]:
 
 
 class SupportTicketsView(APIView):
+    """
+    Internal support API for customer tickets (list, detail, status updates).
+
+    Routed by URL action segment; all methods require ``SupportPermissionAccess``.
+    """
+
     permission_classes = [SupportPermissionAccess]
 
     get_action_handler = {
@@ -87,6 +97,12 @@ class SupportTicketsView(APIView):
     }
 
     def get(self, request, *args, **kwargs):
+        """
+        Dispatch GET by URL ``action`` (``list_tickets``, ``get_ticket_detail``).
+
+        Returns:
+            DRF ``Response`` from the matched handler, or 400 for unknown actions.
+        """
         action = kwargs.get("action")
         if action not in self.get_action_handler:
             return Response({"error": "Invalid action"}, status=status.HTTP_400_BAD_REQUEST)
@@ -94,6 +110,12 @@ class SupportTicketsView(APIView):
         return handler(request, **kwargs)
 
     def patch(self, request, *args, **kwargs):
+        """
+        Dispatch PATCH by URL ``action`` (currently ``update_ticket``).
+
+        Returns:
+            DRF ``Response`` from the matched handler, or 400 for unknown actions.
+        """
         action = kwargs.get("action")
         if action not in self.patch_action_handler:
             return Response({"error": "Invalid action"}, status=status.HTTP_400_BAD_REQUEST)
@@ -101,6 +123,7 @@ class SupportTicketsView(APIView):
         return handler(request, **kwargs)
 
     def _list_tickets(self, request, **kwargs):
+        """Return all tickets newest-first as lightweight list rows for the support queue."""
         tickets = (
             Ticket.objects.select_related("user")
             .order_by("-created_at")
@@ -109,6 +132,15 @@ class SupportTicketsView(APIView):
         return Response({"data": {"tickets": rows}})
 
     def _get_ticket_detail(self, request, **kwargs):
+        """
+        Full ticket payload including update timeline.
+
+        Query params:
+            ticket_id: Primary key of the ``Ticket``.
+
+        Returns:
+            ``{'data': {'ticket': ...}}`` or 400/404.
+        """
         ticket_id = request.query_params.get("ticket_id")
         if not ticket_id:
             return Response(
@@ -122,6 +154,14 @@ class SupportTicketsView(APIView):
         return Response({"data": {"ticket": _serialize_detail(ticket)}})
 
     def _patch_update_ticket(self, request, **kwargs):
+        """
+        Update ticket status and/or append a staff message; enqueue resolution email once.
+
+        Body: ``ticket_id``, ``status`` (required valid choice), optional ``message``.
+
+        Returns:
+            Updated ticket detail dict; 400 on validation errors, 404 if not found.
+        """
         ticket_id = request.data.get("ticket_id")
         new_status = (request.data.get("status") or "").strip()
         message = (request.data.get("message") or "").strip()
@@ -149,6 +189,7 @@ class SupportTicketsView(APIView):
                 ticket.status = new_status
 
                 if old_status != new_status:
+                    # Status transition: record timeline row with target status.
                     TicketUpdate.objects.create(
                         ticket=ticket,
                         kind="status_change",
@@ -156,12 +197,14 @@ class SupportTicketsView(APIView):
                         message=message or "",
                     )
                 elif message:
+                    # Same status but staff note — store as reply without changing status.
                     TicketUpdate.objects.create(
                         ticket=ticket,
                         kind="reply",
                         message=message,
                     )
 
+                # First move into resolved/closed: email customer once (idempotent via sent_at).
                 should_send_resolution = (
                     new_status in TERMINAL_STATUSES
                     and old_status not in TERMINAL_STATUSES

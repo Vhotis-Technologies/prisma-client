@@ -56,6 +56,7 @@ class WinnerVoucher(models.Model):
         return f"WinnerVoucher {self.code} ({self.assigned_email})"
 
     def save(self, *args, **kwargs):
+        """Normalize code casing and recipient email before persist."""
         User = get_user_model()
         if self.code:
             self.code = str(self.code).strip().upper()
@@ -64,6 +65,7 @@ class WinnerVoucher(models.Model):
         super().save(*args, **kwargs)
 
     def is_valid_window(self, at=None):
+        """True if ``at`` falls within optional ``valid_from`` / ``expires_at`` bounds."""
         at = at or timezone.now()
         if self.valid_from and at < self.valid_from:
             return False
@@ -132,6 +134,7 @@ class GiftVoucher(models.Model):
         return f'GiftVoucher {c} → {self.assigned_email}'
 
     def save(self, *args, **kwargs):
+        """Normalize code casing and recipient email before persist."""
         User = get_user_model()
         if self.code:
             self.code = str(self.code).strip().upper()
@@ -140,9 +143,11 @@ class GiftVoucher(models.Model):
         super().save(*args, **kwargs)
 
     def is_paid(self) -> bool:
+        """Gift codes are assigned only after Stripe payment succeeds."""
         return bool(self.code)
 
     def is_valid_window(self, at=None):
+        """True if ``at`` falls within optional ``valid_from`` / ``expires_at`` bounds."""
         at = at or timezone.now()
         if self.valid_from and at < self.valid_from:
             return False

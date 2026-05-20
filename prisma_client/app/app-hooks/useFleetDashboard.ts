@@ -12,10 +12,22 @@ import {
   processCommonIssuesData,
 } from "@/app/utils/fleetDashboardUtils";
 
+/**
+ * Format a Date as YYYY-MM-DD for fleet dashboard API queries.
+ *
+ * @param date - Date to format
+ * @returns ISO date string (date portion only)
+ */
 function formatDateForAPI(date: Date): string {
   return date.toISOString().split("T")[0];
 }
 
+/**
+ * Fleet dashboard analytics hook: date range, chart data, and summary stats.
+ *
+ * @param primaryColor - Theme color for stat cards (default purple)
+ * @returns Dashboard query state, processed chart data, and date range setters
+ */
 export function useFleetDashboard(primaryColor: string = "#8B5CF6") {
   const [endDate, setEndDate] = useState(new Date());
   const [startDate, setStartDate] = useState(() => {

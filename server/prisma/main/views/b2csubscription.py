@@ -30,6 +30,13 @@ stripe.api_key = settings.STRIPE_SECRET_KEY
 
 
 class B2CSubscriptionView(APIView):
+    """
+    B2C consumer subscription lifecycle (paid Stripe subscriptions, no fleet entities).
+
+    Action-routed via ``b2c-subscription/<action>/``. Mirrors fleet SubscriptionView
+    patterns: plans, subscribe, billing history, payment method, cancel, abandon checkout.
+    """
+
     permission_classes = [IsAuthenticated]
     authentication_classes = [JWTAuthentication]
 
@@ -45,6 +52,7 @@ class B2CSubscriptionView(APIView):
     }
 
     def get(self, request, *args, **kwargs):
+        """Route GET by action (plans, current subscription, billing history, setup intent)."""
         action = kwargs.get('action')
         if action not in self.action_handlers:
             return Response({'error': 'Invalid action'}, status=status.HTTP_400_BAD_REQUEST)
@@ -52,6 +60,7 @@ class B2CSubscriptionView(APIView):
         return handler(request)
 
     def post(self, request, *args, **kwargs):
+        """Route POST by action (create_subscription, update_payment_method)."""
         action = kwargs.get('action')
         if action not in self.action_handlers:
             return Response({'error': 'Invalid action'}, status=status.HTTP_400_BAD_REQUEST)
@@ -59,6 +68,7 @@ class B2CSubscriptionView(APIView):
         return handler(request)
 
     def patch(self, request, *args, **kwargs):
+        """Route PATCH by action (update_payment_method)."""
         action = kwargs.get('action')
         if action not in self.action_handlers:
             return Response({'error': 'Invalid action'}, status=status.HTTP_400_BAD_REQUEST)
@@ -66,6 +76,7 @@ class B2CSubscriptionView(APIView):
         return handler(request)
 
     def delete(self, request, *args, **kwargs):
+        """Route DELETE by action (cancel_subscription, abandon_incomplete_subscription)."""
         action = kwargs.get('action')
         if action not in self.action_handlers:
             return Response({'error': 'Invalid action'}, status=status.HTTP_400_BAD_REQUEST)
@@ -73,6 +84,7 @@ class B2CSubscriptionView(APIView):
         return handler(request)
 
     def get_plans(self, request):
+        """Return all B2C subscription tiers for plan picker UI."""
         try:
             tiers = B2CSubcriptionTier.objects.all().order_by('monthlyPrice')
             plans_data = []
@@ -92,6 +104,7 @@ class B2CSubscriptionView(APIView):
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     def get_current_subscription(self, request):
+        """Return active/pending/past_due subscription for user, or most recent if none active."""
         try:
             subscription = (
                 B2CSubcription.objects.filter(
@@ -134,6 +147,7 @@ class B2CSubscriptionView(APIView):
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     def get_subscription_billing_history(self, request):
+        """Return billing records for all of the user's B2C subscriptions."""
         try:
             records = (
                 B2CSubcriptionBilling.objects.filter(subscription__user=request.user)
@@ -148,6 +162,7 @@ class B2CSubscriptionView(APIView):
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     def _calculate_subscription_dates(self, billing_cycle):
+        """Compute start_date and end_date for monthly or yearly billing cycle."""
         now = timezone.now()
         if billing_cycle == 'monthly':
             end_date = now + relativedelta(months=1)
@@ -158,6 +173,7 @@ class B2CSubscriptionView(APIView):
         return {'start_date': now, 'end_date': end_date}
 
     def _get_or_create_b2c_plan(self, tier, billing_cycle):
+        """Get or create B2CSubcriptionPlan for tier + cycle; sync price from tier."""
         defaults_price = tier.yearly_price if billing_cycle == 'yearly' else tier.monthlyPrice
         plan, created = B2CSubcriptionPlan.objects.get_or_create(
             tier=tier,
@@ -170,6 +186,7 @@ class B2CSubscriptionView(APIView):
         return plan
 
     def _conflicting_subscription_exists(self, user):
+        """True if user already has pending, active, or past_due B2C subscription."""
         return B2CSubcription.objects.filter(
             user=user,
             status__in=('pending', 'active', 'past_due'),
@@ -352,6 +369,11 @@ class B2CSubscriptionView(APIView):
             return {'success': False, 'error': str(exc)}
 
     def create_subscription(self, request):
+        """
+        Start B2C subscription: free tier activates immediately; paid tier returns Stripe payment sheet.
+
+        Expects tierId and billingCycle (monthly|yearly). Creates pending subscription + billing row for paid path.
+        """
         try:
             tier_id = request.data.get('tierId') or request.data.get('tier_id')
             billing_cycle = request.data.get('billingCycle') or request.data.get('billing_cycle')
@@ -451,6 +473,7 @@ class B2CSubscriptionView(APIView):
 
 
     def update_payment_method(self, request):
+        """Attach new default payment method on Stripe subscription; optional confirmation email."""
         try:
             subscription = (
                 B2CSubcription.objects.filter(
@@ -494,6 +517,7 @@ class B2CSubscriptionView(APIView):
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     def get_setup_intent(self, request):
+        """Return Stripe SetupIntent client secret for in-app card collection (update payment method)."""
         try:
             subscription = (
                 B2CSubcription.objects.filter(
@@ -539,6 +563,11 @@ class B2CSubscriptionView(APIView):
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     def cancel_subscription(self, request):
+        """
+        Cancel B2C subscription at period end or immediately.
+
+        Pending (unpaid checkout) subscriptions are always cancelled immediately on Stripe.
+        """
         try:
             subscription = (
                 B2CSubcription.objects.filter(

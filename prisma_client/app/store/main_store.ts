@@ -62,8 +62,12 @@ const store = configureStore({
 
 export default store;
 
+/** Full Redux state shape (slices + RTK Query caches). */
 export type RootState = ReturnType<typeof store.getState>;
+/** Typed dispatch for thunks and RTK Query actions. */
 export type AppDispatch = typeof store.dispatch;
 
+/** Typed `useDispatch` bound to the app store. */
 export const useAppDispatch = () => useDispatch<AppDispatch>();
+/** Typed `useSelector` for slice and API state. */
 export const useAppSelector: TypedUseSelectorHook<RootState> = useSelector;

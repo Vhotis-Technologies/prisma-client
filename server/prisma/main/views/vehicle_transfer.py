@@ -22,11 +22,11 @@ class WebTransferActionView(APIView):
     permission_classes = [AllowAny]
     
     def get(self, request, transfer_id):
-        """Display the transfer confirmation page"""
+        """Display the transfer confirmation page (approve/reject form)."""
         try:
             transfer = VehicleTransfer.objects.select_related('vehicle', 'from_owner', 'to_owner').get(id=transfer_id)
             
-            # Check if transfer can still be processed
+            # Validation: only pending, non-expired transfers can be acted on
             if transfer.status != 'pending':
                 return render(request, 'transfer_invalid.html', {
                     'error': f'This transfer request is {transfer.status} and cannot be processed',
@@ -61,7 +61,7 @@ class WebTransferActionView(APIView):
     
 
     def post(self, request, transfer_id):
-        """Process the transfer approval or rejection"""
+        """Process transfer approval or rejection from HTML form POST."""
         action = request.POST.get('action', '').strip().lower()
         
         if action not in ['approve', 'reject']:
@@ -103,7 +103,7 @@ class WebTransferActionView(APIView):
     
 
     def _process_approval(self, request, transfer):
-        """Process transfer approval"""
+        """Apply ownership change and notify parties via apply_vehicle_transfer_approval."""
         try:
             err = apply_vehicle_transfer_approval(transfer)
             if err:

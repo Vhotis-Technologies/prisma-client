@@ -1,122 +1,186 @@
 """
 DRF serializers for main models: User, Vehicle, Fleet, BookedAppointment, Address, etc.
 
-Includes CustomTokenObtainPairSerializer for JWT with custom claims.
+Includes :class:`CustomTokenObtainPairSerializer` for JWT login responses enriched with
+profile, address, loyalty, fleet branch, and partner fields for the mobile app.
 """
 from rest_framework import serializers
 from .models import User, Vehicle, VehicleOwnership, VehicleEvent, Fleet, FleetMember, FleetVehicle, VehicleTransfer, ServiceType, ValetType, DetailerProfile, BookedAppointment, Address, AddOns, LoyaltyProgram, Promotions, Branch, SubscriptionTier, SubscriptionPlan, FleetSubscription, SubscriptionBilling, EventDataManagement, B2CSubcriptionTier, B2CSubcriptionPlan, B2CSubcription, B2CSubcriptionBilling
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from rest_framework.exceptions import ValidationError   
+from rest_framework.exceptions import ValidationError
+
 
 class UserSerializer(serializers.ModelSerializer):
+    """Read/write all :class:`~main.models.user.User` fields for admin/API use."""
+
     class Meta:
         model = User
         fields = '__all__'
 
+
 class VehicleSerializer(serializers.ModelSerializer):
+    """Vehicle CRUD; exposes image URL when present."""
+
     image = serializers.ImageField(required=False, allow_null=True, use_url=True)
+
     class Meta:
         model = Vehicle
         fields = '__all__'
 
+
 class VehicleOwnershipSerializer(serializers.ModelSerializer):
+    """Ownership interval linking a user to a vehicle."""
+
     class Meta:
         model = VehicleOwnership
         fields = '__all__'
 
+
 class VehicleEventSerializer(serializers.ModelSerializer):
+    """Garage timeline event serializer."""
+
     class Meta:
         model = VehicleEvent
         fields = '__all__'
 
+
 class FleetSerializer(serializers.ModelSerializer):
+    """Fleet header record (owner, name, trial flags)."""
+
     class Meta:
         model = Fleet
         fields = '__all__'
 
+
 class FleetMemberSerializer(serializers.ModelSerializer):
+    """User membership in a fleet with role and optional branch."""
+
     class Meta:
         model = FleetMember
         fields = '__all__'
 
+
 class FleetVehicleSerializer(serializers.ModelSerializer):
+    """Vehicle linked to a fleet (and optional branch)."""
+
     class Meta:
         model = FleetVehicle
         fields = '__all__'
 
+
 class VehicleTransferSerializer(serializers.ModelSerializer):
+    """Peer ownership transfer request."""
+
     class Meta:
         model = VehicleTransfer
         fields = '__all__'
 
+
 class ServiceTypeSerializer(serializers.ModelSerializer):
+    """Bookable service catalog entry."""
+
     class Meta:
         model = ServiceType
         fields = '__all__'
 
+
 class ValetTypeSerializer(serializers.ModelSerializer):
+    """Valet modality (mobile vs on-site)."""
+
     class Meta:
         model = ValetType
         fields = '__all__'
 
+
 class DetailerProfileSerializer(serializers.ModelSerializer):
+    """Assigned detailer profile from detailer service."""
+
     class Meta:
         model = DetailerProfile
         fields = '__all__'
 
+
 class BookedAppointmentSerializer(serializers.ModelSerializer):
+    """Single booking row including pricing and status."""
+
     class Meta:
         model = BookedAppointment
         fields = '__all__'
 
+
 class AddOnsSerializer(serializers.ModelSerializer):
+    """Optional booking add-on."""
+
     class Meta:
         model = AddOns
         fields = '__all__'
 
+
 class LoyaltyProgramSerializer(serializers.ModelSerializer):
+    """B2C loyalty tier and free-wash counters."""
+
     class Meta:
         model = LoyaltyProgram
         fields = '__all__'
 
+
 class PromotionsSerializer(serializers.ModelSerializer):
+    """Per-user promotional discount."""
+
     class Meta:
         model = Promotions
         fields = '__all__'
 
+
 class BranchSerializer(serializers.ModelSerializer):
+    """Fleet branch location and spend limits."""
+
     class Meta:
         model = Branch
         fields = '__all__'
 
+
 class SubscriptionTierSerializer(serializers.ModelSerializer):
+    """Fleet SaaS tier definition."""
+
     class Meta:
         model = SubscriptionTier
         fields = '__all__'
 
+
 class SubscriptionPlanSerializer(serializers.ModelSerializer):
+    """Fleet plan with nested tier read and writable tier_id."""
+
     tier = SubscriptionTierSerializer(read_only=True)
     tier_id = serializers.PrimaryKeyRelatedField(queryset=SubscriptionTier.objects.all(), source='tier', write_only=True, required=False)
-    
+
     class Meta:
         model = SubscriptionPlan
         fields = '__all__'
 
+
 class FleetSubscriptionSerializer(serializers.ModelSerializer):
+    """Active fleet subscription with nested plan."""
+
     plan = SubscriptionPlanSerializer(read_only=True)
     plan_id = serializers.PrimaryKeyRelatedField(queryset=SubscriptionPlan.objects.all(), source='plan', write_only=True, required=False)
-    
+
     class Meta:
         model = FleetSubscription
         fields = '__all__'
 
+
 class B2CSubscriptionTierSerializer(serializers.ModelSerializer):
+    """B2C subscription tier for consumer catalog APIs."""
+
     class Meta:
         model = B2CSubcriptionTier
         fields = '__all__'
 
 
 class B2CSubscriptionPlanSerializer(serializers.ModelSerializer):
+    """B2C plan with tier, billing cycle, price, and computed entitlement limits."""
+
     tier = B2CSubscriptionTierSerializer(read_only=True)
     tier_id = serializers.PrimaryKeyRelatedField(
         queryset=B2CSubcriptionTier.objects.all(),
@@ -140,10 +204,13 @@ class B2CSubscriptionPlanSerializer(serializers.ModelSerializer):
         )
 
     def get_limits(self, obj):
+        """Expose :meth:`B2CSubcriptionPlan.get_limits` for mobile subscription UI."""
         return obj.get_limits()
 
 
 class B2CSubscriptionSerializer(serializers.ModelSerializer):
+    """User B2C subscription instance with nested plan."""
+
     plan = B2CSubscriptionPlanSerializer(read_only=True)
     plan_id = serializers.PrimaryKeyRelatedField(
         queryset=B2CSubcriptionPlan.objects.all(),
@@ -158,20 +225,28 @@ class B2CSubscriptionSerializer(serializers.ModelSerializer):
 
 
 class B2CSubscriptionBillingSerializer(serializers.ModelSerializer):
+    """B2C subscription invoice/charge row."""
+
     subscription = B2CSubscriptionSerializer(read_only=True)
 
     class Meta:
         model = B2CSubcriptionBilling
         fields = '__all__'
 
+
 class SubscriptionBillingSerializer(serializers.ModelSerializer):
+    """Fleet subscription billing row with nested subscription."""
+
     subscription = FleetSubscriptionSerializer(read_only=True)
-    
+
     class Meta:
         model = SubscriptionBilling
         fields = '__all__'
 
+
 class EventDataManagementSerializer(serializers.ModelSerializer):
+    """Digital health check fields attached to a completed booking."""
+
     class Meta:
         model = EventDataManagement
         fields = [
@@ -182,13 +257,17 @@ class EventDataManagementSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['inspected_at']
 
-""" Customise the token serializer to get the attrs sent from the client 
-    This attrs contains the users email and password.
-    Returns the users profile data, access and refresh tokens,
-    and the users address data if there is any associated adress with the user , else returns null
-"""
+
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+    """
+    JWT login: normalize email, then attach user profile payload to the token response.
+
+    Returns access/refresh tokens plus nested ``user`` (address, loyalty, fleet branch,
+    partner/dealership flags) for the React Native client bootstrap.
+    """
+
     def validate(self, attrs):
+        """Authenticate by email and enrich token payload with profile context."""
         email = attrs.get(self.username_field)
         if email:
             normalized_email = email.strip().lower()
@@ -202,9 +281,9 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             data = super().validate(attrs)
         except ValidationError as e:
             raise e
-        
+
         user = self.user
-        # Check if the user has an address
+        # Primary service address (first row) for booking defaults
         address = Address.objects.filter(user=user).first()
         loyalty = (
             LoyaltyProgram.objects.filter(user=user).first()
@@ -212,8 +291,8 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             else None
         )
         loyalty_benefits = loyalty.get_tier_benefits() if loyalty else None
-        
-        # Get managed branch if user is branch admin
+
+        # Branch admins see their managed site in the app shell
         managed_branch = None
         if user.is_branch_admin:
             managed_branch_obj = user.get_managed_branch()
@@ -225,8 +304,8 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
                     'postcode': managed_branch_obj.postcode,
                     'city': managed_branch_obj.city,
                 }
-        
-        # Partner profile for dealership users
+
+        # Partner / dealership profile for referral dashboard entry
         from main.models import Partner
         try:
             partner_profile = user.partner_profile
@@ -238,11 +317,10 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             partner_referral_code = None
             partner_business_name = None
 
-        # Add user data to the existing token data
         data.update({
             'user': {
                 'id': user.id,
-                'name': user.name ,
+                'name': user.name,
                 'email': user.email,
                 'phone': user.phone,
                 'is_fleet_owner': user.is_fleet_owner,
@@ -264,6 +342,6 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
                 'loyalty_benefits': loyalty_benefits,
                 'referral_code': user.referral_code if user.referral_code else None,
             }
-            
+
         })
         return data

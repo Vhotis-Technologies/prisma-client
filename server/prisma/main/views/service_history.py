@@ -13,9 +13,15 @@ import logging
 
 
 class ServiceHistoryView(APIView):
+    """
+    Completed booking history and before/after images for the client app.
+
+    Action-routed via ``service-history/<action>/``. Scope expands for fleet owners
+    and branch admins; fleet subscription may gate vehicle detail images.
+    """
+
     permission_classes = [IsAuthenticated]
 
-    """ Define a set of action handlers that would be used to route the url to the appropriate function """
     action_handlers = {
         "get_service_history": "get_service_history",
         "get_booking_images": "get_booking_images",

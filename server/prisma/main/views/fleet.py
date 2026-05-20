@@ -247,6 +247,13 @@ def perform_bulk_order_reschedule(bulk_order, request_data):
 
 
 class FleetView(APIView):
+    """
+    Fleet owner and branch admin API: branches, admins, vehicles, spend caps, bulk orders.
+
+    Action-routed via ``fleet/<action>/`` with optional ``branch_id`` or ``vehicle_id`` in URL.
+    Bulk cancel/reschedule delegates to module helpers ``perform_bulk_order_*``.
+    """
+
     permission_classes = [IsAuthenticated]
     
     action_handlers = {

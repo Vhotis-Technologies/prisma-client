@@ -184,6 +184,11 @@ const SettingScreen = () => {
   const sectionLabelColor = useThemeColor({}, "text");
   const isFleetOwner = userProfile?.is_fleet_owner === true;
   const isPartner = userProfile?.is_dealership === true;
+  const isPartnerUser =
+    isPartner || Boolean(userProfile?.partner_referral_code);
+  const displayReferralCode = isPartnerUser
+    ? userProfile?.partner_referral_code
+    : userProfile?.referral_code;
   const isBranchAdmin = userProfile?.is_branch_admin === true;
   const showBulkInvoices = canAccessBulkInvoices(userProfile);
   const showBusinessName = isFleetOwner || isPartner;
@@ -291,16 +296,13 @@ const SettingScreen = () => {
           )}
         </Pressable>
 
-        {/* Referral code – show whenever user has a referral code */}
-        {(userProfile?.referral_code || userProfile?.partner_referral_code) && (
+        {/* Referral code – partners share their DP partner code, not their user code */}
+        {displayReferralCode ? (
           <ReferralCodeCard
-            referral={
-              userProfile?.referral_code ||
-              userProfile?.partner_referral_code ||
-              ""
-            }
+            referral={displayReferralCode}
+            variant={isPartnerUser ? "partner" : "consumer"}
           />
-        )}
+        ) : null}
 
         {/* Preferences */}
         <StyledText

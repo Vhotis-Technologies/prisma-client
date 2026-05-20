@@ -4,11 +4,9 @@ import { Platform } from "react-native";
 import { useNotificationService } from "@/app/app-hooks/useNotificationService";
 
 /**
- * NotificationInitializer Component
- *
- * This component initializes the notification system when the app starts.
- * It ensures that notifications are properly configured and ready to use.
- */useNotificationService
+ * Mounts once at app root to configure Expo notification handlers/channels
+ * and delegate token registration to {@link useNotificationService}.
+ */
 const NotificationInitializer: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {

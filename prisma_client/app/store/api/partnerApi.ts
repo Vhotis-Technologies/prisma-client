@@ -50,12 +50,10 @@ export interface PartnerPayoutDetailsBankAccount {
 
 export interface PartnerPayoutDetails {
   pending_commission: number;
-  stripe_connect_account_id: string | null;
   bank_account: PartnerPayoutDetailsBankAccount | null;
 }
 
 export interface PartnerPayoutUpdateRequest {
-  stripe_connect_account_id?: string;
   account_holder_name?: string;
   sort_code?: string;
   account_number?: string;
@@ -83,18 +81,21 @@ const partnerApi = createApi({
   reducerPath: "partnerApi",
   baseQuery: axiosBaseQuery(),
   endpoints: (builder) => ({
+    /** Referral partner dashboard: metrics, commission, vehicle insights. */
     getPartnerDashboard: builder.query<PartnerDashboardResponse, void>({
       query: () => ({
         url: "/api/v1/partner/get_dashboard/",
         method: "GET",
       }),
     }),
+    /** Bulk invoice list for the referral partner. */
     getPartnerInvoices: builder.query<InvoiceListResponse, void>({
       query: () => ({
         url: "/api/v1/partner/get_invoices/",
         method: "GET",
       }),
     }),
+    /** Pending commission and masked bank account for payouts. */
     getPartnerPayoutDetails: builder.query<PartnerPayoutDetails, void>({
       query: () => ({
         url: "/api/v1/partner/get_payout_details/",
@@ -102,6 +103,7 @@ const partnerApi = createApi({
       }),
       providesTags: [{ type: "PartnerPayoutDetails", id: "PARTNER_PAYOUT" }],
     }),
+    /** Past payout requests and statuses. */
     getPartnerPayoutHistory: builder.query<PartnerPayoutHistoryResponse, void>({
       query: () => ({
         url: "/api/v1/partner/get_payout_history/",
@@ -109,6 +111,7 @@ const partnerApi = createApi({
       }),
       providesTags: [{ type: "PartnerPayoutHistory", id: "PARTNER_PAYOUT_HISTORY" }],
     }),
+    /** Update partner bank details for commission payouts. */
     updatePartnerPayoutDetails: builder.mutation<
       PartnerPayoutDetails,
       PartnerPayoutUpdateRequest
@@ -120,6 +123,7 @@ const partnerApi = createApi({
       }),
       invalidatesTags: [{ type: "PartnerPayoutDetails", id: "PARTNER_PAYOUT" }],
     }),
+    /** Request payout of pending commission balance. */
     createPayoutRequest: builder.mutation<
       CreatePayoutRequestResponse,
       void

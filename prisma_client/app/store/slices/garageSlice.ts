@@ -12,12 +12,11 @@ const garageSlice = createSlice({
   name: "garage",
   initialState,
   reducers: {
-    /* Set the new vehicle to the states so that is can be used in the add new vehicle screen */
+    /** Stash in-progress vehicle fields for the add-vehicle screen. */
     createNewVehicle: (state, action: PayloadAction<MyVehiclesProps>) => {
       state.newVehicle = action.payload;
     },
-    /* After adding the new vehicle to the server db, 
-    * this will be called to clear the state of all the values stored in the newVehicle state*/
+    /** Clear draft vehicle after successful add or cancel. */
     resetNewVehicle: (state) => {
       state.newVehicle = null;
     },

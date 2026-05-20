@@ -1,3 +1,4 @@
+"""Celery task: branch admin / manager credential email on account creation."""
 from celery import shared_task
 from django.template.loader import render_to_string
 from main.util.graph_mail import send_mail as graph_send_mail
@@ -12,7 +13,20 @@ def send_branch_admin_credentials_email(
     password,
     role_label="Branch Admin",
 ):
-    """Send login credentials to a new branch admin or manager when the fleet owner creates their account."""
+    """
+    Send login credentials to a new branch admin or manager.
+
+    Args:
+        recipient_email: Login email (also shown in template).
+        recipient_name: Greeting name.
+        branch_name: Branch label.
+        branch_address: Optional address text.
+        password: Plain-text initial password (one-time delivery).
+        role_label: Role string for template (default Branch Admin).
+
+    Returns:
+        str: Success or failure message.
+    """
     try:
         subject = "Your Prisma Branch Account – Login Details"
         html_message = render_to_string("branch_admin_credentials.html", {

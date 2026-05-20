@@ -127,6 +127,11 @@ const useGarage = () => {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [isImageModalVisible, setIsImageModalVisible] = useState(false);
 
+  /**
+   * Select a vehicle for stats/detail view (triggers useGetVehicleStatsQuery).
+   *
+   * @param vehicleId - Vehicle ID to load stats for
+   */
   const handleVehicleStatsSelection = useCallback(
     (vehicleId: string) => {
       setVehicleId(vehicleId);

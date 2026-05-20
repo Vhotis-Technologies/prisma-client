@@ -9,6 +9,8 @@ from .vehicle import Vehicle, PaymentTransaction
 
 
 class Fleet(models.Model):
+    """Business fleet owned by a :class:`~main.models.user.User` with branches, vehicles, and subscription."""
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=255)
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='owned_fleets')
@@ -22,12 +24,14 @@ class Fleet(models.Model):
         return f"{self.name} ({self.owner.name})"
 
     def get_active_subscription(self):
+        """Return the current active or trialing fleet subscription, if any."""
         return self.subscriptions.filter(
             status__in=['active', 'trialing'],
             end_date__gte=timezone.now()
         ).first()
 
     def check_subscription_limits(self):
+        """Compare tier limits vs current admin/branch/vehicle counts for this fleet."""
         subscription = self.get_active_subscription()
         if not subscription:
             return {
@@ -48,6 +52,7 @@ class Fleet(models.Model):
         }
 
     def can_add_admin(self):
+        """Return (allowed, error_message) for adding another fleet admin."""
         limits_info = self.check_subscription_limits()
         if not limits_info['has_subscription']:
             return False, "No active subscription"
@@ -59,6 +64,7 @@ class Fleet(models.Model):
         return True, None
 
     def can_add_branch(self):
+        """Return (allowed, error_message) for adding another branch."""
         limits_info = self.check_subscription_limits()
         if not limits_info['has_subscription']:
             return False, "No active subscription"
@@ -70,6 +76,7 @@ class Fleet(models.Model):
         return True, None
 
     def can_add_vehicle(self):
+        """Return (allowed, error_message) for linking another vehicle to the fleet."""
         limits_info = self.check_subscription_limits()
         if not limits_info['has_subscription']:
             return False, "No active subscription"
@@ -82,6 +89,8 @@ class Fleet(models.Model):
 
 
 class Branch(models.Model):
+    """Physical site under a fleet with optional spend limits and geolocation."""
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     fleet = models.ForeignKey(Fleet, on_delete=models.CASCADE, related_name='branches')
     name = models.CharField(max_length=100, null=True, blank=True)
@@ -104,6 +113,8 @@ class Branch(models.Model):
 
 
 class FleetMember(models.Model):
+    """Links a user to a fleet (and optionally a branch) with admin or manager role."""
+
     ROLE_CHOICES = [
         ('admin', 'Admin'),
         ('manager', 'Manager')
@@ -123,6 +134,8 @@ class FleetMember(models.Model):
 
 
 class FleetVehicle(models.Model):
+    """Association between a fleet-owned vehicle and an optional branch."""
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     fleet = models.ForeignKey(Fleet, on_delete=models.CASCADE, related_name='fleet_vehicles')
     vehicle = models.ForeignKey(Vehicle, on_delete=models.CASCADE, related_name='fleet_associations')
@@ -138,6 +151,8 @@ class FleetVehicle(models.Model):
 
 
 class SubscriptionTier(models.Model):
+    """Fleet SaaS tier (Starter / Plus / Enterprise) with feature list and reference pricing."""
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=100, unique=True)
     tagLine = models.CharField(max_length=255, blank=True, null=True)
@@ -157,6 +172,7 @@ class SubscriptionTier(models.Model):
         return f"{self.name} - ${self.monthlyPrice}/month"
 
     def get_limits(self):
+        """Max admins, branches, and vehicles allowed for this tier name (None = unlimited)."""
         limits = {
             'Prisma Starter': {'max_admins': 3, 'max_branches': 3, 'max_vehicles': 50},
             'Prisma Plus': {'max_admins': 10, 'max_branches': 10, 'max_vehicles': 200},
@@ -173,6 +189,8 @@ class SubscriptionTier(models.Model):
 
 
 class SubscriptionPlan(models.Model):
+    """Billable fleet plan: tier + monthly/yearly cycle + Stripe price."""
+
     BILLING_CYCLE_CHOICES = [('monthly', 'Monthly'), ('yearly', 'Yearly')]
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     tier = models.ForeignKey(SubscriptionTier, on_delete=models.CASCADE, related_name='plans')
@@ -192,6 +210,8 @@ class SubscriptionPlan(models.Model):
 
 
 class FleetSubscription(models.Model):
+    """Active or historical fleet subscription tied to Stripe and trial/grace metadata."""
+
     STATUS_CHOICES = [
         ('active', 'Active'),
         ('pending', 'Pending'),
@@ -232,6 +252,8 @@ class FleetSubscription(models.Model):
 
 
 class SubscriptionBilling(models.Model):
+    """Payment record for a fleet subscription billing period."""
+
     STATUS_CHOICES = [
         ('paid', 'Paid'),
         ('pending', 'Pending'),

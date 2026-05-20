@@ -35,7 +35,6 @@ const PartnerPayoutScreen = () => {
     payout,
     payoutHistory,
     payoutForm,
-    saveStripe,
     saveBank,
     requestPayment,
     isUpdating,
@@ -43,17 +42,12 @@ const PartnerPayoutScreen = () => {
   } = usePartner();
 
   const {
-    editingStripe,
-    setEditingStripe,
     editingBank,
     setEditingBank,
-    stripeValue,
-    setStripeValue,
     accountHolder,
     setAccountHolder,
     iban,
     setIban,
-    clearStripeForm,
     clearBankForm,
   } = payoutForm;
 
@@ -64,7 +58,7 @@ const PartnerPayoutScreen = () => {
   const primaryColor = useThemeColor({}, "primary");
   const iconColor = useThemeColor({}, "icons");
 
-  const { data: payoutData, isLoading, error, refetch, pendingCommission, hasStripe, hasBank } = payout;
+  const { data: payoutData, isLoading, error, refetch, pendingCommission, hasBank } = payout;
   const { data: historyItems, isLoading: historyLoading, refetch: refetchHistory } = payoutHistory;
 
   const [refreshing, setRefreshing] = useState(false);
@@ -229,59 +223,16 @@ const PartnerPayoutScreen = () => {
           )}
         </View>
 
-        {/* Payout method (single card: Stripe + Bank) */}
+        {/* Payout method — manual bank transfer */}
         <View style={styles.sectionHead}>
           <StyledText variant="titleSmall" style={{ color: textColor }}>
             How you get paid
           </StyledText>
+          <StyledText variant="bodySmall" style={{ color: textColor, opacity: 0.75, marginTop: 4 }}>
+            Commission is paid by manual bank transfer to the account below.
+          </StyledText>
         </View>
         <View style={[styles.card, { backgroundColor: cardColor, borderColor }]}>
-          {/* Stripe */}
-          <View style={styles.payoutMethodBlock}>
-            <StyledText variant="labelLarge" style={[styles.blockTitle, { color: textColor }]}>
-              Stripe Connect Account
-            </StyledText>
-            {hasStripe && !editingStripe ? (
-              <>
-                <StyledText variant="bodyMedium" style={{ color: textColor }}>
-                  {payoutData?.stripe_connect_account_id ?? ""}
-                </StyledText>
-                <TouchableOpacity onPress={() => setEditingStripe(true)} style={styles.changeLink}>
-                  <Ionicons name="pencil" size={18} color={primaryColor} />
-                  <StyledText variant="bodySmall" style={{ color: primaryColor, marginLeft: 6 }}>
-                    Change
-                  </StyledText>
-                </TouchableOpacity>
-              </>
-            ) : (
-              <>
-                <StyledTextInput
-                  label="Stripe Connect Account ID"
-                  placeholder="acct_..."
-                  value={stripeValue}
-                  onChangeText={setStripeValue}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
-                <View style={styles.rowButtons}>
-                  <StyledButton
-                    variant="tonal"
-                    title={hasStripe ? "Update" : "Save"}
-                    onPress={saveStripe}
-                    isLoading={isUpdating}
-                    style={{ flex: 1 }}
-                  />
-                  {editingStripe && hasStripe && (
-                    <StyledButton variant="tonal" title="Cancel" onPress={clearStripeForm} style={{ flex: 1 }} />
-                  )}
-                </View>
-              </>
-            )}
-          </View>
-
-          <View style={[styles.divider, { backgroundColor: borderColor }]} />
-
-          {/* Bank account */}
           <View style={styles.payoutMethodBlock}>
             <StyledText variant="labelLarge" style={[styles.blockTitle, { color: textColor }]}>
               Bank account

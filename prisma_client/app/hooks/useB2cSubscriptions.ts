@@ -24,8 +24,12 @@ import {
   CurrentSubscriptionView,
 } from "@/app/interfaces/SubscriptionInterfaces";
 
+/** Skip B2C subscription queries when user is a fleet owner. */
 const skipForFleetOwner = (isFleetOwner: boolean | undefined) => !!isFleetOwner;
 
+/**
+ * B2C subscription UI state and handlers: plans, subscribe, cancel, update payment.
+ */
 export const useB2cSubscriptions = () => {
   const user = useAppSelector((state: RootState) => state.auth.user);
   const isFleetOwner = user?.is_fleet_owner === true;
@@ -87,6 +91,7 @@ export const useB2cSubscriptions = () => {
     return subscriptionPayload?.subscription?.status === "active";
   }, [skip, subscriptionPayload]);
 
+  /** Configure Stripe Payment Sheet for a new B2C subscription charge. */
   const initializeSubscriptionPaymentSheet = useCallback(
     async (
       paymentIntentClientSecret: string,
@@ -147,6 +152,7 @@ export const useB2cSubscriptions = () => {
     [initPaymentSheet, addresses, showSnackbarWithConfig]
   );
 
+  /** Tell server to drop incomplete subscription after canceled checkout. */
   const abandonIncompleteCheckout = useCallback(
     async (subscriptionId?: string) => {
       try {
@@ -161,7 +167,7 @@ export const useB2cSubscriptions = () => {
     [abandonIncompleteSubscription, refetchSubscription],
   );
 
-  /* This method is used to create the subscription for the B2C user */
+  /** Create B2C subscription and present Stripe payment sheet when required. */
   const handleSubscribe = useCallback(async () => {
     if (!selectedTierId) {
       showSnackbarWithConfig({
@@ -300,7 +306,7 @@ export const useB2cSubscriptions = () => {
     waitForPaymentConfirmation,
   ]);
 
-  /* This method is used to cancel the subscription for the B2C user */
+  /** Cancel B2C subscription (end of period or immediately). */
   const handleCancelSubscription = useCallback(
     async (cancelAtPeriodEnd: boolean = true) => {
       setIsCanceling(true);
@@ -332,7 +338,7 @@ export const useB2cSubscriptions = () => {
     [cancelSubscription, refetchSubscription, showSnackbarWithConfig]
   );
 
-  /* Method to update the payment method for the B2C user. the method triggers the server to update the payment method on stripe*/
+  /** Update default card via SetupIntent and PATCH payment method. */
   const handleUpdatePaymentMethod = useCallback(async () => {
     setIsUpdatingPayment(true);
     try {
@@ -431,10 +437,12 @@ export const useB2cSubscriptions = () => {
     getSetupIntent,
   ]);
 
+  /** Select subscription tier in plan picker UI. */
   const handleTierSelect = useCallback((tierId: string) => {
     setSelectedTierId(tierId);
   }, []);
 
+  /** Set monthly/yearly billing for the selected tier. */
   const handleBillingCycleChange = useCallback(
     (tierId: string, cycle: "monthly" | "yearly") => {
       if (selectedTierId === tierId) {

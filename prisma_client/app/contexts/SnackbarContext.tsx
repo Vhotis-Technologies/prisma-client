@@ -1,3 +1,6 @@
+/**
+ * Global snackbar/toast context: show success, error, warning, or info messages.
+ */
 import React, { createContext, useContext, useState } from "react";
 import { Snackbar, Portal } from "react-native-paper";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -29,6 +32,7 @@ const SnackbarContext = createContext<SnackbarContextType | undefined>(
   undefined,
 );
 
+/** Provider that renders a themed snackbar and exposes show/hide helpers. */
 export const SnackbarProvider = ({
   children,
 }: {
@@ -43,6 +47,7 @@ export const SnackbarProvider = ({
     duration: 3000,
   });
 
+  /** Show a snackbar with message, type, and optional duration. */
   const showSnackbar = (
     message: any,
     type: "success" | "error" | "warning" | "info" = "info",
@@ -56,6 +61,7 @@ export const SnackbarProvider = ({
     });
   };
 
+  /** Show a snackbar from a config object. */
   const showSnackbarWithConfig = (config: SnackbarConfig) => {
     setSnackbarState({
       visible: true,
@@ -65,6 +71,7 @@ export const SnackbarProvider = ({
     });
   };
 
+  /** Dismiss the current snackbar. */
   const hideSnackbar = () => {
     setSnackbarState((prev) => ({
       ...prev,
@@ -102,6 +109,7 @@ export const SnackbarProvider = ({
   );
 };
 
+/** Access snackbar show/hide methods; must be used within SnackbarProvider. */
 export const useSnackbar = () => {
   const context = useContext(SnackbarContext);
   if (!context) {

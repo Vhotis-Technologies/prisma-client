@@ -1,5 +1,7 @@
 """
-Branch spend calculation for leash enforcement.
+Branch spend calculation for fleet branch spending limits (leash enforcement).
+
+Aggregates succeeded payments minus refunds for branch fleet members and bulk orders.
 """
 from decimal import Decimal
 from django.utils import timezone
@@ -12,12 +14,16 @@ from main.models import Branch, FleetMember, PaymentTransaction, RefundRecord
 def get_branch_spend_for_period(branch: Branch, period: str) -> Decimal:
     """
     Net branch spend for the given period: succeeded payments minus succeeded refunds.
-    Only counts bookings whose user is a FleetMember of the branch.
 
-    - weekly: rolling last 7 days from now.
-    - monthly: current calendar month (start to end) in project timezone.
+    Only counts bookings whose user is a ``FleetMember`` of the branch, plus bulk
+    payments attributed to ``bulk_order.branch``.
 
-    Returns Decimal (>= 0).
+    Args:
+        branch: ``Branch`` whose admins' spend is summed.
+        period: ``'weekly'`` (rolling 7 days) or ``'monthly'`` (calendar month to now).
+
+    Returns:
+        Decimal: Net spend >= 0 (payments minus refunds, floored at zero).
     """
     admin_ids = list(
         FleetMember.objects.filter(branch=branch).values_list('user_id', flat=True)
@@ -30,12 +36,11 @@ def get_branch_spend_for_period(branch: Branch, period: str) -> Decimal:
         start = now - timezone.timedelta(days=7)
         end = now
     else:
-        # monthly: first day 00:00:00 to end of today (or last day of month)
+        # monthly: first day 00:00:00 through now in project timezone
         start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         end = now
 
-    # Payments: type=payment, status=succeeded, booking.user in branch admins, in period.
-    # Exclude transactions without booking (can't attribute to branch).
+    # Per-booking payments by branch fleet admins (exclude orphan transactions).
     payments_qs = PaymentTransaction.objects.filter(
         transaction_type='payment',
         status='succeeded',
@@ -46,7 +51,7 @@ def get_branch_spend_for_period(branch: Branch, period: str) -> Decimal:
     )
     payments_sum = payments_qs.aggregate(total=Sum('amount'))['total'] or Decimal('0')
 
-    # Bulk order payments attributed to this branch (bulk_order.branch == branch)
+    # Bulk fleet orders billed to this branch
     bulk_payments_qs = PaymentTransaction.objects.filter(
         transaction_type='payment',
         status='succeeded',
@@ -58,7 +63,7 @@ def get_branch_spend_for_period(branch: Branch, period: str) -> Decimal:
     bulk_payments_sum = bulk_payments_qs.aggregate(total=Sum('amount'))['total'] or Decimal('0')
     payments_sum = payments_sum + bulk_payments_sum
 
-    # Refunds: status=succeeded, booking.user in branch admins. Use processed_at or created_at for period.
+    # Refunds: use processed_at when set, else created_at, for period window
     refunds_qs = (
         RefundRecord.objects.filter(
             booking__user_id__in=admin_ids,

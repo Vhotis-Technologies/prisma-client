@@ -1,3 +1,6 @@
+/**
+ * Multi-step booking hook: vehicle/service selection, availability, pricing, Stripe payment.
+ */
 import {
   ServiceTypeProps,
   ValetTypeProps,
@@ -59,13 +62,20 @@ const formatLocalTime = (date: Date): string => {
   return `${hours}:${minutes}:${seconds}.${milliseconds}`;
 };
 
-/** Calendar date in local timezone (matches get_timeslots ?date=). Do not use toISOString() for the date part. */
+/**
+ * Format a Date as YYYY-MM-DD in local timezone (avoids UTC date drift).
+ *
+ * @param date - Date to format
+ * @returns Local date string for availability API
+ */
 const formatLocalDate = (date: Date): string => {
   const y = date.getFullYear();
   const m = (date.getMonth() + 1).toString().padStart(2, "0");
   const d = date.getDate().toString().padStart(2, "0");
   return `${y}-${m}-${d}`;
 };
+
+const VAT_RATE = 0.23; // 23% VAT rate
 
 /**
  * Custom hook for managing the booking process state and logic.
@@ -74,18 +84,8 @@ const formatLocalDate = (date: Date): string => {
  * On confirm: builds client + detailer payloads, opens Stripe payment sheet (or free Quick Sparkle path),
  * waits for webhook via confirm_payment_intent polling, then shows confirmation modal.
  *
- * See docs/BOOKING_FLOW.md for the full flow (frontend + backend + webhook).
- *
- * Features:
- * - Multi-step navigation with validation
- * - Date and time selection with detailer availability
- * - Price calculation (base, SUV, express, add-ons, loyalty)
- * - handleBookingConfirmation: payment sheet + waitForPaymentConfirmation + confirmation modal
- *
  * @returns Object containing all booking state, handlers, and utility methods
  */
-const VAT_RATE = 0.23; // 23% VAT rate
-
 const useBooking = () => {
   const dispatch = useAppDispatch();
   const user = useAppSelector((state: RootState) => state.auth.user);
@@ -1388,32 +1388,19 @@ const useBooking = () => {
     isExpressService,
   ]);
   /**
-   * Gets the SUV surcharge amount
+   * Gets the express service fee amount (€30 when express service is selected).
    *
-   * This method returns the SUV surcharge amount if the vehicle is marked as an SUV.
-   * The surcharge is a 15 percent increase on the total price (base price + addon costs).
-   *
-   * @returns The SUV surcharge amount (15% of total price if SUV, 0 otherwise)
-   * @type {number}
-   *
-   * @example
-   * const suvPrice = getSUVPrice(); // Returns 14.06 if total price is 93.75 and isSUV is true, 0 otherwise
-   */
-  /**
-   * Gets the express service fee amount
-   *
-   * This method returns the express service fee if express service is selected.
-   *
-   * @returns The express service fee amount (€30 if selected, 0 otherwise)
-   * @type {number}
-   *
-   * @example
-   * const expressPrice = getExpressServicePrice(); // Returns 30 if isExpressService is true, 0 otherwise
+   * @returns Express service fee in euros
    */
   const getExpressServicePrice = useCallback((): number => {
     return isExpressService ? 30 : 0;
   }, [isExpressService]);
 
+  /**
+   * Gets the SUV surcharge amount (15% of base + addons when isSUV is true).
+   *
+   * @returns SUV surcharge in euros
+   */
   const getSUVPrice = useCallback((): number => {
     // Use fleet_price if user is fleet owner/admin, otherwise use regular price
     const servicePrice = selectedServiceType
@@ -1543,7 +1530,11 @@ const useBooking = () => {
     ]
   );
 
-  /** Server quote resolution for summary step (complimentary QS + VAT breakdown). */
+  /**
+   * Resolve payable total from server quote (handles complimentary Quick Sparkle pools).
+   *
+   * @returns Payable breakdown from quote, or null when voucher overrides quote
+   */
   const getResolvedServerPayable =
     useCallback((): BookingQuoteResponse["payable_full"] | null => {
       if (!serverQuote || winnerVoucherApplied) return null;
@@ -1572,7 +1563,11 @@ const useBooking = () => {
       );
     }, [serverQuote, winnerVoucherApplied, complimentarySparkleSource]);
 
-  /** VAT-inclusive sticker + tier/promo/partner € deductions matching payable total. */
+  /**
+   * Resolve pricing line items from server quote for summary display.
+   *
+   * @returns VAT-inclusive sticker and discount lines, or null when voucher active
+   */
   const getResolvedPricingLines =
     useCallback((): BookingQuotePricingLines | null => {
       if (!serverQuote || winnerVoucherApplied) return null;
@@ -1643,6 +1638,11 @@ const useBooking = () => {
     getResolvedPricingLines,
   ]);
 
+  /**
+   * Build summary breakdown for server-quoted bookings (loyalty, promo, partner, QS savings).
+   *
+   * @returns Price summary for step 5 UI, or null when no server quote
+   */
   const getPriceSummaryBreakdown = useCallback((): BookingPriceSummaryBreakdown | null => {
     if (!serverQuote?.pricing_lines_full || winnerVoucherApplied) return null;
 
@@ -1934,6 +1934,10 @@ const useBooking = () => {
     setCancellationBookingReference("");
   }, []);
 
+  /**
+   * Apply a winner voucher code against the current booking total.
+   * Updates winnerVoucherApplied state on success.
+   */
   const applyWinnerVoucherCode = useCallback(async () => {
     const code = winnerVoucherCode.trim();
     if (!code) {
@@ -2047,11 +2051,17 @@ const useBooking = () => {
     applyPartnerBookingDiscount,
   ]);
 
+  /** Clear applied winner voucher and reset the code input. */
   const clearWinnerVoucher = useCallback(() => {
     setWinnerVoucherApplied(null);
     setWinnerVoucherCode("");
   }, []);
 
+  /**
+   * Amount due at checkout (alias for getFinalPrice).
+   *
+   * @returns Payable total in euros
+   */
   const getPayableTotal = useCallback((): number => {
     return getFinalPrice();
   }, [getFinalPrice]);
@@ -2389,7 +2399,13 @@ const useBooking = () => {
     applyPartnerBookingDiscount,
   ]);
 
-  /* Show cancellation modal with details */
+  /**
+   * Show cancellation modal with tiered refund preview (>24h full, 12–24h half, ≤12h none).
+   *
+   * @param bookingReference - Booking reference to cancel
+   * @param appointmentDate - ISO appointment start for refund tier calculation
+   * @param totalAmount - Original booking total for refund amount
+   */
   const showCancellationModal = useCallback(
     (
       bookingReference: string,
@@ -2454,7 +2470,12 @@ const useBooking = () => {
     []
   );
 
-  /* Handle actual booking cancellation */
+  /**
+   * Cancel a booking via API and navigate to dashboard on success.
+   *
+   * @param bookingReference - Booking reference to cancel
+   * @returns True on success, false on API failure; throws on network error
+   */
   const handleCancelBooking = useCallback(
     async (bookingReference: string) => {
       /* Process the actual cancellation */
@@ -2504,6 +2525,14 @@ const useBooking = () => {
     [cancelBooking, showSnackbarWithConfig, refetchAppointments]
   );
 
+  /**
+   * Reschedule a booking; opens late-reschedule fee payment sheet when required.
+   *
+   * @param bookingId - Internal booking ID
+   * @param newDate - New date (YYYY-MM-DD)
+   * @param newTime - New start time (HH:mm)
+   * @param totalCost - Unused; reserved for future fee display
+   */
   const handleRescheduleBooking = useCallback(
     async (
       bookingId: string,
