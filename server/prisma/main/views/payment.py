@@ -77,6 +77,7 @@ from main.utils.winner_voucher import (
 )
 
 from main.utils.bulk_appointments import create_bulk_appointments
+from main.utils.subscription_invoice import subscription_invoice_is_renewal
 import json
 import re
 import time
@@ -2705,7 +2706,7 @@ class StripeWebhookView(APIView):
 
             metadata = subscription_obj.get('metadata', {}) or {}
             subscription_db_id = metadata.get('subscription_id')
-            billing_id = metadata.get('billing_id')  # Only present for initial payment in metadata string
+            billing_id = metadata.get('billing_id')  # Sticky checkout id; not a renewal signal
             user_id = metadata.get('user_id')
             subscription_type = metadata.get('type')
 
@@ -2741,41 +2742,14 @@ class StripeWebhookView(APIView):
                     'error': 'Subscription not found'
                 }, status=status.HTTP_404_NOT_FOUND)
             
-            # Determine if this is an initial payment or renewal
-            is_renewal = billing_id is None
-            
-            if is_renewal:
-                # For renewals, create a new billing record
-                billing = BillingModel.objects.create(
-                    subscription=subscription,
-                    amount=Decimal(invoice.get('amount_paid', 0)) / 100,  # Convert from cents
-                    billing_date=timezone.now(),
-                    status='paid',
-                    transaction_id=invoice.get('id'),  # Store invoice ID
-                )
-                
-                # Extend subscription end_date based on billing cycle
-                billing_cycle = subscription.plan.billing_cycle
-                if billing_cycle == 'monthly':
-                    subscription.end_date = subscription.end_date + relativedelta(months=1)
-                elif billing_cycle == 'yearly':
-                    subscription.end_date = subscription.end_date + relativedelta(years=1)
-                else:
-                    # Default to monthly
-                    subscription.end_date = subscription.end_date + relativedelta(months=1)
-                if subscription_type == 'b2c_subscription':
-                    subscription.expiring_notice_sent_for_end_date = None
-                    subscription.complimentary_sparkles_used = 0
+            seed_billing = None
+            if billing_id:
+                seed_billing = BillingModel.objects.filter(id=billing_id).first()
+            is_renewal = subscription_invoice_is_renewal(
+                invoice.get('billing_reason'),
+                seed_billing_is_pending=bool(seed_billing and seed_billing.status == 'pending'),
+            )
 
-            else:
-                # For initial payment, get existing billing record
-                try:
-                    billing = BillingModel.objects.get(id=billing_id)
-                except BillingModel.DoesNotExist:
-                    return Response({
-                        'error': 'Billing record not found'
-                    }, status=status.HTTP_404_NOT_FOUND)
-            
             # Get payment intent from invoice
             payment_intent_id = invoice.get('payment_intent')
             payment_intent = None
@@ -2819,15 +2793,60 @@ class StripeWebhookView(APIView):
             existing_transaction = PaymentTransaction.objects.filter(
                 stripe_payment_intent_id=payment_intent_id_str
             ).first()
-            
-            if existing_transaction:
-                # Still update subscription and billing status
+
+            invoice_id = invoice.get('id')
+            invoice_keys = [
+                key for key in (invoice_id, payment_intent_id_str, f"inv_{invoice_id}")
+                if key
+            ]
+            billing_for_invoice = BillingModel.objects.filter(
+                subscription=subscription,
+                transaction_id__in=invoice_keys,
+            ).first()
+            renewal_already_recorded = bool(
+                is_renewal
+                and billing_for_invoice is not None
+                and (seed_billing is None or billing_for_invoice.id != seed_billing.id)
+            )
+
+            if not is_renewal:
+                if not seed_billing:
+                    return Response({
+                        'error': 'Billing record not found'
+                    }, status=status.HTTP_404_NOT_FOUND)
+                billing = seed_billing
+                if existing_transaction:
+                    subscription.status = 'active'
+                    subscription.save()
+                    billing.status = 'paid'
+                    billing.save()
+                    return Response({'status': 'subscription payment already recorded'}, status=status.HTTP_200_OK)
+            elif renewal_already_recorded:
                 subscription.status = 'active'
                 subscription.save()
-                billing.status = 'paid'
-                billing.save()
+                billing_for_invoice.status = 'paid'
+                billing_for_invoice.save()
                 return Response({'status': 'subscription payment already recorded'}, status=status.HTTP_200_OK)
-            
+            else:
+                billing = BillingModel.objects.create(
+                    subscription=subscription,
+                    amount=Decimal(invoice.get('amount_paid', 0)) / 100,
+                    billing_date=timezone.now(),
+                    status='paid',
+                    transaction_id=invoice_id,
+                )
+                billing_cycle = subscription.plan.billing_cycle
+                if billing_cycle == 'monthly':
+                    subscription.end_date = subscription.end_date + relativedelta(months=1)
+                elif billing_cycle == 'yearly':
+                    subscription.end_date = subscription.end_date + relativedelta(years=1)
+                else:
+                    subscription.end_date = subscription.end_date + relativedelta(months=1)
+                if subscription_type == 'b2c_subscription':
+                    subscription.expiring_notice_sent_for_end_date = None
+                    subscription.complimentary_sparkles_used = 0
+                subscription.save()
+
             # Create payment transaction record for subscription
             # Extract payment method details from payment intent or charge
             last_4_digits = None
@@ -2852,19 +2871,21 @@ class StripeWebhookView(APIView):
                         last_4_digits = card_details.get('last4')
                         card_brand = card_details.get('brand')
             
-            # Create PaymentTransaction
-            payment_transaction = PaymentTransaction.objects.create(
-                booking=None,  # Subscriptions don't have bookings
-                user=user,
-                booking_reference=None,  # Subscriptions don't have booking references
-                stripe_payment_intent_id=payment_intent_id_str,
-                transaction_type=subscription_type,
-                amount=Decimal(invoice.get('amount_paid', 0)) / 100,  # Convert from cents
-                currency=invoice.get('currency', 'eur'),
-                last_4_digits=last_4_digits,
-                card_brand=card_brand,
-                status='succeeded'
-            )
+            if existing_transaction:
+                payment_transaction = existing_transaction
+            else:
+                payment_transaction = PaymentTransaction.objects.create(
+                    booking=None,  # Subscriptions don't have bookings
+                    user=user,
+                    booking_reference=None,  # Subscriptions don't have booking references
+                    stripe_payment_intent_id=payment_intent_id_str,
+                    transaction_type=subscription_type,
+                    amount=Decimal(invoice.get('amount_paid', 0)) / 100,  # Convert from cents
+                    currency=invoice.get('currency', 'eur'),
+                    last_4_digits=last_4_digits,
+                    card_brand=card_brand,
+                    status='succeeded'
+                )
             
             # Link payment transaction to billing record
             billing.payment = payment_transaction
@@ -2884,8 +2905,8 @@ class StripeWebhookView(APIView):
             billing.status = 'paid'
             billing.save()
             
-            # Send trial ended email if this is the first payment after trial
-            if trial_just_ended and not is_renewal:
+            # Send trial ended email if this is the first paid invoice after trial
+            if trial_just_ended:
                 from main.tasks import send_trial_ended_email
                 from dateutil.relativedelta import relativedelta
                 
@@ -2991,12 +3012,16 @@ class StripeWebhookView(APIView):
                 try:
                     subscription = FleetSubscription.objects.get(id=subscription_db_id)
                     billing = SubscriptionBilling.objects.get(id=billing_id)
-                    subscription.status = 'active'
-                    subscription.save(update_fields=['status', 'updated_at'])
-                    billing.status = 'paid'
-                    billing.payment = payment_transaction
-                    billing.transaction_id = payment_intent_id
-                    billing.save(update_fields=['status', 'payment', 'transaction_id', 'updated_at'])
+                    # billing_id remains on Stripe subscription metadata after checkout.
+                    # Only activate the still-pending seed row; renewals are applied
+                    # by invoice.payment_succeeded so end_date is extended once.
+                    if billing.status == 'pending':
+                        subscription.status = 'active'
+                        subscription.save(update_fields=['status', 'updated_at'])
+                        billing.status = 'paid'
+                        billing.payment = payment_transaction
+                        billing.transaction_id = payment_intent_id
+                        billing.save(update_fields=['status', 'payment', 'transaction_id', 'updated_at'])
                 except FleetSubscription.DoesNotExist:
                     pass
                 except SubscriptionBilling.DoesNotExist:
@@ -3060,12 +3085,13 @@ class StripeWebhookView(APIView):
                 try:
                     subscription = B2CSubcription.objects.get(id=subscription_db_id)
                     billing = B2CSubcriptionBilling.objects.get(id=billing_id)
-                    subscription.status = 'active'
-                    subscription.save(update_fields=['status'])
-                    billing.status = 'paid'
-                    billing.payment = payment_transaction
-                    billing.transaction_id = payment_intent_id
-                    billing.save(update_fields=['status', 'payment', 'transaction_id'])
+                    if billing.status == 'pending':
+                        subscription.status = 'active'
+                        subscription.save(update_fields=['status'])
+                        billing.status = 'paid'
+                        billing.payment = payment_transaction
+                        billing.transaction_id = payment_intent_id
+                        billing.save(update_fields=['status', 'payment', 'transaction_id'])
                 except B2CSubcription.DoesNotExist:
                     pass
                 except B2CSubcriptionBilling.DoesNotExist:
