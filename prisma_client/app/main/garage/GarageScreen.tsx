@@ -5,7 +5,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import StyledText from "@/app/components/helpers/StyledText";
 import useGarage from "@/app/app-hooks/useGarage";
 import GarageVehicleComponent from "@/app/components/garage/GarageVehicleComponent";
@@ -17,6 +17,7 @@ import AddNewVehicle from "@/app/components/garage/AddNewVehicle";
 import { useAppSelector, RootState } from "@/app/store/main_store";
 import PendingTransfersSection from "@/app/components/garage/PendingTransfersSection";
 import { ActivityIndicator } from "react-native-paper";
+import { canUsePersonalGarage } from "@/app/utils/account";
 
 const GarageScreen = () => {
   const {
@@ -29,7 +30,14 @@ const GarageScreen = () => {
   } = useGarage();
 
   const user = useAppSelector((state: RootState) => state.auth.user);
-  const isFleetOwner = user?.is_fleet_owner;
+  const isFleetOwner = user?.is_fleet_owner === true;
+  const showGarage = canUsePersonalGarage(user);
+
+  useEffect(() => {
+    if (user && !showGarage) {
+      router.replace("/main/bookings/BookingScreen");
+    }
+  }, [user, showGarage]);
 
   const backgroundColor = useThemeColor({}, "background");
   const iconColor = useThemeColor({}, "icons");
@@ -40,6 +48,10 @@ const GarageScreen = () => {
   const [isAddVehicleModalVisible, setIsAddVehicleModalVisible] =
     useState(false);
   const [loadingVehicleId, setLoadingVehicleId] = useState<string | null>(null);
+
+  if (user && !showGarage) {
+    return null;
+  }
 
   if (isLoadingVehicles) {
     return (

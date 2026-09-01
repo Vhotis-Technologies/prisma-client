@@ -20,6 +20,7 @@ class Vehicle(models.Model):
     registration_number = models.CharField(max_length=50)
     country = models.CharField(max_length=100)
     county = models.CharField(max_length=100, blank=True, null=True)
+    # Legacy JSON dump from Ireland lookup; new writes leave this null (data minimisation).
     registration_provider_payload = models.JSONField(blank=True, null=True)
     abi_code = models.CharField(max_length=100, null=True, blank=True)
     make = models.CharField(max_length=100)
@@ -156,7 +157,7 @@ class DetailerProfile(models.Model):
 
     def save(self, *args, **kwargs):
         """Normalize phone to E.164-style storage before persist."""
-        from main.util.phone_utils import normalize_phone
+        from main.utils.phone_utils import normalize_phone
         if self.phone:
             self.phone = normalize_phone(self.phone)
         super().save(*args, **kwargs)
@@ -247,6 +248,60 @@ class BookedAppointment(models.Model):
         if not self.booking_reference:
             self.booking_reference = f"APT{int(time.time() * 1000)}{str(uuid.uuid4())[:8].upper()}"
         super().save(*args, **kwargs)
+
+
+class GuestAccessToken(models.Model):
+    """Time-limited hashed token for a guest to view booking photos and job notes.
+
+    Raw token is emailed once; only ``token_hash`` is stored. Tokens are multi-view
+    until ``expires_at`` or ``revoked_at``.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    booking = models.ForeignKey(
+        BookedAppointment,
+        on_delete=models.CASCADE,
+        related_name="guest_access_tokens",
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="guest_access_tokens",
+    )
+    token_hash = models.CharField(max_length=64, unique=True, db_index=True)
+    expires_at = models.DateTimeField()
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "guest_access_tokens"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(
+                fields=["booking", "revoked_at"],
+                name="guest_tok_booking_revoked_idx",
+            ),
+            models.Index(
+                fields=["user", "-created_at"],
+                name="guest_tok_user_created_idx",
+            ),
+        ]
+
+    def is_expired(self):
+        """True when ``expires_at`` is in the past."""
+        return timezone.now() >= self.expires_at
+
+    def is_revoked(self):
+        """True when support or a replacement issue has revoked this token."""
+        return self.revoked_at is not None
+
+    def is_valid(self):
+        """True when not revoked and not expired. Multiple views are allowed until then."""
+        return not self.is_revoked() and not self.is_expired()
+
+    def __str__(self):
+        return f"Guest access token for {self.booking.booking_reference}"
 
 
 class VehicleEvent(models.Model):

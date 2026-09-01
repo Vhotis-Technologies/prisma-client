@@ -8,26 +8,30 @@ from django.core.management.base import BaseCommand
 import json
 import logging
 import re
+import time
 
-from main.models import BookedAppointment, BookedAppointmentImage, Notification, User, Address, BulkOrder
-from main.tasks import send_booking_confirmation_email
-from main.utils.bulk_appointments import get_or_create_bulk_appointment_for_slot
-from main.utils.bulk_notifications import try_send_bulk_client_confirmation_notifications
+from main.utils.observability import log_timed, stream_lag_ms
+
+import redis.exceptions
+
+from main.models import BookedAppointment, Notification, User, Address, BulkOrder
+from main.utils.booking_image_sync import sync_booking_images
+from main.services.bulk_appointments import get_or_create_bulk_appointment_for_slot
+from main.services.bulk_notifications import try_send_bulk_client_confirmation_notifications
 from main.services.NotificationServices import NotificationService
-from asgiref.sync import async_to_sync
-from channels.layers import get_channel_layer
+from main.utils.live_booking import publish_live_booking_update
 from main.utils.redis_streams import (
     STREAM_JOB_EVENTS,
+    RedisStreamConsumer,
     ensure_consumer_group,
-    read_group_blocking,
-    read_pending,
-    ack,
 )
 
 logger = logging.getLogger(__name__)
 
 CLIENT_GROUP = "client_group"
 CONSUMER_NAME = "subscribe_redis"
+MAX_PROCESS_FAILURES = 5
+PENDING_ALERT_THRESHOLD = 50
 
 
 class Command(BaseCommand):
@@ -56,32 +60,7 @@ class Command(BaseCommand):
         Returns:
             int: Count of newly created ``BookedAppointmentImage`` rows.
         """
-        if not before_images:
-            return 0
-        created = 0
-        for img_data in before_images:
-            if not isinstance(img_data, dict):
-                continue
-            url = (img_data.get("image_url") or "").strip()
-            if not url:
-                continue
-            seg = img_data.get("segment")
-            if seg not in ("interior", "exterior"):
-                seg = "exterior"
-            try:
-                if BookedAppointmentImage.objects.filter(
-                    booking=booking, image_type="before", image_url=url
-                ).exists():
-                    continue
-                BookedAppointmentImage.objects.create(
-                    booking=booking,
-                    image_type="before",
-                    image_url=url,
-                    segment=seg,
-                )
-                created += 1
-            except Exception as e:
-                self.stderr.write(f"Error saving before image: {e}")
+        created = sync_booking_images(booking, before_images, "before")
         if created:
             self.stdout.write(
                 f"Synced {created} new before image(s) for {booking.booking_reference}"
@@ -99,32 +78,7 @@ class Command(BaseCommand):
         Returns:
             int: Count of newly created image rows.
         """
-        if not after_images:
-            return 0
-        created = 0
-        for img_data in after_images:
-            if not isinstance(img_data, dict):
-                continue
-            url = (img_data.get("image_url") or "").strip()
-            if not url:
-                continue
-            seg = img_data.get("segment")
-            if seg not in ("interior", "exterior"):
-                seg = "exterior"
-            try:
-                if BookedAppointmentImage.objects.filter(
-                    booking=booking, image_type="after", image_url=url
-                ).exists():
-                    continue
-                BookedAppointmentImage.objects.create(
-                    booking=booking,
-                    image_type="after",
-                    image_url=url,
-                    segment=seg,
-                )
-                created += 1
-            except Exception as e:
-                self.stderr.write(f"Error saving after image: {e}")
+        created = sync_booking_images(booking, after_images, "after")
         if created:
             self.stdout.write(
                 f"Synced {created} new after image(s) for {booking.booking_reference}"
@@ -145,33 +99,83 @@ class Command(BaseCommand):
         ensure_consumer_group(STREAM_JOB_EVENTS, CLIENT_GROUP)
         self.stdout.write(self.style.SUCCESS("Subscribed to job_events stream (client_group)"))
 
-        channel_layer = get_channel_layer()
-
-        # Process any pending messages from previous run
-        for msg_id, fields in read_pending(STREAM_JOB_EVENTS, CLIENT_GROUP, CONSUMER_NAME):
-            self._process_message(msg_id, fields, channel_layer)
-
+        stream = RedisStreamConsumer(block_ms=5000)
+        idle_loops = 0
         try:
+            for msg_id, fields in stream.read_pending(STREAM_JOB_EVENTS, CLIENT_GROUP, CONSUMER_NAME):
+                self._finish_message(stream, msg_id, fields)
             while True:
-                entries = read_group_blocking(STREAM_JOB_EVENTS, CLIENT_GROUP, CONSUMER_NAME, block_ms=5000)
+                try:
+                    entries = stream.read_group_blocking(
+                        STREAM_JOB_EVENTS, CLIENT_GROUP, CONSUMER_NAME
+                    )
+                except redis.exceptions.TimeoutError:
+                    continue
+                if not entries:
+                    idle_loops += 1
+                    if idle_loops % 12 == 0:
+                        pending = stream.pending_count(STREAM_JOB_EVENTS, CLIENT_GROUP)
+                        if pending >= PENDING_ALERT_THRESHOLD:
+                            self.stderr.write(
+                                f"ALERT: {pending} pending job_events in client_group "
+                                "(subscriber may be stuck)"
+                            )
+                    continue
+                idle_loops = 0
                 for msg_id, fields in entries:
-                    self._process_message(msg_id, fields, channel_layer)
+                    self._finish_message(stream, msg_id, fields)
         except KeyboardInterrupt:
             self.stdout.write(self.style.SUCCESS("subscribe_redis stopped"))
+        finally:
+            stream.close()
 
-    def _process_message(self, msg_id, fields, channel_layer):
+    def _finish_message(self, stream, msg_id, fields):
+        """Process one entry; ACK only after success or a dead-letter drop."""
+        for attempt in range(1, MAX_PROCESS_FAILURES + 1):
+            if self._process_message(msg_id, fields):
+                stream.ack(STREAM_JOB_EVENTS, CLIENT_GROUP, msg_id)
+                return
+            self.stderr.write(f"Retry {attempt}/{MAX_PROCESS_FAILURES} for {msg_id}")
+        self.stderr.write(f"Dead-letter ACK for {msg_id} after {MAX_PROCESS_FAILURES} failures")
+        stream.ack(STREAM_JOB_EVENTS, CLIENT_GROUP, msg_id)
+
+    def _process_message(self, msg_id, fields):
         """
         Dispatch one Redis stream entry: parse payload, update booking, notify user.
 
-        Always ACKs the message (even on errors) to avoid poison-pill blocking.
-
-        Args:
-            msg_id: Redis stream message id.
-            fields: Stream field dict (``event``, ``payload``).
-            channel_layer: Django Channels layer (reserved for future WS fan-out).
+        Returns True when the message is done (ACK). False means retry later.
         """
+        started = time.monotonic()
         event = fields.get("event")
         raw = fields.get("payload", "{}")
+        request_id = fields.get("request_id")
+        booking_reference = fields.get("booking_reference") or ""
+        ok = False
+        try:
+            result = self._dispatch_job_event(msg_id, fields, event, raw)
+            ok = bool(result)
+            return result
+        finally:
+            if not request_id or not booking_reference:
+                try:
+                    payload = json.loads(raw) if raw else {}
+                    if isinstance(payload, dict):
+                        request_id = request_id or payload.get("request_id")
+                        booking_reference = booking_reference or payload.get("booking_reference") or ""
+                except Exception:
+                    pass
+            log_timed(
+                "subscribe_redis.process",
+                started,
+                event=event,
+                booking_reference=booking_reference or fields.get("booking_reference"),
+                request_id=request_id,
+                consumer_lag_ms=stream_lag_ms(msg_id),
+                ok=ok,
+            )
+
+    def _dispatch_job_event(self, msg_id, fields, event, raw):
+        """Apply one job_events payload. Returns True to ACK."""
         if event not in (
             "job_acceptance",
             "job_started",
@@ -179,8 +183,7 @@ class Command(BaseCommand):
             "job_reassigned",
             "booking_reassigned",
         ):
-            ack(STREAM_JOB_EVENTS, CLIENT_GROUP, msg_id)
-            return
+            return True
         try:
             data = json.loads(raw)
             if isinstance(data, dict):
@@ -235,15 +238,19 @@ class Command(BaseCommand):
 
         if event in ("booking_reassigned", "job_reassigned"):
             self._handle_reassignment(event, data, booking_reference)
-            ack(STREAM_JOB_EVENTS, CLIENT_GROUP, msg_id)
-            return
+            return True
 
         try:
             booking = BookedAppointment.objects.get(booking_reference=booking_reference)
 
             if event == "job_acceptance":
+                from main.tasks.bookings.events import notify_client_booking_confirmed
                 from main.views.payment import assign_detailers_to_booking
-                
+
+                already_assigned = isinstance(booking.assigned_detailers, list) and bool(
+                    booking.assigned_detailers
+                )
+
                 if isinstance(detailers_list, list) and len(detailers_list) > 0:
                     assign_detailers_to_booking(booking, detailers_list)
                     self.stdout.write(f"Assigned {len(detailers_list)} detailer(s) to booking {booking_reference}")
@@ -251,11 +258,17 @@ class Command(BaseCommand):
                     assign_detailers_to_booking(booking, [detailer_data])
                     self.stdout.write(f"Detailer assigned to booking {booking_reference}")
 
-                booking.status = "confirmed"
-                booking.save()
-                self.stdout.write(f"Updated booking {booking_reference} to confirmed")
+                if booking.status != "confirmed":
+                    booking.status = "confirmed"
+                    booking.save(update_fields=["status"])
+                    self.stdout.write(f"Updated booking {booking_reference} to confirmed")
 
-                if getattr(booking, "bulk_order_id", None):
+                # HTTP/Celery assign is primary. Redis is backup: notify only if we were first.
+                if already_assigned:
+                    self.stdout.write(
+                        f"Skipped duplicate confirmation for {booking_reference} (already assigned)"
+                    )
+                elif getattr(booking, "bulk_order_id", None):
                     bulk_order = booking.bulk_order
                     sent = try_send_bulk_client_confirmation_notifications(bulk_order, booking)
                     if sent:
@@ -263,42 +276,11 @@ class Command(BaseCommand):
                             f"Sent bulk client confirmation (once) for {bulk_order.booking_reference}"
                         )
                 else:
-                    # Single booking: per-booking email, push, and notification.
-                    if booking.user.allow_email_notifications and booking.detailer:
-                        vdisp = vehicle_display(booking)
-                        parts = vdisp.split(None, 1)
-                        vmake = parts[0] if parts else "Vehicle"
-                        vmodel = parts[1] if len(parts) > 1 else "—"
-                        send_booking_confirmation_email.delay(
-                            booking.user.email,
-                            booking.user.name,
-                            booking.booking_reference,
-                            vmake,
-                            vmodel,
-                            booking.appointment_date,
-                            booking.start_time,
-                            booking.service_type.name,
-                            booking.valet_type.name,
-                            booking.total_amount,
-                            booking.detailer.name,
-                        )
-                    self.send_push_notification(
-                        booking.user.id,
-                        "Booking Confirmed! 🎉",
-                        f"Your valet service is confirmed for {booking.appointment_date} at {booking.start_time}. Your detailer is {booking.detailer.name}",
-                        {
-                            "type": "booking_confirmed",
-                            "booking_reference": booking.booking_reference,
-                            "screen": "booking_details",
-                        },
-                    )
-                    self.create_notification(
-                        booking.user,
-                        "Booking Confirmed",
-                        "booking_confirmed",
-                        "success",
-                        f"Your booking has been confirmed! Your detailer will be with you at the specified time. Your detailer is {booking.detailer.name}",
-                    )
+                    booking.refresh_from_db()
+                    notify_client_booking_confirmed(booking)
+                publish_live_booking_update(
+                    booking.user_id, booking.booking_reference, event, booking.status
+                )
 
             elif event == "job_started":
                 before_images = data.get("before_images", []) if isinstance(data, dict) else []
@@ -327,6 +309,9 @@ class Command(BaseCommand):
                         "success",
                         "Your appointment has been started! You will be notified when it is completed.",
                     )
+                publish_live_booking_update(
+                    booking.user_id, booking.booking_reference, event, booking.status
+                )
 
             elif event == "job_completed":
                 after_images = data.get("after_images", []) if isinstance(data, dict) else []
@@ -364,6 +349,10 @@ class Command(BaseCommand):
                         )
                     except Exception as e:
                         self.stderr.write(f"Error saving fleet maintenance: {e}")
+                from main.services.guest import maybe_notify_guest_results_ready
+
+                # Idempotent: emails the guest once when photos or a health check exist.
+                maybe_notify_guest_results_ready(booking)
                 if not skip_notify:
                     self.send_push_notification(
                         booking.user.id,
@@ -376,9 +365,12 @@ class Command(BaseCommand):
                         "Appointment Completed",
                         "cleaning_completed",
                         "success",
-                        "Your appointment has been completed! Thank you for choosing Prisma.",
+                        "Your appointment has been completed! Thank you for choosing Prisma Car Care.",
                     )
-            ack(STREAM_JOB_EVENTS, CLIENT_GROUP, msg_id)
+                publish_live_booking_update(
+                    booking.user_id, booking.booking_reference, event, booking.status
+                )
+            return True
 
         except BookedAppointment.DoesNotExist:
             # May be a bulk job ref (e.g. BULK123-1, BULK123-2)
@@ -454,6 +446,10 @@ class Command(BaseCommand):
                                     )
                                 except Exception as e:
                                     self.stderr.write(f"Error saving fleet maintenance: {e}")
+                            from main.services.guest import maybe_notify_guest_results_ready
+
+                            # Idempotent: emails the guest once when photos or a health check exist.
+                            maybe_notify_guest_results_ready(booking)
                             if not skip_notify:
                                 self.send_push_notification(
                                     booking.user.id,
@@ -466,10 +462,12 @@ class Command(BaseCommand):
                                     "Appointment Completed",
                                     "cleaning_completed",
                                     "success",
-                                    "Your appointment has been completed! Thank you for choosing Prisma.",
+                                    "Your appointment has been completed! Thank you for choosing Prisma Car Care.",
                                 )
-                        ack(STREAM_JOB_EVENTS, CLIENT_GROUP, msg_id)
-                        return
+                        publish_live_booking_update(
+                            booking.user_id, booking.booking_reference, event, booking.status
+                        )
+                        return True
                 else:
                     self.stderr.write(f"Bulk order not found: {base_ref}")
             if event == "job_acceptance" and detailer_data and detailer_data.get("phone"):
@@ -479,7 +477,7 @@ class Command(BaseCommand):
                     bulk = BulkOrder.objects.filter(booking_reference=base_ref).first()
                     if bulk:
                         from main.models import DetailerProfile
-                        from main.util.phone_utils import normalize_phone
+                        from main.utils.phone_utils import normalize_phone
 
                         detailer_name = detailer_data.get("name", "").strip()
                         detailer_phone = detailer_data.get("phone", "").strip()
@@ -496,6 +494,7 @@ class Command(BaseCommand):
                             assigned = getattr(bulk, "assigned_detailers", None) or []
                             if not isinstance(assigned, list):
                                 assigned = []
+                            already_had_team = bool(assigned)
                             detailer_id_str = str(detailer.id)
                             if not any(d.get("id") == detailer_id_str for d in assigned):
                                 assigned.append({
@@ -508,20 +507,15 @@ class Command(BaseCommand):
                                 bulk.assigned_detailers = assigned
                                 bulk.save()
                                 self.stdout.write(f"Detailer {detailer.name} added to bulk order {base_ref}")
-                                if len(assigned) == 1:
-                                    self.send_push_notification(
-                                        bulk.user.id,
-                                        "Bulk booking team assigned",
-                                        "Your bulk booking team has been assigned.",
-                                        "bulk_team_assigned",
+                                if not already_had_team:
+                                    sent = try_send_bulk_client_confirmation_notifications(
+                                        bulk,
+                                        BookedAppointment.objects.filter(bulk_order=bulk).first(),
                                     )
-                                    self.create_notification(
-                                        bulk.user,
-                                        "Bulk booking team assigned",
-                                        "bulk_team_assigned",
-                                        "success",
-                                        "Your bulk booking team has been assigned.",
-                                    )
+                                    if sent:
+                                        self.stdout.write(
+                                            f"Sent bulk client confirmation (once) for {base_ref}"
+                                        )
                         else:
                             self.stderr.write(f"Invalid phone for bulk detailer: {detailer_name}")
                     else:
@@ -530,10 +524,10 @@ class Command(BaseCommand):
                     self.stderr.write(f"Booking not found: {booking_reference}")
             else:
                 self.stderr.write(f"Booking not found: {booking_reference}")
-            ack(STREAM_JOB_EVENTS, CLIENT_GROUP, msg_id)
+            return True
         except Exception as e:
             self.stderr.write(f"Processing error: {e}")
-            ack(STREAM_JOB_EVENTS, CLIENT_GROUP, msg_id)
+            return False
 
     def _handle_reassignment(self, event, data, booking_reference):
         """Silent swap of ``assigned_detailers`` for a booking or every appointment in a bulk order.
@@ -571,6 +565,10 @@ class Command(BaseCommand):
                 if already_applied(appt.assigned_detailers or [], detailers):
                     continue
                 assign_detailers_to_booking(appt, detailers)
+            if bulk.user_id:
+                publish_live_booking_update(
+                    bulk.user_id, booking_reference, event, "confirmed"
+                )
             return
 
         booking = BookedAppointment.objects.filter(booking_reference=booking_reference).first()
@@ -582,6 +580,9 @@ class Command(BaseCommand):
             return
         assign_detailers_to_booking(booking, detailers)
         self.stdout.write(f"{event}: updated booking {booking_reference}")
+        publish_live_booking_update(
+            booking.user_id, booking.booking_reference, event, booking.status
+        )
 
     # Create a notification for the user   
     def create_notification(self, user, title, type, status, message):
@@ -608,14 +609,27 @@ class Command(BaseCommand):
 
     def send_push_notification(self, user_id, title, message, type):
         """
-        Send a push notification to a user.
+        Send an Expo push to a registered user.
+
+        Guests have no app install; skip so job-completed Redis events do not
+        treat a missing token as an error.
+
+        Args:
+            user_id: Recipient ``User`` id.
+            title: Push title.
+            message: Push body.
+            type: Payload passed to ``_normalize_push_data`` (string or dict).
         """
         try:
             from main.models import User
             from main.tasks.notifications.push import _normalize_push_data
             from exponent_server_sdk import PushClient, PushMessage
 
-            user = User.objects.get(id=user_id)
+            user = User.objects.filter(id=user_id).first()
+            if user is None:
+                return f"Push notification not sent: User {user_id} not found"
+            if getattr(user, "is_guest", False):
+                return "Push notification skipped: guest user"
 
             if not user.notification_token:
                 return f"Push notification not sent: User {user_id} has no notification token"

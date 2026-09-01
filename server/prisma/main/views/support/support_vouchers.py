@@ -27,7 +27,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from main.models import User, WinnerVoucher
-from main.utils.winner_voucher import normalize_winner_code
+from main.services.winner_voucher import normalize_winner_code
 from main.views.support.support_permission_access import SupportPermissionAccess
 
 _EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")

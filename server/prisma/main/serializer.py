@@ -197,6 +197,7 @@ class B2CSubscriptionPlanSerializer(serializers.ModelSerializer):
             'tier',
             'tier_id',
             'billing_cycle',
+            'vehicle_category',
             'price',
             'created_at',
             'updated_at',
@@ -274,6 +275,11 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             try:
                 user = User.objects.get(email__iexact=normalized_email)
                 attrs[self.username_field] = user.email
+                if user.is_guest:
+                    raise ValidationError(
+                        "This email was used for a guest booking. "
+                        "Open the link we emailed to create your password."
+                    )
             except User.DoesNotExist:
                 attrs[self.username_field] = normalized_email
 
@@ -325,6 +331,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
                 'phone': user.phone,
                 'is_fleet_owner': user.is_fleet_owner,
                 'is_branch_admin': user.is_branch_admin,
+                'is_guest': user.is_guest,
                 'is_dealership': is_dealership,
                 'partner_referral_code': partner_referral_code,
                 'business_name': partner_business_name,

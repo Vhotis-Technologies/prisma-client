@@ -1,21 +1,41 @@
 """
 B2C consumer subscription catalog and billing.
 
-Tiers define marketing copy and reference prices; :class:`B2CSubcriptionPlan` rows are the
-billable SKUs (monthly/yearly). Active subscriptions live on :class:`B2CSubcription` with
-Stripe ids and complimentary Quick Sparkle usage tracked per period.
+Tiers define marketing copy and reference prices (sedan vs SUV/MPV); :class:`B2CSubcriptionPlan`
+rows are the billable SKUs (monthly/yearly × vehicle category). Active subscriptions live on
+:class:`B2CSubcription` with Stripe ids and complimentary Quick Sparkle usage tracked per period.
 """
 import uuid
+from decimal import Decimal
+
 from django.db import models
 
 
 class B2CSubcriptionTier(models.Model):
     """Named subscription tier (Lite, Pro, Spectrum, etc.) with list pricing and feature bullets."""
+
+    VEHICLE_CATEGORY_SEDAN = 'sedan'
+    VEHICLE_CATEGORY_SUV_MPV = 'suv_mpv'
+    VEHICLE_CATEGORY_CHOICES = [
+        (VEHICLE_CATEGORY_SEDAN, 'Sedan'),
+        (VEHICLE_CATEGORY_SUV_MPV, 'SUV / MPV'),
+    ]
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=100, unique=True)
     tagLine = models.CharField(max_length=255, blank=True, null=True)
     monthlyPrice = models.DecimalField(max_digits=10, decimal_places=2)
     yearly_price = models.DecimalField(max_digits=10, decimal_places=2)
+    monthlyPriceSedan = models.DecimalField(max_digits=10, decimal_places=2)
+    yearly_price_sedan = models.DecimalField(max_digits=10, decimal_places=2)
+    service_discount_percent = models.PositiveSmallIntegerField(
+        default=0,
+        help_text='Percent off paid bookings (VAT-inc stack) for active subscribers, e.g. 10 or 15.',
+    )
+    max_complimentary_washes = models.PositiveSmallIntegerField(
+        default=1,
+        help_text='Complimentary Prisma Quick Sparkle washes per billing period for active subscribers.',
+    )
     features = models.JSONField(default=list)
     badge = models.CharField(max_length=50, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -27,42 +47,57 @@ class B2CSubcriptionTier(models.Model):
     def __str__(self) -> str:
         return self.name
 
+    def list_price(self, vehicle_category: str, billing_cycle: str) -> Decimal:
+        """Reference list price for a vehicle category and billing cycle."""
+        is_sedan = vehicle_category == self.VEHICLE_CATEGORY_SEDAN
+        if billing_cycle == 'yearly':
+            return self.yearly_price_sedan if is_sedan else self.yearly_price
+        return self.monthlyPriceSedan if is_sedan else self.monthlyPrice
+
 
 class B2CSubcriptionPlan(models.Model):
-    """Concrete plan row: tier + billing cycle + price; entitlements derived from tier name."""
+    """Concrete plan row: tier + billing cycle + vehicle category + price; entitlements from tier name."""
 
     BILLING_CYCLE_CHOICES = [('monthly', 'Monthly'), ('yearly', 'Yearly')]
+    VEHICLE_CATEGORY_SEDAN = B2CSubcriptionTier.VEHICLE_CATEGORY_SEDAN
+    VEHICLE_CATEGORY_SUV_MPV = B2CSubcriptionTier.VEHICLE_CATEGORY_SUV_MPV
+    VEHICLE_CATEGORY_CHOICES = B2CSubcriptionTier.VEHICLE_CATEGORY_CHOICES
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     tier = models.ForeignKey(B2CSubcriptionTier, on_delete=models.CASCADE, related_name='plans')
     billing_cycle = models.CharField(max_length=20, choices=BILLING_CYCLE_CHOICES)
+    vehicle_category = models.CharField(
+        max_length=20,
+        choices=VEHICLE_CATEGORY_CHOICES,
+        default=VEHICLE_CATEGORY_SUV_MPV,
+    )
     price = models.DecimalField(max_digits=10, decimal_places=2)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = [['tier', 'billing_cycle']]
+        unique_together = [['tier', 'billing_cycle', 'vehicle_category']]
 
     def __str__(self) -> str:
-        return f"{self.tier.name} ({self.get_billing_cycle_display()})"
+        return (
+            f"{self.tier.name} ({self.get_billing_cycle_display()}, "
+            f"{self.get_vehicle_category_display()})"
+        )
 
     def get_limits(self):
-        """Entitlement caps for this plan (no promotional discount on subscription list price)."""
-        # Longer substrings first so e.g. "spectrum" beats "pro" if both appear.
-        ordered = [('spectacular', 4), ('spectrum', 4), ('lite', 1), ('pro', 2)]
-        tier_slug = self.tier.name.lower()
-        for key, max_sparkles in ordered:
-            if key in tier_slug:
-                return {'max_prisma_sparkles': max_sparkles}
-        return {'max_prisma_sparkles': 1}
+        """Entitlement caps for this plan, from the tier's admin-editable ``max_complimentary_washes``."""
+        try:
+            max_sparkles = int(getattr(self.tier, 'max_complimentary_washes', 1) or 1)
+        except (TypeError, ValueError):
+            max_sparkles = 1
+        return {'max_prisma_sparkles': max_sparkles}
 
     def get_service_discount_percent(self) -> int:
-        """Percent off paid bookings (VAT-inc stack) for active subscribers — Lite/Pro 5%, Spectrum/Spectacular 7%."""
-        ordered = [('spectacular', 15), ('spectrum', 15), ('lite', 10), ('pro', 10)]
-        tier_slug = self.tier.name.lower()
-        for key, pct in ordered:
-            if key in tier_slug:
-                return pct
-        return 0
+        """Percent off paid bookings from the tier's admin-editable ``service_discount_percent``."""
+        try:
+            return int(getattr(self.tier, 'service_discount_percent', 0) or 0)
+        except (TypeError, ValueError):
+            return 0
 
 
 class B2CSubcription(models.Model):
@@ -120,7 +155,7 @@ class B2CSubcriptionBilling(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     subscription = models.ForeignKey(B2CSubcription, on_delete=models.CASCADE, related_name='billing_records')
     amount = models.DecimalField(max_digits=10, decimal_places=2)
-    billing_date = models.DateTimeField()  
+    billing_date = models.DateTimeField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     transaction_id = models.CharField(max_length=255, null=True, blank=True)
     payment = models.ForeignKey('PaymentTransaction', on_delete=models.SET_NULL, null=True, blank=True, related_name='b2c_subscription_billings')

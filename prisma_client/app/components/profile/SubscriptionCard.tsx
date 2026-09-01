@@ -60,14 +60,14 @@ const SubscriptionCard: React.FC<SubscriptionCardProps> = ({
     }
   };
 
-  const getStatusColor = (status: string | undefined, hasCurrentPlan?: boolean) => {
+  const isTrialing = Boolean(subscription?.isTrialing || subscription?.status === "trialing");
+
+  const getStatusColor = (status: string | undefined) => {
+    if (isTrialing) return warningColor;
     switch (status) {
       case "active":
         return successColor;
-      case "trialing":
-        return successColor; // trial is active
       case "pending":
-        return warningColor;
       case "past_due":
         return warningColor;
       case "expired":
@@ -75,16 +75,15 @@ const SubscriptionCard: React.FC<SubscriptionCardProps> = ({
       case "cancelled":
         return errorColor;
       default:
-        return hasCurrentPlan ? successColor : textColor;
+        return textColor;
     }
   };
 
-  const getStatusText = (status: string | undefined, hasCurrentPlan?: boolean) => {
+  const getStatusText = (status: string | undefined) => {
+    if (isTrialing) return "Trial";
     switch (status) {
       case "active":
         return "Active";
-      case "trialing":
-        return "Trialing";
       case "pending":
         return "Pending Payment";
       case "past_due":
@@ -95,10 +94,15 @@ const SubscriptionCard: React.FC<SubscriptionCardProps> = ({
       case "cancelled":
         return "Cancelled";
       default:
-        // If we have a plan name but no/unknown status, treat as active
-        return hasCurrentPlan ? "Active" : "No Subscription";
+        return status ? status.replace(/_/g, " ") : "No Subscription";
     }
   };
+
+  const periodLabel = isTrialing
+    ? `Trial ends: ${formatDate(subscription?.trialEndDate || subscription?.renewsOn || null)}`
+    : subscription?.renewsOn
+      ? `Renews on: ${formatDate(subscription.renewsOn)}`
+      : null;
 
   return (
     <View
@@ -128,7 +132,7 @@ const SubscriptionCard: React.FC<SubscriptionCardProps> = ({
               children={
                 isFleetOwner
                   ? "Manage your fleet subscription"
-                  : "Manage your Prisma subscription"
+                  : "Manage your Prisma Car Care subscription"
               }
             />
           </View>
@@ -167,36 +171,45 @@ const SubscriptionCard: React.FC<SubscriptionCardProps> = ({
               <View
                 style={[
                   styles.statusBadge,
-                  { backgroundColor: getStatusColor(subscription.status, !!subscription.currentPlan) + "20" },
+                  { backgroundColor: getStatusColor(subscription.status) + "20" },
                 ]}
               >
                 <View
                   style={[
                     styles.statusDot,
-                    { backgroundColor: getStatusColor(subscription.status, !!subscription.currentPlan) },
+                    { backgroundColor: getStatusColor(subscription.status) },
                   ]}
                 />
                 <StyledText
                   style={[
                     styles.statusText,
-                    { color: getStatusColor(subscription.status, !!subscription.currentPlan) },
+                    { color: getStatusColor(subscription.status) },
                   ]}
-                  children={getStatusText(subscription.status, !!subscription.currentPlan)}
+                  children={getStatusText(subscription.status)}
                 />
               </View>
             </View>
 
-            {subscription.status === "active" && subscription.renewsOn && (
+            {(periodLabel || subscription.billingCycle || subscription.lastPaidOn !== undefined) && (
               <View style={styles.renewalInfo}>
-                <StyledText
-                  style={[styles.renewalLabel, { color: textColor }]}
-                  variant="bodySmall"
-                  children={`Renews on: ${formatDate(subscription.renewsOn)}`}
-                />
+                {periodLabel ? (
+                  <StyledText
+                    style={[styles.renewalLabel, { color: textColor }]}
+                    variant="bodySmall"
+                    children={periodLabel}
+                  />
+                ) : null}
+                {subscription.billingCycle ? (
+                  <StyledText
+                    style={[styles.billingCycle, { color: textColor }]}
+                    variant="bodySmall"
+                    children={`Billing: ${subscription.billingCycle}`}
+                  />
+                ) : null}
                 <StyledText
                   style={[styles.billingCycle, { color: textColor }]}
                   variant="bodySmall"
-                  children={`Billing: ${subscription.billingCycle}`}
+                  children={`Last paid: ${subscription.lastPaidOn ? formatDate(subscription.lastPaidOn) : "Never"}`}
                 />
               </View>
             )}

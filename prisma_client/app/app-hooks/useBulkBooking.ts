@@ -3,8 +3,8 @@
  */
 import { useState, useCallback, useEffect } from "react";
 import dayjs from "dayjs";
-import { API_CONFIG } from "@/constants/Config";
 import type { ServiceTypeProps, ValetTypeProps, AddOnsProps } from "@/app/interfaces/BookingInterfaces";
+import { useLazyCheckBulkCapacityQuery } from "@/app/store/api/eventApi";
 import type { MyAddressProps } from "@/app/interfaces/ProfileInterfaces";
 
 export interface BulkCapacityOption {
@@ -31,6 +31,7 @@ export interface BulkBookingState {
 
 const BULK_DISCOUNT_THRESHOLD = 10;
 const BULK_DISCOUNT_PERCENT = 10;
+export const MIN_BULK_VEHICLES = 2;
 
 /**
  * Bulk fleet booking hook: capacity check, pricing, and payload builder for payment.
@@ -38,11 +39,12 @@ const BULK_DISCOUNT_PERCENT = 10;
  * @returns Bulk booking state, pricing breakdown, and capacity/payload handlers
  */
 export function useBulkBooking() {
+  const [checkCapacity] = useLazyCheckBulkCapacityQuery();
   const [selectedServiceType, setSelectedServiceType] =
     useState<ServiceTypeProps | null>(null);
   const [selectedValetType, setSelectedValetType] =
     useState<ValetTypeProps | null>(null);
-  const [numberOfVehicles, setNumberOfVehicles] = useState<number>(0);
+  const [numberOfVehicles, setNumberOfVehicles] = useState<number>(MIN_BULK_VEHICLES);
   const [isSUV, setIsSUV] = useState<boolean>(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [currentCalendarMonth, setCurrentCalendarMonth] = useState<dayjs.Dayjs>(
@@ -109,7 +111,7 @@ export function useBulkBooking() {
     numberOfVehicles > BULK_DISCOUNT_THRESHOLD ? BULK_DISCOUNT_PERCENT : 0;
   const discountAmount = (subtotalWithAddons * discountPercent) / 100;
   const amountAfterDiscount = Math.max(0, subtotalWithAddons - discountAmount);
-  const suvSurcharge = isSUV ? amountAfterDiscount * 0.15 : 0;
+  const suvSurcharge = isSUV ? amountAfterDiscount * 0.20 : 0;
   const total = amountAfterDiscount + suvSurcharge;
 
   /**
@@ -137,9 +139,9 @@ export function useBulkBooking() {
       !selectedServiceType ||
       !selectedDate ||
       !selectedAddress ||
-      numberOfVehicles < 1
+      numberOfVehicles < MIN_BULK_VEHICLES
     ) {
-      setCapacityError("Please select service, date, address and vehicle count.");
+      setCapacityError("Please select service, date, address and at least 2 vehicles.");
       return;
     }
     setIsLoadingCapacity(true);
@@ -147,41 +149,19 @@ export function useBulkBooking() {
     setCapacityOptions(null);
     setSelectedOption(null);
     try {
-      const url = new URL(
-        `${API_CONFIG.detailerAppUrl}/api/v1/availability/check_bulk_capacity/`
-      );
       const dateStr = selectedDate.toISOString().slice(0, 10);
-      url.searchParams.append("date", dateStr);
       const today = new Date();
       const isToday = dateStr === today.toISOString().slice(0, 10);
-      if (isToday) {
-        url.searchParams.append("now", new Date().toISOString());
-      }
-      url.searchParams.append("workload_minutes", String(workloadMinutes));
-      url.searchParams.append(
-        "service_duration",
-        String(selectedServiceType.duration || 60)
-      );
-      url.searchParams.append("country", selectedAddress.country || "");
-      url.searchParams.append("city", selectedAddress.city || "");
-      if (
-        selectedAddress.latitude != null &&
-        selectedAddress.longitude != null
-      ) {
-        url.searchParams.append(
-          "latitude",
-          String(selectedAddress.latitude)
-        );
-        url.searchParams.append(
-          "longitude",
-          String(selectedAddress.longitude)
-        );
-      }
-      const response = await fetch(url.toString(), {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-      });
-      const data = await response.json();
+      const data = await checkCapacity({
+        date: dateStr,
+        workload_minutes: workloadMinutes,
+        service_duration: selectedServiceType.duration || 60,
+        country: selectedAddress.country || "",
+        city: selectedAddress.city || "",
+        latitude: selectedAddress.latitude,
+        longitude: selectedAddress.longitude,
+        ...(isToday ? { now: new Date().toISOString() } : {}),
+      }).unwrap();
       if (data.error || !data.available) {
         setCapacityError(
           data.error ||
@@ -210,6 +190,7 @@ export function useBulkBooking() {
     selectedAddress,
     numberOfVehicles,
     workloadMinutes,
+    checkCapacity,
   ]);
 
   /**
@@ -293,7 +274,7 @@ export function useBulkBooking() {
     setSelectedServiceType(null);
     setSelectedValetType(null);
     setSelectedAddons([]);
-    setNumberOfVehicles(1);
+    setNumberOfVehicles(MIN_BULK_VEHICLES);
     setIsSUV(false);
     setSelectedDate(null);
     setSelectedAddress(null);

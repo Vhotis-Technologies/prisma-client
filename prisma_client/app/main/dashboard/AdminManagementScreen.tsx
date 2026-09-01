@@ -17,6 +17,7 @@ import {
   useGetBranchesQuery,
   useUpdateBranchAdminMutation,
   useRemoveBranchAdminMutation,
+  useResendInviteMutation,
 } from "@/app/store/api/fleetApi";
 import StyledButton from "@/app/components/helpers/StyledButton";
 import StyledTextInput from "@/app/components/helpers/StyledTextInput";
@@ -44,6 +45,7 @@ const AdminManagementScreen = () => {
   const { data: branchesData } = useGetBranchesQuery();
   const [updateBranchAdmin, { isLoading: isUpdating }] = useUpdateBranchAdminMutation();
   const [removeBranchAdmin, { isLoading: isRemoving }] = useRemoveBranchAdminMutation();
+  const [resendInvite, { isLoading: isResending }] = useResendInviteMutation();
   const { limitsReached } = useSubscriptionLimits();
 
   const admins = fleetAdminsData?.admins ?? [];
@@ -93,6 +95,40 @@ const AdminManagementScreen = () => {
         onConfirm: () => setIsVisible(false),
       });
     }
+  };
+
+  const handleResendInvite = (admin: FleetAdmin) => {
+    setAlertConfig({
+      isVisible: true,
+      title: "Resend invitation",
+      message: `Send a new set-password email to ${admin.email}? The previous link will stop working.`,
+      type: "warning",
+      onClose: () => setIsVisible(false),
+      onConfirm: async () => {
+        try {
+          await resendInvite({ admin_id: admin.id }).unwrap();
+          refetchAdmins();
+          setIsVisible(false);
+          setAlertConfig({
+            isVisible: true,
+            title: "Invitation resent",
+            message: "They'll get a new email to set their password.",
+            type: "success",
+            onConfirm: () => setIsVisible(false),
+          });
+        } catch (error: unknown) {
+          const err = error as { data?: { error?: string } };
+          setIsVisible(false);
+          setAlertConfig({
+            isVisible: true,
+            title: "Error",
+            message: err?.data?.error || "Failed to resend invitation",
+            type: "error",
+            onConfirm: () => setIsVisible(false),
+          });
+        }
+      },
+    });
   };
 
   const handleRemoveAdmin = (admin: FleetAdmin) => {
@@ -238,8 +274,30 @@ const AdminManagementScreen = () => {
                   <StyledText variant="bodyMedium" style={{ color: textColor }}>{formatJoinedAt(selectedAdmin.joined_at)}</StyledText>
                 </View>
               )}
+              {selectedAdmin.invite_pending && (
+                <View style={styles.detailRow}>
+                  <StyledText variant="bodyMedium" style={{ color: textColor, fontWeight: "600" }}>Status</StyledText>
+                  <View style={[styles.pendingBadge, { backgroundColor: primaryColor + "20" }]}>
+                    <StyledText variant="labelSmall" style={{ color: primaryColor }}>
+                      Invite pending
+                    </StyledText>
+                  </View>
+                </View>
+              )}
             </View>
             <View style={styles.detailActions}>
+              {selectedAdmin.invite_pending && (
+                <TouchableOpacity
+                  style={[styles.actionButton, { borderColor: primaryColor, backgroundColor: cardColor }]}
+                  onPress={() => handleResendInvite(selectedAdmin)}
+                  disabled={isResending}
+                >
+                  <Ionicons name="mail-outline" size={18} color={primaryColor} />
+                  <StyledText variant="bodyMedium" style={{ color: primaryColor }}>
+                    {isResending ? "Sending…" : "Resend invite"}
+                  </StyledText>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity
                 style={[styles.actionButton, { borderColor, backgroundColor: cardColor }]}
                 onPress={() => startEditing(selectedAdmin)}
@@ -295,9 +353,18 @@ const AdminManagementScreen = () => {
               <View style={styles.adminCardHeader}>
                 <Ionicons name="person" size={22} color={primaryColor} />
                 <View style={styles.adminCardInfo}>
-                  <StyledText variant="titleMedium" style={[styles.adminName, { color: textColor }]}>
-                    {admin.name}
-                  </StyledText>
+                  <View style={styles.adminNameRow}>
+                    <StyledText variant="titleMedium" style={[styles.adminName, { color: textColor }]}>
+                      {admin.name}
+                    </StyledText>
+                    {admin.invite_pending && (
+                      <View style={[styles.pendingBadge, { backgroundColor: primaryColor + "20" }]}>
+                        <StyledText variant="labelSmall" style={{ color: primaryColor }}>
+                          Pending
+                        </StyledText>
+                      </View>
+                    )}
+                  </View>
                   <StyledText variant="bodySmall" style={{ color: textColor, opacity: 0.8 }}>
                     {admin.email}
                   </StyledText>
@@ -349,7 +416,9 @@ const styles = StyleSheet.create({
   },
   adminCardHeader: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
   adminCardInfo: { flex: 1, gap: 2 },
+  adminNameRow: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
   adminName: { fontWeight: "600" },
+  pendingBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
   emptyCard: {
     margin: 16,
     padding: 24,
@@ -362,7 +431,7 @@ const styles = StyleSheet.create({
   emptySubtitle: { opacity: 0.8 },
   detailCard: { margin: 16, padding: 16, borderRadius: 12, borderWidth: 1, gap: 12 },
   detailRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  detailActions: { flexDirection: "row", gap: 12, paddingHorizontal: 16, paddingBottom: 16 },
+  detailActions: { flexDirection: "row", flexWrap: "wrap", gap: 12, paddingHorizontal: 16, paddingBottom: 16 },
   actionButton: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, padding: 12, borderRadius: 8, borderWidth: 1 },
   formCard: { margin: 16, padding: 16, borderRadius: 12, borderWidth: 1, gap: 12 },
   sectionTitle: { marginBottom: 4, fontWeight: "600" },

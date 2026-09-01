@@ -7,7 +7,7 @@ from celery import shared_task
 from datetime import timedelta
 from django.template.loader import render_to_string
 from django.utils.dateparse import parse_datetime
-from main.util.graph_mail import send_mail as graph_send_mail
+from main.utils.graph_mail import send_mail as graph_send_mail
 
 
 @shared_task

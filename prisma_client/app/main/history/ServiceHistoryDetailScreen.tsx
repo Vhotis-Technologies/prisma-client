@@ -16,6 +16,7 @@ import InspectionDataModal from "@/app/components/profile/InspectionDataModal";
 import { useAlertContext } from "@/app/contexts/AlertContext";
 import { useModalService } from "@/app/contexts/ModalServiceProvider";
 import StyledButton from "@/app/components/helpers/StyledButton";
+import { apiErrorMessage } from "@/app/utils/apiErrorMessage";
 
 type TabType = "before-interior" | "before-exterior" | "after-interior" | "after-exterior";
 
@@ -161,7 +162,10 @@ const ServiceHistoryDetailScreen = () => {
             variant="bodyMedium"
             style={[styles.errorText, { color: textColor }]}
           >
-            {(error as any)?.data?.error || "An error occurred while loading images. Please try again."}
+            {apiErrorMessage(
+              error,
+              "We couldn’t load these photos. Please try again."
+            )}
           </StyledText>
         </View>
       </View>

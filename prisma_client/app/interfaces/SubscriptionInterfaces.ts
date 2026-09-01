@@ -1,6 +1,13 @@
 /**
- * Fleet subscription types: tiers, plans, current subscription, billing history.
+ * Fleet / B2C subscription types: tiers, plans, current subscription, billing history.
  */
+export type B2cVehicleCategory = "sedan" | "suv_mpv";
+
+export interface SubscriptionCategoryPrices {
+  monthlyPrice: number;
+  yearlyPrice: number;
+}
+
 export interface SubscriptionTierProps {
   id: string;
   name: string;
@@ -10,12 +17,19 @@ export interface SubscriptionTierProps {
   yearlyBillingText?: string;
   badge?: string;
   features: string[];
+  serviceDiscountPercent?: number;
+  maxComplimentaryWashes?: number;
+  pricesByVehicleCategory?: {
+    sedan: SubscriptionCategoryPrices;
+    suv_mpv: SubscriptionCategoryPrices;
+  };
 }
 
 export interface SubscriptionPlanProps {
   id: string;
   tier: SubscriptionTierProps;
   billing_cycle: "monthly" | "yearly";
+  vehicle_category?: B2cVehicleCategory;
   name: string;
   price: number;
   is_active: boolean;
@@ -31,12 +45,20 @@ export interface PaymentFailureStatus {
 export interface FleetSubscriptionProps {
   id?: string;
   currentPlan: string | null;
-  status: "active" | "pending" | "trialing" | "past_due" | "canceled" | "expired";
+  status:
+    | "active"
+    | "pending"
+    | "trialing"
+    | "past_due"
+    | "canceled"
+    | "expired";
   renewsOn: string | null;
   billingCycle: "monthly" | "yearly";
+  vehicleCategory?: B2cVehicleCategory;
   trialDaysRemaining?: number | null;
   trialEndDate?: string | null;
   isTrialing?: boolean;
+  lastPaidOn?: string | null;
   canStartTrial?: boolean;
   isEarlyAdopter?: boolean;
   paymentFailureStatus?: PaymentFailureStatus | null;
@@ -55,6 +77,7 @@ export interface SubscriptionBillingProps {
         name: string;
       };
       billing_cycle: "monthly" | "yearly";
+      vehicle_category?: B2cVehicleCategory;
     };
   };
   amount: number;
@@ -73,6 +96,8 @@ export interface PaymentSheetProps {
 export interface CreateSubscriptionRequest {
   tierId: string;
   billingCycle: "monthly" | "yearly";
+  /** Defaults to suv_mpv on the server when omitted. */
+  vehicleCategory?: B2cVehicleCategory;
 }
 
 export interface CreateSubscriptionResponse {

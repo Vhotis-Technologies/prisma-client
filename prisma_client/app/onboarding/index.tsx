@@ -84,7 +84,7 @@ export default function OnboardingAccountTypeScreen() {
           style={[styles.subtitle, { color: textColor }]}
           variant="bodyMedium"
         >
-          Choose how you will use Prisma. You can update support details later if
+          Choose how you will use Prisma Car Care. You can update support details later if
           anything changes.
         </StyledText>
 

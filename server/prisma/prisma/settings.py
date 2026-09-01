@@ -1,10 +1,11 @@
 
 from pathlib import Path
 from datetime import timedelta
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urlparse
 import os
 import dj_database_url
 from celery.schedules import crontab
+from corsheaders.defaults import default_headers
 from google.oauth2 import service_account
 
 # Env names
@@ -20,23 +21,149 @@ IS_STAGING = PRISMA_ENV == 'staging'
 _DEFAULT_REDIS_HOST = 'client_staging_redis' if IS_STAGING else 'prisma_redis'
 
 SECRET_KEY= os.getenv('DJANGO_SECRET_KEY')
-BASE_URL = os.getenv('BASE_URL')
+# How long branch-admin (and future) invite links stay valid.
+INVITE_TOKEN_EXPIRY_HOURS = int(os.getenv('INVITE_TOKEN_EXPIRY_HOURS', '48'))
+# Guest booking results link lifetime (multi-view until expiry or revoke).
+GUEST_ACCESS_TOKEN_EXPIRY_DAYS = int(os.getenv('GUEST_ACCESS_TOKEN_EXPIRY_DAYS', '14'))
 
-_DEFAULT_CLIENT_ORIGIN = 'https://staging.client.prismavalet.com' if IS_STAGING else 'https://client.prismavalet.com'
-# Production: client.prismavalet.com on droplet. Override via env for local/dev.
-_CLIENT_ORIGIN = os.getenv('CLIENT_ORIGIN', _DEFAULT_CLIENT_ORIGIN) 
-# Base URL for email links (e.g. Privacy Policy, Terms). Defaults to client origin.
-FRONTEND_BASE_URL = os.getenv('FRONTEND_BASE_URL', _CLIENT_ORIGIN).rstrip('/')
+# Public origins: BASE_URL = Django API, CLIENT_WEB_BASE_URL = Prisma Web SPA.
+_DEFAULT_API = (
+    'https://bat-useful-penguin.ngrok-free.app/client' 
+    if IS_STAGING
+    else 'https://client.prismavalet.com'
+)
+BASE_URL = (
+    os.getenv('BASE_URL') or os.getenv('CLIENT_ORIGIN') or _DEFAULT_API
+).strip().rstrip('/')
+
+_DEFAULT_WEB = 'http://localhost:5173' if IS_STAGING else 'https://app.prismavalet.com'
+# Vite dev origins — used to ignore localhost CLIENT_WEB_BASE_URL when BASE_URL is a public tunnel.
+_LOCAL_WEB_DEV_ORIGINS = frozenset({
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'http://localhost:5174',
+    'http://127.0.0.1:5174',
+    'http://localhost:5175',
+    'http://127.0.0.1:5175',
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+})
+
+
+def _client_web_base_from_api_url(api_url: str) -> str | None:
+    """
+    Derive the Prisma Web SPA origin from the public API BASE_URL.
+
+    Staging nginx serves the API at ``/client`` and the SPA at ``/app`` on the same host.
+  """
+    root = api_url.rstrip('/')
+    if root.endswith('/client'):
+        return f"{root[: -len('/client')]}/app"
+    return None
+
+
+_raw_client_web = (os.getenv('CLIENT_WEB_BASE_URL') or '').strip().rstrip('/')
+if _raw_client_web and not (
+    IS_STAGING
+    and _raw_client_web in _LOCAL_WEB_DEV_ORIGINS
+    and _client_web_base_from_api_url(BASE_URL)
+):
+    CLIENT_WEB_BASE_URL = _raw_client_web
+elif IS_STAGING and _client_web_base_from_api_url(BASE_URL):
+    CLIENT_WEB_BASE_URL = _client_web_base_from_api_url(BASE_URL)
+else:
+    CLIENT_WEB_BASE_URL = (_raw_client_web or _DEFAULT_WEB).strip().rstrip('/')
 
 # Partner-referred users: optional % discount on bookings (separate from one-time complimentary wash).
 PARTNER_REFERRED_BOOKING_DISCOUNT_PERCENT = int(
     os.getenv('PARTNER_REFERRED_BOOKING_DISCOUNT_PERCENT', '30').strip().split('.', 1)[0] or '30'
 )
-# Prismahome (landing site) often runs on localhost:3000; allow it for terms/privacy API calls.
-_DEFAULT_CORS_ORIGINS = [_CLIENT_ORIGIN, 'http://localhost:3000', 'http://127.0.0.1:3000', 'https://prismavalet.com']
-ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', _CLIENT_ORIGIN).split(',') if os.getenv('ALLOWED_ORIGINS') else [_CLIENT_ORIGIN]
-CSRF_TRUSTED_ORIGINS = os.getenv('CSRF_TRUSTED_ORIGINS', _CLIENT_ORIGIN).split(',') if os.getenv('CSRF_TRUSTED_ORIGINS') else [_CLIENT_ORIGIN]
+# Browser origins. django-cors-headers reads CORS_ALLOWED_ORIGINS (not ALLOWED_ORIGINS).
+# Vite uses 5173 by default and hops to 5174+ when that port is taken.
+_WEB_DEV_ORIGINS = [
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'http://localhost:5174',
+    'http://127.0.0.1:5174',
+    'http://localhost:5175',
+    'http://127.0.0.1:5175',
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+]
+# Django CSRF_TRUSTED_ORIGINS supports https://*.example.com (ALLOWED_HOSTS-style
+# suffixes do not). Staging ngrok subdomains rotate; do not require .env updates.
+_STAGING_NGROK_CSRF_ORIGINS = [
+    'https://*.ngrok-free.app',
+    'https://*.ngrok.io',
+    'https://*.ngrok.app',
+]
+_STAGING_NGROK_CORS_REGEXES = [
+    r'^https://[\w-]+\.ngrok-free\.app$',
+    r'^https://[\w-]+\.ngrok\.io$',
+    r'^https://[\w-]+\.ngrok\.app$',
+]
+
+
+def _append_unique(dest: list[str], values: list[str]) -> None:
+    for value in values:
+        if value and value not in dest:
+            dest.append(value)
+
+
+def _origin_only(value: str) -> str:
+    """CORS/CSRF origins are scheme+host+port — strip paths like /client."""
+    parsed = urlparse(value.strip())
+    if parsed.scheme and parsed.netloc:
+        return f"{parsed.scheme}://{parsed.netloc}"
+    return value.strip().rstrip("/")
+
+
+def _split_origins(raw: str | None, fallback: list[str]) -> list[str]:
+    sources = raw.split(",") if raw and raw.strip() else fallback
+    seen: set[str] = set()
+    out: list[str] = []
+    for origin in sources:
+        value = _origin_only(origin) if isinstance(origin, str) else ""
+        if value and value not in seen:
+            seen.add(value)
+            out.append(value)
+    return out
+
+
+_DEFAULT_CORS_ORIGINS = [
+    BASE_URL,
+    CLIENT_WEB_BASE_URL,
+    'https://prismavalet.com',
+    'https://www.prismavalet.com',
+    *_WEB_DEV_ORIGINS,
+]
+CORS_ALLOWED_ORIGINS = _split_origins(
+    os.getenv('CORS_ALLOWED_ORIGINS') or os.getenv('ALLOWED_ORIGINS'),
+    _DEFAULT_CORS_ORIGINS,
+)
+# Staging: always allow local Vite (prisma_web) and CRA (prismahome) even if env omitted them.
+if IS_STAGING:
+    _append_unique(CORS_ALLOWED_ORIGINS, _WEB_DEV_ORIGINS)
+    # Exact-origin lists miss Vite's next port and rotating ngrok hosts.
+    CORS_ALLOWED_ORIGIN_REGEXES = [
+        r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
+        *_STAGING_NGROK_CORS_REGEXES,
+    ]
+
+CSRF_TRUSTED_ORIGINS = _split_origins(
+    os.getenv('CSRF_TRUSTED_ORIGINS'),
+    CORS_ALLOWED_ORIGINS,
+)
+_append_unique(CSRF_TRUSTED_ORIGINS, [_origin_only(BASE_URL), _origin_only(CLIENT_WEB_BASE_URL)])
+if IS_STAGING:
+    _append_unique(CSRF_TRUSTED_ORIGINS, _WEB_DEV_ORIGINS)
+    _append_unique(CSRF_TRUSTED_ORIGINS, _STAGING_NGROK_CSRF_ORIGINS)
 CORS_ALLOW_CREDENTIALS = True
+# Ngrok free tunnels intercept browser GETs unless this header is present.
+CORS_ALLOW_HEADERS = (
+    *default_headers,
+    'ngrok-skip-browser-warning',
+)
 
 
 def _build_allowed_hosts() -> list[str]:
@@ -71,14 +198,11 @@ def _build_allowed_hosts() -> list[str]:
 
     return out
 
-
 ALLOWED_HOSTS = _build_allowed_hosts()
-
 USE_X_FORWARDED_HOST = True
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 DEBUG = os.getenv('DEBUG') == 'True'
-
 INSTALLED_APPS = [
     'daphne',
     'django.contrib.admin',
@@ -142,10 +266,15 @@ def _resolve_database_url():
     port = os.getenv('POSTGRES_PORT', '5432')
     db = os.getenv('POSTGRES_DB')
     if user and password and host and db:
-        return (
+        url = (
             f'postgresql://{quote_plus(user)}:{quote_plus(password)}'
             f'@{host}:{port}/{db}'
         )
+        sslmode = os.getenv('POSTGRES_SSLMODE', '').strip()
+        if sslmode:
+            sep = '&' if '?' in url else '?'
+            url = f'{url}{sep}sslmode={quote_plus(sslmode)}'
+        return url
     return ''
 
 
@@ -273,11 +402,14 @@ REST_FRAMEWORK = {
 }
 
 
+# Dedicated DB so Channels idle waits do not share Celery broker DB 0.
+# Pub/sub layer avoids BZPOPMIN, which redis-py asyncio treats as a hard timeout.
+_redis_db_channels = int(os.getenv('REDIS_CHANNELS_DB', '5'))
 CHANNEL_LAYERS = {
     "default": {
-        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "BACKEND": "channels_redis.pubsub.RedisPubSubChannelLayer",
         "CONFIG": {
-            "hosts": [f'redis://{_redis_host}:{_redis_port}'],
+            "hosts": [f"redis://{_redis_host}:{_redis_port}/{_redis_db_channels}"],
         },
     },
 }
@@ -298,7 +430,7 @@ SIMPLE_JWT = {
     "ISSUER": None,
     "JSON_ENCODER": None,
     "JWK_URL": None,
-    "LEEWAY": 0,
+    "LEEWAY": 30,
     "AUTH_HEADER_TYPES": ("Bearer",),
     "AUTH_HEADER_NAME": "HTTP_AUTHORIZATION",
     "USER_ID_FIELD": "id",
@@ -386,16 +518,37 @@ ASGI_APPLICATION = 'prisma.asgi.application'
 
 # Stripe Configuration
 STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY')
+STRIPE_PUBLISHABLE_KEY = os.getenv('STRIPE_PUBLISHABLE_KEY', '')
 STRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET')
+GOOGLE_PLACES_API_KEY = os.getenv('GOOGLE_PLACES_API_KEY', '')
 
 # Late reschedule fee (minor units / “cents”, same as Stripe PaymentIntent.amount)
 RESCHEDULE_FEE_CENTS = int(os.getenv('RESCHEDULE_FEE_CENTS', '1000'))
 
-# Detailer app URL for server-to-server communication (client -> detailer booking API).
-# Set DETAILER_APP_URL to the detailer app's full base URL so the client can reach it without
-# relying on Docker DNS. Example: https://YOUR_SUBDOMAIN.ngrok-free.app/detailer
-# or https://detailer.yourdomain.com (no trailing slash).
-DETAILER_APP_URL = os.getenv('DETAILER_APP_URL', '').strip() or None
+# Detailer app URL for server-to-server calls (create booking, timeslot proxy).
+# Use the public project URL (ngrok /detailer or https://crew…), not Docker DNS.
+# Auth is X-Client-Internal-Key (DETAILER_API_SECRET == detailer CLIENT_SERVER_SECRET).
+def _public_project_url(env_value, path_segment):
+    """Prefer an explicit public URL; ignore Docker hostnames and fall back to BASE_URL."""
+    from urllib.parse import urlparse
+
+    raw = (env_value or "").strip() or None
+    if raw:
+        host = (urlparse(raw).hostname or "")
+        if host.endswith("_staging_server"):
+            raw = None
+    if raw:
+        return raw.rstrip("/")
+    base = (os.getenv("BASE_URL") or "").strip()
+    parsed = urlparse(base)
+    if parsed.scheme in ("http", "https") and parsed.netloc:
+        return f"{parsed.scheme}://{parsed.netloc}/{path_segment.strip('/')}"
+    return None
+
+
+DETAILER_APP_URL = _public_project_url(os.getenv("DETAILER_APP_URL"), "detailer")
+# Shared secret sent as X-Client-Internal-Key; must match detailer CLIENT_SERVER_SECRET.
+DETAILER_API_SECRET = (os.getenv('DETAILER_API_SECRET') or '').strip()
 
 # Shared secret for support server -> client dashboard metrics (header X-Support-Internal-Key).
 SUPPORT_INTERNAL_API_KEY = (os.getenv('SUPPORT_INTERNAL_API_KEY') or '').strip()

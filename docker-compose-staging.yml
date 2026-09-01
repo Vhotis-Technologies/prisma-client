@@ -1,7 +1,10 @@
 # Client — standalone staging. docker compose -f docker-compose-staging.yml up -d --build
 # Requires: docker network create prisma_shared_net
 # client_staging_redis is the single shared Redis for all staging apps (detailer/support use other DB indexes).
-# Ngrok: point the tunnel at this stack’s nginx — e.g. `ngrok http 8080` (see client_staging_nginx ports below).
+# Ngrok: point the tunnel at this stack’s nginx — e.g. `ngrok http 80`.
+# HTTP: client_staging_nginx — /client/ → API, /app/ → prisma_web SPA.
+# Direct SPA: host :8182 (Vite base /app/, so prefer /app/ or the nginx path).
+# Stripe publishable + Places bake into the SPA at image build (from .env.staging / Dockerfile defaults).
 # If ngrok shows ERR_NGROK_8012 with undefined://undefined, the agent has no forward URL/host set in CLI or dashboard.
 
 name: prisma_client_staging
@@ -56,6 +59,7 @@ services:
     environment:
       - DJANGO_SETTINGS_MODULE=prisma.settings
       - PRISMA_ENV=staging
+    command: python manage.py runserver 0.0.0.0:8000
     depends_on:
       client_postgres:
         condition: service_healthy
@@ -97,22 +101,39 @@ services:
     networks:
       - prisma_shared_net
 
-  # client_staging_nginx:
-  #   image: nginx:alpine
-  #   container_name: client_staging_nginx
-  #   restart: unless-stopped
-  #   env_file:
-  #     - .env.staging
-  #   ports:
-  #     - "80:80"
-  #   volumes:
-  #     - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-  #     - ./nginx/conf.d:/etc/nginx/conf.d:ro
-  #     - ./nginx/html/static:/usr/share/nginx/html/static:ro
-  #   depends_on:
-  #     - client_staging_server
-  #   networks:
-  #     - prisma_shared_net
+  client_staging_nginx:
+    image: nginx:alpine
+    container_name: client_staging_nginx
+    restart: unless-stopped
+    env_file:
+      - .env.staging
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/html/static:/usr/share/nginx/html/static:ro
+    depends_on:
+      - client_staging_server
+      - client_staging_web
+    networks:
+      - prisma_shared_net
+
+  # SPA at host :8182 and, via client_staging_nginx, https://<ngrok>/app/
+  client_staging_web:
+    build:
+      context: ./prisma_web
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: /client
+        VITE_BASE: /app/
+        VITE_STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-pk_test_51S0pDCFVJJgf9kPbBk7noZevUQSzkRN7CyYGi7QeKzKGToFekvr6jPVQQS1lsQoZyvd1J3EiQTfZJJHMxwIpX4mL005xBo7ME9}
+    container_name: client_staging_web
+    ports:
+      - "8182:80"
+    networks:
+      - prisma_shared_net
+    restart: unless-stopped
 
   client_staging_job_subscriber:
     build:

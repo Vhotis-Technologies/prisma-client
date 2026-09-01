@@ -186,7 +186,7 @@ const VehicleSelector: React.FC<VehicleSelectorProps> = ({
                     },
                   ]}
                 >
-                  Additional 15% surcharge for SUV / MPV cleaning
+                  Additional 20% surcharge for SUV / MPV cleaning
                 </StyledText>
               </View>
               <CircleCheckbox checked={isSUV} accentColor={primaryPurpleColor} />
@@ -198,7 +198,7 @@ const VehicleSelector: React.FC<VehicleSelectorProps> = ({
               style={[styles.bodyStyleHint, { color: textColor }]}
             >
               {
-                "This vehicle's registered body style requires the SUV / MPV option (15% surcharge)."
+                "This vehicle's registered body style requires the SUV / MPV option (20% surcharge)."
               }
             </StyledText>
           )}

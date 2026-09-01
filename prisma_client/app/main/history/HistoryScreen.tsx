@@ -23,6 +23,7 @@ import ModalServices from "@/app/utils/ModalServices";
 import ReviewComponent from "@/app/components/booking/ReviewComponent";
 import { RecentServicesProps } from "@/app/interfaces/DashboardInterfaces";
 import { useAppSelector, RootState } from "@/app/store/main_store";
+import { apiErrorMessage } from "@/app/utils/apiErrorMessage";
 
 const HistoryScreen = () => {
   const {
@@ -319,9 +320,15 @@ const HistoryScreen = () => {
             style={styles.errorIcon}
           />
           <StyledText
-            children={`Error loading service history: ${JSON.stringify(
-              errorServiceHistory
-            )}`}
+            children="Couldn’t load history"
+            variant="titleMedium"
+            style={[styles.errorTitle, { color: textColor }]}
+          />
+          <StyledText
+            children={apiErrorMessage(
+              errorServiceHistory,
+              "We couldn’t load your service history. Please try again."
+            )}
             variant="bodyMedium"
             style={[styles.errorText, { color: textColor }]}
           />
@@ -498,10 +505,18 @@ const styles = StyleSheet.create({
   errorIcon: {
     marginBottom: 16,
   },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: "600",
+    textAlign: "center",
+    marginBottom: 8,
+  },
   errorText: {
     fontSize: 16,
     textAlign: "center",
     marginBottom: 20,
+    opacity: 0.8,
+    lineHeight: 22,
   },
   emptyStateContainer: {
     margin: 20,

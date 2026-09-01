@@ -50,7 +50,12 @@ class RequestPasswordResetView(APIView):
         
         try:
             user = User.objects.get(email=email)
-            
+            if user.is_guest:
+                # Same generic message as unknown email: guests have no password to reset.
+                return Response({
+                    'message': 'If an account with that email exists, a password reset link has been sent.'
+                }, status=status.HTTP_200_OK)
+
             # Invalidate any existing tokens for this user
             PasswordResetToken.objects.filter(user=user, used=False).update(used=True)
             

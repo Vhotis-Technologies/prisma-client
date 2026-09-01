@@ -98,7 +98,7 @@ const OnboardingScreen = () => {
       if (!signUpData.signUpAccountType) {
         setAlertConfig({
           title: "Account type required",
-          message: "Please go back and choose how you will use Prisma.",
+          message: "Please go back and choose how you will use Prisma Car Care.",
           type: "error",
           isVisible: true,
           onConfirm: () => setIsVisible(false),

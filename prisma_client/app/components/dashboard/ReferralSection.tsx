@@ -23,7 +23,7 @@ const ReferralSection: React.FC<ReferralSectionProps> = ({ referral }) => {
 
   const copyReferralCode = async () => {
     try {
-      const promotionalMessage = `Join Prisma Valet, the best mobile detailing tech integrated service and get 10% off your first wash! Use code: ${referral}`;
+      const promotionalMessage = `Join Prisma Car Care, the best mobile detailing tech integrated service and get 10% off your first wash! Use code: ${referral}`;
       await Clipboard.setStringAsync(promotionalMessage);
       setCopied(true);
       showSnackbarWithConfig({

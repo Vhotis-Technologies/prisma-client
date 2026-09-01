@@ -40,16 +40,19 @@ import CircleCheckbox from "@/app/components/helpers/CircleCheckbox";
 // Import hooks
 import useBooking from "@/app/app-hooks/useBooking";
 import {
+  MIN_BULK_VEHICLES,
   useBulkBooking,
   type BulkCapacityOption,
 } from "@/app/app-hooks/useBulkBooking";
 import usePayment from "@/app/app-hooks/usePayment";
 import { useAppSelector } from "@/app/store/main_store";
 import type AuthState from "@/app/interfaces/AuthInterface";
+import { isFleetOperator } from "@/app/utils/account";
 import {
   useFetchPaymentSheetDetailsMutation,
   useConfirmPaymentIntentMutation,
   useCreateBulkOrderInvoiceLaterMutation,
+  useGetInvoiceLaterEligibilityQuery,
   type ComplimentarySparkleSource,
 } from "@/app/store/api/eventApi";
 
@@ -112,7 +115,8 @@ const BookingScreen = () => {
     user?.is_dealership ||
     user?.partner_referral_code,
   );
-  const [isBulkMode, setIsBulkMode] = useState(false);
+  const fleetOperator = isFleetOperator(user);
+  const [isBulkMode, setIsBulkMode] = useState(() => isFleetOperator(user));
   const [bulkStep, setBulkStep] = useState(1);
   const [bulkPaymentOption, setBulkPaymentOption] = useState<
     "pay_now" | "pay_later"
@@ -145,6 +149,20 @@ const BookingScreen = () => {
   const [confirmPaymentIntent] = useConfirmPaymentIntentMutation();
   const [createBulkOrderInvoiceLater] =
     useCreateBulkOrderInvoiceLaterMutation();
+  const { data: invoiceLater } = useGetInvoiceLaterEligibilityQuery(undefined, {
+    skip: !isBulkEligible,
+  });
+  const invoiceLaterAllowed = invoiceLater?.allowed !== false;
+
+  useEffect(() => {
+    if (fleetOperator) setIsBulkMode(true);
+  }, [fleetOperator]);
+
+  useEffect(() => {
+    if (invoiceLater && !invoiceLater.allowed) {
+      setBulkPaymentOption("pay_now");
+    }
+  }, [invoiceLater]);
 
   /* Get the save new address hook and handle save address function to close the modal and save the address */
   const { saveNewAddress } = useProfile();
@@ -306,25 +324,25 @@ const BookingScreen = () => {
   const handleBulkConfirmationClose = useCallback(() => {
     setBulkConfirmationPayload(null);
     bulk.resetBulkBooking();
-    setIsBulkMode(false);
+    setIsBulkMode(fleetOperator);
     setBulkStep(1);
     setBulkPaymentOption("pay_now");
-  }, [bulk]);
+  }, [bulk, fleetOperator]);
 
   const handleBulkConfirmationViewDashboard = useCallback(() => {
     setBulkConfirmationPayload(null);
     bulk.resetBulkBooking();
-    setIsBulkMode(false);
+    setIsBulkMode(fleetOperator);
     setBulkStep(1);
     setBulkPaymentOption("pay_now");
     router.push("/main/dashboard/DashboardScreen");
-  }, [bulk]);
+  }, [bulk, fleetOperator]);
 
   const handleBulkConfirmationViewInvoice = useCallback(() => {
     const bulkOrderId = bulkConfirmationPayload?.bulkOrderId;
     setBulkConfirmationPayload(null);
     bulk.resetBulkBooking();
-    setIsBulkMode(false);
+    setIsBulkMode(fleetOperator);
     setBulkStep(1);
     setBulkPaymentOption("pay_now");
     if (bulkOrderId) {
@@ -335,7 +353,7 @@ const BookingScreen = () => {
       return;
     }
     router.push("/main/settings/InvoicesScreen");
-  }, [bulk, bulkConfirmationPayload?.bulkOrderId]);
+  }, [bulk, bulkConfirmationPayload?.bulkOrderId, fleetOperator]);
 
   // Handle add address based on user role
   const handleAddAddress = useCallback(() => {
@@ -842,6 +860,19 @@ const BookingScreen = () => {
                     total={getPayableTotal()}
                     coolingOffConsent={coolingOffConsent}
                     onCoolingOffConsentChange={setCoolingOffConsent}
+                    subscriptionCoverageMessage={
+                      serverQuote?.subscription_coverage?.covers_vehicle === false
+                        ? serverQuote.subscription_coverage.message
+                        : null
+                    }
+                    onUpgradeSubscriptionPress={
+                      serverQuote?.subscription_coverage?.covers_vehicle === false
+                        ? () =>
+                            router.push(
+                              "/main/settings/SubscriptionPlanScreen" as const,
+                            )
+                        : undefined
+                    }
                   />
                 </>
               )}
@@ -886,9 +917,12 @@ const BookingScreen = () => {
               : isProcessingPayment &&
                   paymentConfirmationStatus === "confirming"
                 ? "Confirming Payment..."
-                : isLoading
-                  ? "Creating Booking..."
-                  : "Confirm Booking"
+                : isProcessingPayment &&
+                    paymentConfirmationStatus === "assigning"
+                  ? "Assigning your detailer..."
+                  : isLoading
+                    ? "Creating Booking..."
+                    : "Confirm Booking"
           }
           variant="medium"
           onPress={handleBookingConfirmation}
@@ -940,12 +974,22 @@ const BookingScreen = () => {
   );
 
   const handleBulkPayNow = useCallback(async () => {
+    if (bulk.numberOfVehicles < MIN_BULK_VEHICLES) {
+      setAlertConfig({
+        isVisible: true,
+        title: "Too few vehicles",
+        message: "Bulk bookings need at least 2 vehicles.",
+        type: "error",
+        onConfirm: () => dismissAlert(setAlertConfig),
+      });
+      return;
+    }
     const bookingReference = `BULK${Date.now()}${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
     const bookingData = bulk.buildBulkBookingData(bookingReference);
     try {
       const result = await openPaymentSheet(
         bulk.total,
-        "Prisma Valet",
+        "Prisma Car Care",
         bookingReference,
         bookingData,
         undefined,
@@ -971,6 +1015,27 @@ const BookingScreen = () => {
   ]);
 
   const handleBulkPayLater = useCallback(async () => {
+    if (bulk.numberOfVehicles < MIN_BULK_VEHICLES) {
+      setAlertConfig({
+        isVisible: true,
+        title: "Too few vehicles",
+        message: "Bulk bookings need at least 2 vehicles.",
+        type: "error",
+        onConfirm: () => dismissAlert(setAlertConfig),
+      });
+      return;
+    }
+    if (invoiceLater && !invoiceLater.allowed) {
+      setAlertConfig({
+        isVisible: true,
+        title: "Invoice later unavailable",
+        message: invoiceLater.message || "Invoice later is not available. You can still pay now.",
+        type: "error",
+        onConfirm: () => dismissAlert(setAlertConfig),
+      });
+      setBulkPaymentOption("pay_now");
+      return;
+    }
     const bookingReference = `BULK${Date.now()}${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
     const bookingData = bulk.buildBulkBookingData(bookingReference);
     setIsBulkInvoiceSubmitting(true);
@@ -1009,6 +1074,7 @@ const BookingScreen = () => {
   }, [
     bulk,
     createBulkOrderInvoiceLater,
+    invoiceLater,
     setAlertConfig,
     setBulkConfirmedModal,
   ]);
@@ -1052,11 +1118,23 @@ const BookingScreen = () => {
 
           <StyledTextInput
             label="Number of vehicles"
-            placeholder="Enter the number of vehicles"
-            value={String(bulk.numberOfVehicles)}
+            placeholder="Minimum 2 vehicles"
+            info={
+              bulk.numberOfVehicles > 0 && bulk.numberOfVehicles < MIN_BULK_VEHICLES
+                ? "Enter at least 2 vehicles to continue."
+                : "Minimum 2 vehicles."
+            }
+            value={
+              bulk.numberOfVehicles > 0 ? String(bulk.numberOfVehicles) : ""
+            }
             onChangeText={(t) =>
               bulk.setNumberOfVehicles(Math.max(0, parseInt(t, 10) || 0))
             }
+            onEndEditing={() => {
+              if (bulk.numberOfVehicles < MIN_BULK_VEHICLES) {
+                bulk.setNumberOfVehicles(MIN_BULK_VEHICLES);
+              }
+            }}
             keyboardType="number-pad"
             autoCapitalize="none"
             autoCorrect={false}
@@ -1094,7 +1172,7 @@ const BookingScreen = () => {
                     },
                   ]}
                 >
-                  Additional 15% surcharge for SUV / MPV cleaning
+                  Additional 20% surcharge for SUV / MPV cleaning
                 </StyledText>
               </View>
               <CircleCheckbox
@@ -1256,7 +1334,7 @@ const BookingScreen = () => {
                     variant="bodySmall"
                     style={{ color: textColor, marginTop: 4 }}
                   >
-                    SUV / MPV surcharge (15%): +€{bulk.suvSurcharge.toFixed(2)}
+                    SUV / MPV surcharge (20%): +€{bulk.suvSurcharge.toFixed(2)}
                   </StyledText>
                 )}
                 <StyledText
@@ -1304,9 +1382,13 @@ const BookingScreen = () => {
                     bulkPaymentOption === "pay_later" && {
                       backgroundColor: primaryPurpleColor,
                     },
+                    !invoiceLaterAllowed && { opacity: 0.45 },
                   ]}
-                  onPress={() => setBulkPaymentOption("pay_later")}
-                  disabled={isBulkInvoiceSubmitting}
+                  onPress={() => {
+                    if (!invoiceLaterAllowed) return;
+                    setBulkPaymentOption("pay_later");
+                  }}
+                  disabled={isBulkInvoiceSubmitting || !invoiceLaterAllowed}
                 >
                   <StyledText
                     variant="bodyMedium"
@@ -1327,10 +1409,33 @@ const BookingScreen = () => {
                   { color: textColor, marginTop: 8, marginBottom: 4 },
                 ]}
               >
-                {bulkPaymentOption === "pay_now"
-                  ? "Pay with card now. Your booking is confirmed after payment succeeds."
-                  : "We will email a Stripe invoice (due in 30 days). Your booking is confirmed now; pay when it suits your accounts team."}
+                {!invoiceLaterAllowed
+                  ? invoiceLater?.message ||
+                    "Invoice later needs an active fleet subscription. You can still pay now."
+                  : bulkPaymentOption === "pay_now"
+                    ? "Pay with card now. Your booking is confirmed after payment succeeds."
+                    : "We will email a Stripe invoice (due in 30 days). Your booking is confirmed now; pay when it suits your accounts team. Trialing fleets can use this too."}
               </StyledText>
+              {!invoiceLaterAllowed && invoiceLater?.code === "OVERDUE_INVOICE" ? (
+                <StyledButton
+                  title="View invoices"
+                  variant="tonal"
+                  onPress={() =>
+                    router.push("/main/settings/InvoicesScreen" as const)
+                  }
+                />
+              ) : null}
+              {!invoiceLaterAllowed &&
+              invoiceLater?.code === "FLEET_SUBSCRIPTION_REQUIRED" &&
+              user?.is_fleet_owner ? (
+                <StyledButton
+                  title="Subscribe"
+                  variant="tonal"
+                  onPress={() =>
+                    router.push("/main/settings/SubscriptionPlanScreen" as const)
+                  }
+                />
+              ) : null}
               <View
                 style={[
                   styles.bulkConsentSection,
@@ -1409,7 +1514,7 @@ const BookingScreen = () => {
         { backgroundColor, paddingBottom: insets.bottom + 30 },
       ]}
     >
-      {isBulkEligible && (
+      {isBulkEligible && !fleetOperator && (
         <View
           style={[
             styles.bulkToggleRow,
@@ -1509,7 +1614,7 @@ const BookingScreen = () => {
               }}
               disabled={
                 (bulkStep === 1 &&
-                  (!bulk.selectedServiceType || bulk.numberOfVehicles < 1)) ||
+                  (!bulk.selectedServiceType || bulk.numberOfVehicles < MIN_BULK_VEHICLES)) ||
                 (bulkStep === 2 && !bulk.selectedValetType) ||
                 (bulkStep === 3 &&
                   (!bulk.selectedDate || !bulk.selectedAddress))
@@ -1606,7 +1711,9 @@ const BookingScreen = () => {
                   ? "Processing Payment..."
                   : paymentConfirmationStatus === "confirming"
                     ? "Confirming Payment..."
-                    : "Processing..."}
+                    : paymentConfirmationStatus === "assigning"
+                      ? "Assigning your detailer..."
+                      : "Processing..."}
               </StyledText>
               <StyledText
                 variant="bodyMedium"
@@ -1616,7 +1723,9 @@ const BookingScreen = () => {
                   ? "Please wait while we process your payment"
                   : paymentConfirmationStatus === "confirming"
                     ? "Waiting for payment confirmation..."
-                    : "Please wait..."}
+                    : paymentConfirmationStatus === "assigning"
+                      ? "Payment received. Finding an available detailer..."
+                      : "Please wait..."}
               </StyledText>
             </View>
           }

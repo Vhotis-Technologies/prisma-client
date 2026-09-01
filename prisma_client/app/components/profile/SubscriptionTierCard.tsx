@@ -3,7 +3,7 @@ import { View, StyleSheet, Pressable } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useThemeColor } from "@/hooks/useThemeColor";
 import StyledText from "../helpers/StyledText";
-import { SubscriptionTierProps } from "@/app/interfaces/SubscriptionInterfaces";
+import { SubscriptionTierProps, B2cVehicleCategory } from "@/app/interfaces/SubscriptionInterfaces";
 
 interface SubscriptionTierCardProps {
   tier: SubscriptionTierProps;
@@ -11,6 +11,8 @@ interface SubscriptionTierCardProps {
   onSelect: () => void;
   selectedBillingCycle: "monthly" | "yearly";
   onBillingCycleChange: (cycle: "monthly" | "yearly") => void;
+  /** When set, price comes from pricesByVehicleCategory for that class. */
+  vehicleCategory?: B2cVehicleCategory;
   canStartTrial?: boolean;
   isEarlyAdopter?: boolean;
 }
@@ -21,6 +23,7 @@ const SubscriptionTierCard: React.FC<SubscriptionTierCardProps> = ({
   onSelect,
   selectedBillingCycle,
   onBillingCycleChange,
+  vehicleCategory,
   canStartTrial = false,
   isEarlyAdopter = false,
 }) => {
@@ -30,10 +33,15 @@ const SubscriptionTierCard: React.FC<SubscriptionTierCardProps> = ({
   const primaryColor = useThemeColor({}, "primary");
   const successColor = useThemeColor({}, "success");
 
+  const categoryPrices =
+    vehicleCategory && tier.pricesByVehicleCategory
+      ? tier.pricesByVehicleCategory[vehicleCategory]
+      : null;
+
   const currentPrice =
     selectedBillingCycle === "monthly"
-      ? tier.monthlyPrice
-      : tier.yearlyPrice;
+      ? (categoryPrices?.monthlyPrice ?? tier.monthlyPrice)
+      : (categoryPrices?.yearlyPrice ?? tier.yearlyPrice);
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat("en-US", {
@@ -201,6 +209,38 @@ const SubscriptionTierCard: React.FC<SubscriptionTierCardProps> = ({
           variant="labelLarge"
           children="Features:"
         />
+        {(tier.maxComplimentaryWashes ?? 0) > 0 && (
+          <View style={styles.featureItem}>
+            <Ionicons
+              name="checkmark-circle"
+              size={18}
+              color={successColor}
+              style={styles.featureIcon}
+            />
+            <StyledText
+              style={[styles.featureText, { color: textColor }]}
+              variant="bodySmall"
+              children={`${tier.maxComplimentaryWashes} complimentary Prisma Quick Sparkle wash${
+                tier.maxComplimentaryWashes === 1 ? "" : "es"
+              } / period`}
+            />
+          </View>
+        )}
+        {(tier.serviceDiscountPercent ?? 0) > 0 && (
+          <View style={styles.featureItem}>
+            <Ionicons
+              name="checkmark-circle"
+              size={18}
+              color={successColor}
+              style={styles.featureIcon}
+            />
+            <StyledText
+              style={[styles.featureText, { color: textColor }]}
+              variant="bodySmall"
+              children={`${tier.serviceDiscountPercent}% off paid bookings`}
+            />
+          </View>
+        )}
         {tier.features && tier.features.length > 0 ? (
           tier.features.map((feature, index) => (
             <View key={index} style={styles.featureItem}>
@@ -217,13 +257,13 @@ const SubscriptionTierCard: React.FC<SubscriptionTierCardProps> = ({
               />
             </View>
           ))
-        ) : (
+        ) : (tier.serviceDiscountPercent ?? 0) <= 0 && (tier.maxComplimentaryWashes ?? 0) <= 0 ? (
           <StyledText
             style={[styles.noFeatures, { color: textColor }]}
             variant="bodySmall"
             children="No features listed"
           />
-        )}
+        ) : null}
       </View>
 
       {!isSelected && (

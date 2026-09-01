@@ -9,6 +9,7 @@ Payment and Stripe webhook views for Prisma Car Care.
 - ``create_bulk_order_invoice_later`` — BulkOrder with Stripe Invoice (pay later) + detailer bulk job.
 - ``apply_winner_voucher`` / ``apply_gift_voucher`` — validate codes and return checkout amounts.
 - ``get_bulk_invoice_checkout`` / ``get_my_bulk_invoices`` — fleet/partner bulk invoice pay & list.
+- ``get_invoice_later_eligibility`` — fleet subscription + overdue invoice gate for pay later.
 - ``confirm_payment_intent`` / ``check_payment_status`` / ``get_refund_status`` — polling and support.
 
 **StripeWebhookView** (unsigned POST, signature-verified):
@@ -28,14 +29,14 @@ See docs/BOOKING_FLOW.md for the full booking flow.
 """
 from rest_framework.response import Response
 from rest_framework import status
-from main.tasks import send_push_notification, publish_booking_rescheduled
+from main.tasks import send_push_notification, publish_booking_cancelled, publish_booking_rescheduled
 from main.services.NotificationServices import NotificationService
 import stripe
 from django.conf import settings
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from datetime import datetime, timedelta, timezone as dt_timezone
 from django.utils import timezone
-from django.db import transaction
+from django.db import transaction, IntegrityError
 from django.db.models import Q
 from django.utils.decorators import method_decorator
 from django_ratelimit.decorators import ratelimit
@@ -47,16 +48,21 @@ from main.models import (
     Vehicle, ValetType, ServiceType, AddOns, LoyaltyProgram, Branch, ReferralAttribution, WinnerVoucher,
     Fleet,
 )
-from main.utils.branch_spend import get_branch_spend_for_period
+from main.services.branch_spend import get_branch_spend_for_period
 from main.utils.bulk_invoice import serialize_bulk_order_invoice_list
-from main.utils.booking_quote import (
+from main.services.booking_quote import (
+    expected_bulk_total_from_booking_data,
+    expected_bulk_payable_from_booking_data,
+    record_bulk_complimentary_usage,
     validate_booking_financials,
+    validate_bulk_booking_financials,
     validate_complimentary_choice,
     consume_complimentary_quick_sparkle,
     is_quick_sparkle_service_name,
 )
-from main.utils.gift_voucher import (
+from main.services.gift_voucher import (
     compute_gift_discount,
+    gift_purchase_amount_error,
     gift_voucher_eligible_for_checkout,
     gift_voucher_validity_issue,
     gift_voucher_validity_user_message,
@@ -65,7 +71,7 @@ from main.utils.gift_voucher import (
 )
 
 
-from main.utils.winner_voucher import (
+from main.services.winner_voucher import (
     normalize_winner_code,
     voucher_eligible_for_checkout,
     winner_voucher_validity_issue,
@@ -76,7 +82,9 @@ from main.utils.winner_voucher import (
     redeem_winner_voucher_for_booking,
 )
 
-from main.utils.bulk_appointments import create_bulk_appointments
+from main.services.bulk_appointments import create_bulk_appointments
+from main.utils.subscription_invoice import subscription_invoice_is_renewal
+from main.utils.legal_urls import client_web_url
 import json
 import re
 import time
@@ -131,6 +139,122 @@ def _stripe_object_to_dict(obj):
     return obj
 
 
+def refund_payment_intent_for_slot_conflict(payment_intent_id, booking_reference, refund_reason):
+    """
+    Refund a PaymentIntent after the detailer API rejected the slot at booking time.
+
+    This is not a crew cancellation — crews cannot cancel jobs from their app.
+    Already-refunded charges count as success so Stripe webhook retries stay idempotent.
+    Other Stripe or network failures raise so the webhook can return 500 and retry.
+    """
+    stripe.Refund.create(
+        payment_intent=payment_intent_id,
+        reason='requested_by_customer',
+        metadata={
+            'booking_reference': booking_reference or '',
+            'refund_reason': refund_reason,
+        },
+    )
+
+
+def _slot_conflict_already_refunded(exc):
+    """True when Stripe rejected the refund because the charge is already refunded."""
+    code = getattr(exc, 'code', None) or ''
+    if code == 'charge_already_refunded':
+        return True
+    err = str(exc).lower()
+    return 'already' in err and 'refund' in err
+
+
+def try_refund_payment_intent(payment_intent_id, booking_reference, refund_reason):
+    """
+    Attempt a Stripe refund. True if created or already refunded; False if it failed.
+
+    Callers should return HTTP 500 on False so Stripe retries the webhook.
+    """
+    try:
+        refund_payment_intent_for_slot_conflict(
+            payment_intent_id, booking_reference, refund_reason
+        )
+        return True
+    except stripe.error.InvalidRequestError as exc:
+        if _slot_conflict_already_refunded(exc):
+            return True
+        logger.warning(
+            'refund failed for PI %s (%s): %s',
+            payment_intent_id,
+            refund_reason,
+            exc,
+        )
+        return False
+    except Exception as exc:
+        logger.warning(
+            'refund failed for PI %s (%s): %s',
+            payment_intent_id,
+            refund_reason,
+            exc,
+        )
+        return False
+
+
+def _existing_free_booking_response(booking_reference):
+    """Return the success payload for an already-completed free ($0) booking, or None.
+
+    Used to make the zero-amount checkout paths idempotent on ``booking_reference``:
+    a duplicate submission (double-tap, client retry after a dropped response) that
+    reuses the same reference should return the original result instead of creating
+    a second ``BookedAppointment`` and consuming a second complimentary wash / voucher.
+    """
+    existing = BookedAppointment.objects.filter(booking_reference=booking_reference).first()
+    if not existing:
+        return None
+    return Response({
+        'free_booking': True,
+        'booking_reference': booking_reference,
+        'success': True,
+        'appointment_id': str(existing.id),
+    }, status=status.HTTP_200_OK)
+
+
+def _create_pending_booking_idempotent(booking_reference, user, booking_data, detailer_booking_data, expires_at):
+    """
+    Create a ``PendingBooking`` for a zero-amount checkout, guarding against duplicate
+    submissions that reuse the same ``booking_reference``.
+
+    ``booking_reference`` is unique on both ``PendingBooking`` and ``BookedAppointment``,
+    so a genuine duplicate (double-tap before the UI disables the button, or a retried
+    request after a dropped response) is caught here instead of silently proceeding to
+    create a second booking / consume a second complimentary wash.
+
+    Returns:
+        (pending_booking, duplicate_response) — exactly one is not None. When a
+        duplicate is detected, ``duplicate_response`` is either the original booking's
+        success payload (if it already completed) or a 409 telling the caller the
+        request is already being processed.
+    """
+    duplicate_response = _existing_free_booking_response(booking_reference)
+    if duplicate_response is not None:
+        return None, duplicate_response
+    try:
+        pending_booking = PendingBooking.objects.create(
+            booking_reference=booking_reference,
+            user=user,
+            booking_data=booking_data,
+            detailer_booking_data=detailer_booking_data,
+            payment_status='succeeded',
+            expires_at=expires_at,
+        )
+    except IntegrityError:
+        duplicate_response = _existing_free_booking_response(booking_reference)
+        if duplicate_response is not None:
+            return None, duplicate_response
+        return None, Response(
+            {'error': 'This booking is already being processed. Please check your bookings before retrying.'},
+            status=status.HTTP_409_CONFLICT,
+        )
+    return pending_booking, None
+
+
 def create_booking_from_pending(pending_booking):
     """
     Create actual BookedAppointment from pending booking data.
@@ -138,7 +262,9 @@ def create_booking_from_pending(pending_booking):
     Shared by PaymentView (free Quick Sparkle path) and StripeWebhookView (post-payment).
     Resolves vehicle, valet_type, service_type, address (or branch→address), parses date/time,
     applies free Quick Sparkle (loyalty or partner) if in booking_data, creates BookedAppointment,
-    attaches add-ons, sends push notification. Does not call detailer app.
+    attaches add-ons. Members get a payment-received push. Guests get a hashed results token
+    instead (the confirmation email later replaces it with the emailed secret). Does not call
+    the detailer app.
 
     Args:
         pending_booking: PendingBooking instance with booking_data and user.
@@ -276,13 +402,24 @@ def create_booking_from_pending(pending_booking):
         appointment.add_ons.set(addons)
         appointment.save()
 
-    # Send push notification
-    send_push_notification.delay(
-        user.id,
-        "Booking Confirmed! 🎉",
-        f"Your booking for {appointment_date} has been confirmed. Payment received!",
-        "booking_confirmed"
-    )
+    if getattr(user, "is_guest", False):
+        # Confirmation email will revoke this and email a fresh raw token.
+        try:
+            from main.services.guest import issue_guest_access_token
+
+            issue_guest_access_token(appointment)
+        except Exception:
+            logger.exception(
+                "Failed to issue guest access token for %s",
+                pending_booking.booking_reference,
+            )
+    else:
+        send_push_notification.delay(
+            user.id,
+            "Payment received",
+            f"Payment received for {appointment_date}. We're assigning your detailer.",
+            "booking_confirmed"
+        )
 
     return appointment
 
@@ -382,6 +519,12 @@ def build_detailer_payload_from_booking_data(booking_data, user, booking_referen
     # start_time + duration -> end_time
     start_time_str = booking_data.get('start_time', '00:00:00')
     duration_minutes = booking_data.get('duration') or 0
+    if not duration_minutes and isinstance(service_type, dict):
+        duration_minutes = service_type.get('duration') or 0
+    try:
+        duration_minutes = int(duration_minutes)
+    except (TypeError, ValueError):
+        duration_minutes = 0
     try:
         try:
             start_dt = datetime.strptime(start_time_str, '%H:%M:%S.%f')
@@ -436,6 +579,7 @@ def build_detailer_payload_from_booking_data(booking_data, user, booking_referen
         'booking_date': date_str,
         'start_time': start_time_str,
         'end_time': end_time_str,
+        'duration': duration_minutes,
         'loyalty_tier': loyalty_tier,
         'loyalty_benefits': loyalty_benefits,
         'is_express_service': booking_data.get('is_express_service', False),
@@ -549,6 +693,13 @@ def build_bulk_detailer_payload(booking_data, user, booking_reference):
         number_of_vehicles = max(0, int(booking_data.get('number_of_vehicles', 0)))
     except (TypeError, ValueError):
         number_of_vehicles = 0
+    duration_minutes = booking_data.get('duration') or booking_data.get('service_duration') or 0
+    if not duration_minutes and isinstance(service_type, dict):
+        duration_minutes = service_type.get('duration') or 0
+    try:
+        duration_minutes = int(duration_minutes)
+    except (TypeError, ValueError):
+        duration_minutes = 0
     return {
         'booking_reference': booking_reference,
         'address': addr.get('address', ''),
@@ -562,6 +713,7 @@ def build_bulk_detailer_payload(booking_data, user, booking_reference):
         'end_time': end_time,
         'service_type': service_type_name,
         'valet_type': valet_type_name,
+        'duration': duration_minutes,
         'number_of_vehicles': number_of_vehicles,
         'total_amount': total_amount,
         'client_name': getattr(user, 'name', '') or '',
@@ -572,7 +724,42 @@ def build_bulk_detailer_payload(booking_data, user, booking_reference):
     }
 
 
-def try_create_bulk_booking_on_detailer(pending_booking_or_bulk_order):
+def _rollback_invoice_later_after_crew(bulk_order, invoice=None):
+    """
+    Cancel local invoice-later rows and crew jobs after Stripe invoice failure.
+
+    Voids a draft/open invoice when possible, publishes ``booking_cancelled`` per
+    appointment so the crew subscriber drops the jobs, then marks the bulk order cancelled.
+    """
+    if invoice is not None:
+        try:
+            invoice_id = getattr(invoice, "id", None) or (invoice.get("id") if isinstance(invoice, dict) else None)
+            if invoice_id:
+                stripe.Invoice.void_invoice(invoice_id)
+        except Exception:
+            logger.exception(
+                "Failed to void Stripe invoice after invoice-later rollback %s",
+                bulk_order.booking_reference,
+            )
+    appointments = BookedAppointment.objects.filter(bulk_order=bulk_order)
+    for apt in appointments:
+        if apt.status not in ("cancelled", "completed"):
+            apt.status = "cancelled"
+            apt.save(update_fields=["status"])
+        try:
+            publish_booking_cancelled.delay(apt.booking_reference)
+        except Exception:
+            logger.exception(
+                "Failed to publish booking_cancelled for invoice-later rollback %s",
+                apt.booking_reference,
+            )
+    bulk_order.payment_status = "cancelled"
+    bulk_order.save(update_fields=["payment_status"])
+    from main.models import FleetComplimentaryBooking
+    FleetComplimentaryBooking.objects.filter(bulk_order=bulk_order).delete()
+
+
+def try_create_bulk_booking_on_detailer(pending_booking_or_bulk_order, request_id=None):
     """
     POST bulk job to the detailer app (create_bulk_booking).
 
@@ -601,14 +788,30 @@ def try_create_bulk_booking_on_detailer(pending_booking_or_bulk_order):
         )
     if not payload:
         return (False, "Invalid bulk payload")
+    import time
+    from main.utils.detailer_client import detailer_request_headers
+    from main.utils.observability import log_timed, new_request_id
+    payload = dict(payload)
+    request_id = request_id or new_request_id()
+    payload["request_id"] = request_id
     detailer_app_url = getattr(settings, 'DETAILER_APP_URL', None) or getattr(settings, 'API_CONFIG', {}).get('detailerAppUrl')
     if not detailer_app_url:
         return (False, "Detailer app not configured")
     base = (detailer_app_url or "").rstrip("/")
     url = f"{base}/api/v1/booking/create_bulk_booking/"
+    started = time.monotonic()
     try:
-        response = requests.post(url, json=payload, headers={'Content-Type': 'application/json'}, timeout=60)
-        if response.status_code in [200, 201]:
+        response = requests.post(url, json=payload, headers=detailer_request_headers(), timeout=60)
+        ok = response.status_code in [200, 201]
+        log_timed(
+            "detailer.create_bulk_booking",
+            started,
+            booking_reference=payload.get("booking_reference"),
+            request_id=request_id,
+            http_status=response.status_code,
+            ok=ok,
+        )
+        if ok:
             body = response.json() if response.content else {}
             assigned_detailers = body.get("assigned_detailers")
             if not isinstance(assigned_detailers, list):
@@ -618,10 +821,18 @@ def try_create_bulk_booking_on_detailer(pending_booking_or_bulk_order):
         error_message = err_body.get('error', response.text or f"HTTP {response.status_code}")
         return (False, error_message)
     except Exception as e:
+        log_timed(
+            "detailer.create_bulk_booking",
+            started,
+            booking_reference=payload.get("booking_reference"),
+            request_id=request_id,
+            ok=False,
+            error=str(e),
+        )
         return (False, str(e))
 
 
-def try_create_booking_on_detailer(pending_booking):
+def try_create_booking_on_detailer(pending_booking, request_id=None):
     """
     Attempt to create a single job on the detailer app before confirming payment.
 
@@ -637,6 +848,7 @@ def try_create_booking_on_detailer(pending_booking):
             possibly empty), or ``(False, error_message)`` on failure.
     """
     import requests
+    from main.utils.detailer_client import detailer_request_headers
 
     detailer_data = pending_booking.detailer_booking_data
     if not detailer_data or not isinstance(detailer_data, dict):
@@ -648,6 +860,11 @@ def try_create_booking_on_detailer(pending_booking):
     if not detailer_data:
         return (False, "No detailer payload")
 
+    import time
+    from main.utils.observability import log_timed, new_request_id
+    detailer_data = dict(detailer_data)
+    request_id = request_id or new_request_id()
+    detailer_data["request_id"] = request_id
     if 'booking_reference' not in detailer_data:
         detailer_data['booking_reference'] = pending_booking.booking_reference
     # No separate accept step; ensure detailer receives job as accepted
@@ -659,14 +876,23 @@ def try_create_booking_on_detailer(pending_booking):
     if not detailer_app_url:
         return (False, "Detailer app not configured")
 
+    started = time.monotonic()
     try:
         base = (detailer_app_url or "").rstrip("/")
         url = f"{base}/api/v1/booking/create_booking/"
         response = requests.post(
             url,
             json=detailer_data,
-            headers={'Content-Type': 'application/json'},
+            headers=detailer_request_headers(),
             timeout=30
+        )
+        log_timed(
+            "detailer.create_booking",
+            started,
+            booking_reference=detailer_data.get("booking_reference"),
+            request_id=request_id,
+            http_status=response.status_code,
+            ok=response.status_code in [200, 201],
         )
 
         if response.status_code in [200, 201]:
@@ -688,6 +914,14 @@ def try_create_booking_on_detailer(pending_booking):
         return (False, error_message)
 
     except Exception as e:
+        log_timed(
+            "detailer.create_booking",
+            started,
+            booking_reference=detailer_data.get("booking_reference"),
+            request_id=request_id,
+            ok=False,
+            error=str(e),
+        )
         return (False, str(e))
 
 
@@ -727,7 +961,7 @@ def assign_detailers_to_booking(booking, assigned_detailers_list):
     if not assigned_detailers_list or not isinstance(assigned_detailers_list, list):
         return
     from main.models import DetailerProfile
-    from main.util.phone_utils import normalize_phone
+    from main.utils.phone_utils import normalize_phone
 
     saved_list = []
     first_profile = None
@@ -890,6 +1124,7 @@ class PaymentView(APIView):
         apply_gift_voucher (POST) — Validate gift voucher code; return discount and amount due.
         get_bulk_invoice_checkout (GET) — Hosted invoice URL; sync paid status from Stripe.
         get_my_bulk_invoices (GET) — List bulk orders / invoices for the current user.
+        get_invoice_later_eligibility (GET) — Whether the user may create an invoice-later bulk order.
         get_refund_status (GET) — RefundRecord list for a booking_reference.
         check_payment_status (GET) — PaymentTransaction or pending refund-by-slot status.
         confirm_payment_intent (POST) — Poll whether webhook created PaymentTransaction.
@@ -908,6 +1143,7 @@ class PaymentView(APIView):
         'create_gift_voucher_payment_sheet': 'create_gift_voucher_payment_sheet',
         'get_bulk_invoice_checkout': 'get_bulk_invoice_checkout',
         'get_my_bulk_invoices': 'get_my_bulk_invoices',
+        'get_invoice_later_eligibility': 'get_invoice_later_eligibility',
     }
 
     def get(self, request, *args, **kwargs):
@@ -1074,6 +1310,19 @@ class PaymentView(APIView):
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+    def get_invoice_later_eligibility(self, request):
+        """
+        Whether the current user may create a bulk order billed via invoice later.
+
+        Fleet owners and branch admins need an active or trialing fleet subscription,
+        and must not have an unpaid invoice older than 30 days. Partners are not gated.
+        Pay-now bookings are never blocked by this check.
+        """
+        return Response(
+            Fleet.invoice_later_eligibility_for_user(request.user),
+            status=status.HTTP_200_OK,
+        )
+
     def get_bulk_invoice_checkout(self, request):
         """
         Return Stripe hosted invoice URL for an unpaid fleet/partner bulk invoice.
@@ -1196,6 +1445,11 @@ class PaymentView(APIView):
                 booking_reference = f"APT{int(time.time() * 1000)}{str(uuid.uuid4())[:8].upper()}"
 
             user = User.objects.get(id=request.user.id)
+            if getattr(user, "is_guest", False):
+                from main.services.guest import sanitize_guest_booking_data
+
+                # Guest wizard cannot opt into loyalty/complimentary/bulk; vouchers are allowed.
+                booking_data = sanitize_guest_booking_data(booking_data)
 
             amount = request.data.get('amount', 0)
             if amount == 0:
@@ -1211,14 +1465,15 @@ class PaymentView(APIView):
                     except ValueError as e:
                         return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
                     expires_at = timezone.now() + timedelta(hours=24)
-                    pending_booking = PendingBooking.objects.create(
-                        booking_reference=booking_reference,
-                        user=user,
-                        booking_data=booking_data,
-                        detailer_booking_data=detailer_booking_data or build_detailer_payload_from_booking_data(booking_data, user, booking_reference),
-                        payment_status='succeeded',
-                        expires_at=expires_at
+                    pending_booking, duplicate_response = _create_pending_booking_idempotent(
+                        booking_reference,
+                        user,
+                        booking_data,
+                        detailer_booking_data or build_detailer_payload_from_booking_data(booking_data, user, booking_reference),
+                        expires_at,
                     )
+                    if duplicate_response is not None:
+                        return duplicate_response
                     success, result = try_create_booking_on_detailer(pending_booking)
                     if not success:
                         pending_booking.delete()
@@ -1233,7 +1488,10 @@ class PaymentView(APIView):
                         try:
                             assign_detailers_to_booking(booking, result)
                         except Exception:
-                            pass
+                            logger.exception(
+                                "Failed to assign detailers after winner-voucher booking %s",
+                                booking_reference,
+                            )
                     pending_booking.delete()
                     return Response({
                         'free_booking': True,
@@ -1249,14 +1507,15 @@ class PaymentView(APIView):
                     except ValueError as e:
                         return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
                     expires_at = timezone.now() + timedelta(hours=24)
-                    pending_booking = PendingBooking.objects.create(
-                        booking_reference=booking_reference,
-                        user=user,
-                        booking_data=booking_data,
-                        detailer_booking_data=detailer_booking_data or build_detailer_payload_from_booking_data(booking_data, user, booking_reference),
-                        payment_status='succeeded',
-                        expires_at=expires_at
+                    pending_booking, duplicate_response = _create_pending_booking_idempotent(
+                        booking_reference,
+                        user,
+                        booking_data,
+                        detailer_booking_data or build_detailer_payload_from_booking_data(booking_data, user, booking_reference),
+                        expires_at,
                     )
+                    if duplicate_response is not None:
+                        return duplicate_response
                     success, result = try_create_booking_on_detailer(pending_booking)
                     if not success:
                         pending_booking.delete()
@@ -1271,7 +1530,10 @@ class PaymentView(APIView):
                         try:
                             assign_detailers_to_booking(booking, result)
                         except Exception:
-                            pass
+                            logger.exception(
+                                "Failed to assign detailers after gift-voucher booking %s",
+                                booking_reference,
+                            )
                     pending_booking.delete()
                     return Response({
                         'free_booking': True,
@@ -1293,14 +1555,15 @@ class PaymentView(APIView):
                         if err_fin:
                             return Response({'error': err_fin}, status=status.HTTP_400_BAD_REQUEST)
                         expires_at = timezone.now() + timedelta(hours=24)
-                        pending_booking = PendingBooking.objects.create(
-                            booking_reference=booking_reference,
-                            user=user,
-                            booking_data=booking_data,
-                            detailer_booking_data=detailer_booking_data or build_detailer_payload_from_booking_data(booking_data, user, booking_reference),
-                            payment_status='succeeded',
-                            expires_at=expires_at
+                        pending_booking, duplicate_response = _create_pending_booking_idempotent(
+                            booking_reference,
+                            user,
+                            booking_data,
+                            detailer_booking_data or build_detailer_payload_from_booking_data(booking_data, user, booking_reference),
+                            expires_at,
                         )
+                        if duplicate_response is not None:
+                            return duplicate_response
                         success, result = try_create_booking_on_detailer(pending_booking)
                         if not success:
                             pending_booking.delete()
@@ -1313,7 +1576,10 @@ class PaymentView(APIView):
                             try:
                                 assign_detailers_to_booking(booking, result)
                             except Exception:
-                                pass
+                                logger.exception(
+                                    "Failed to assign detailers after complimentary booking %s",
+                                    booking_reference,
+                                )
                         pending_booking.delete()
                         return Response({
                             'free_booking': True,
@@ -1371,6 +1637,14 @@ class PaymentView(APIView):
                 err_fin = validate_booking_financials(user, booking_data)
                 if err_fin:
                     return Response({'error': err_fin}, status=status.HTTP_400_BAD_REQUEST)
+                if isinstance(booking_data, dict) and booking_data.get('is_bulk') is True:
+                    payable, _applied = expected_bulk_payable_from_booking_data(user, booking_data)
+                    expected_cents = int((payable * Decimal("100")).quantize(Decimal("1")))
+                    if abs(int(amount) - expected_cents) > 2:
+                        return Response(
+                            {'error': 'Payment amount does not match the balance due. Refresh and try again.'},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
                 validate_winner_voucher_for_payment(user, booking_data, int(amount))
                 validate_gift_voucher_for_payment(user, booking_data, int(amount))
             except ValueError as e:
@@ -1442,7 +1716,9 @@ class PaymentView(APIView):
                 automatic_payment_methods={
                     'enabled': True,
                 },
-                setup_future_usage='off_session',
+                # Guests do not save cards; omit setup_future_usage so Stripe does not
+                # attach the payment method for off-session reuse.
+                **({} if getattr(user, 'is_guest', False) else {'setup_future_usage': 'off_session'}),
                 metadata=payment_intent_metadata
             )
             
@@ -1508,15 +1784,16 @@ class PaymentView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
+            amount_error = gift_purchase_amount_error(credit)
+            if amount_error:
+                return Response(
+                    {'error': amount_error},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
             amount_cents = int(
                 (credit * Decimal('100')).quantize(Decimal('1'), rounding=ROUND_HALF_UP)
             )
-            min_cents = 50  # Stripe practical minimum for card payments
-            if amount_cents < min_cents:
-                return Response(
-                    {'error': f'Minimum gift amount is {min_cents / 100:.2f}'},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
 
             try:
                 v_int = int(validity_days_raw)
@@ -1749,15 +2026,18 @@ class PaymentView(APIView):
         """
         Create a bulk order billed via Stripe Invoice (pay later) and notify the detailer app.
 
-        Creates BulkOrder with payment_status=invoice_later, finalizes and emails a Stripe Invoice,
-        then POSTs create_bulk_booking to the detailer app. Branch spend limits apply for admins.
+        Creates BulkOrder appointments, POSTs create_bulk_booking to crew first, then
+        finalizes and emails a Stripe Invoice. Crew failure returns 409 (local rows deleted).
+        Invoice failure after crew success cancels local rows and crew jobs (502).
+        Branch spend limits apply for admins.
 
         Args:
             request.data: booking_data (or root body), optional booking_reference.
 
         Returns:
-            Response: 201 with success, booking_reference, bulk_order_id; 403 spend limit;
-                502 if Stripe invoice fails.
+            Response: 201 with success, booking_reference, bulk_order_id; 403 spend limit,
+                missing fleet subscription, or overdue invoice; 409 if crew create fails;
+                502 if Stripe invoice fails after crew success.
         """
         try:
             booking_data = request.data.get('booking_data') or request.data
@@ -1767,7 +2047,35 @@ class PaymentView(APIView):
                                  booking_data.get('booking_reference') or
                                  f"BULK{int(time.time() * 1000)}{str(uuid.uuid4())[:8].upper()}")
             user = User.objects.get(id=request.user.id)
-            total_amount = Decimal(str(booking_data.get('total_amount', 0) or 0))
+            booking_data = dict(booking_data)
+            err_fin = validate_bulk_booking_financials(user, booking_data)
+            if err_fin:
+                return Response({'error': err_fin}, status=status.HTTP_400_BAD_REQUEST)
+            try:
+                payable, complimentary_applied = expected_bulk_payable_from_booking_data(user, booking_data)
+                gross_total = expected_bulk_total_from_booking_data(user, booking_data)
+            except ValueError as exc:
+                return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            except Exception:
+                return Response(
+                    {'error': 'Could not validate booking price. Refresh and try again.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            total_amount = payable
+            booking_data['total_amount'] = float(total_amount)
+            booking_data['complimentary_vehicles_applied'] = complimentary_applied
+            booking_data['complimentary_credit'] = float(gross_total - payable)
+
+            if total_amount > 0:
+                eligibility = Fleet.invoice_later_eligibility_for_user(user)
+                if not eligibility.get('allowed'):
+                    return Response(
+                        {
+                            'error': eligibility.get('message') or 'Invoice later is not available.',
+                            'code': eligibility.get('code'),
+                        },
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
             discount_applied = Decimal(str(booking_data.get('discount_applied', 0) or 0))
             number_of_vehicles = int(booking_data.get('number_of_vehicles', 0))
             address_id = (booking_data.get('address') or {}).get('id') if isinstance(booking_data.get('address'), dict) else booking_data.get('address_id')
@@ -1798,7 +2106,7 @@ class PaymentView(APIView):
             if user.is_fleet_owner and not fleet_obj and hasattr(user, 'owned_fleets'):
                 fleet_obj = user.owned_fleets.first()
             # Branch spend limit: block before creating invoice
-            if user.is_branch_admin:
+            if user.is_branch_admin and total_amount > 0:
                 branch = user.get_managed_branch()
                 if branch and branch.spend_limit is not None and branch.spend_limit > 0:
                     period = branch.spend_limit_period or 'monthly'
@@ -1811,6 +2119,7 @@ class PaymentView(APIView):
                             },
                             status=status.HTTP_403_FORBIDDEN,
                         )
+
             bulk_order = BulkOrder.objects.create(
                 booking_reference=booking_reference,
                 user=user,
@@ -1826,8 +2135,38 @@ class PaymentView(APIView):
             try:
                 create_bulk_appointments(bulk_order)
             except Exception:
-                pass
-            # Create Stripe Invoice and send to user.email; then send to detailer
+                logger.exception(
+                    "create_bulk_appointments failed for invoice-later %s",
+                    booking_reference,
+                )
+                bulk_order.delete()
+                return Response(
+                    {'error': 'Could not create appointments for this order. Please try again.'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+            success, assigned = try_create_bulk_booking_on_detailer(bulk_order)
+            if not success:
+                BookedAppointment.objects.filter(bulk_order=bulk_order).delete()
+                bulk_order.delete()
+                return Response(
+                    {
+                        'error': 'This time slot is no longer available. Please choose another.',
+                        'detail': assigned,
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+            if assigned:
+                bulk_order.assigned_detailers = assigned
+                bulk_order.save(update_fields=['assigned_detailers'])
+                for apt in BookedAppointment.objects.filter(bulk_order=bulk_order):
+                    try:
+                        assign_detailers_to_booking(apt, assigned)
+                    except Exception:
+                        logger.exception(
+                            "Failed to assign detailers on invoice-later appointment %s",
+                            apt.booking_reference,
+                        )
+            invoice = None
             try:
                 country = 'Ireland'
                 if bulk_order.address:
@@ -1839,6 +2178,19 @@ class PaymentView(APIView):
                     else:
                         country = (bulk_order.order_data.get('country') or 'Ireland')
                 currency = 'gbp' if country == 'United Kingdom' else 'eur'
+
+                if float(bulk_order.total_amount) <= 0:
+                    record_bulk_complimentary_usage(user, booking_data, bulk_order)
+                    bulk_order.payment_status = 'succeeded'
+                    bulk_order.save(update_fields=['payment_status'])
+                    return Response({
+                        'success': True,
+                        'booking_reference': bulk_order.booking_reference,
+                        'bulk_order_id': bulk_order.id,
+                        'message': 'Complimentary Quick Sparkles cover this order. No payment is due.',
+                        'is_complimentary': True,
+                    }, status=status.HTTP_201_CREATED)
+
                 if hasattr(user, 'stripe_customer_id') and user.stripe_customer_id:
                     customer = stripe.Customer.retrieve(user.stripe_customer_id)
                 else:
@@ -1852,6 +2204,7 @@ class PaymentView(APIView):
                         user.save()
                 amount_cents = int(float(bulk_order.total_amount) * 100)
                 if amount_cents <= 0:
+                    _rollback_invoice_later_after_crew(bulk_order)
                     return Response({'error': 'Invalid amount'}, status=status.HTTP_400_BAD_REQUEST)
                 invoice = stripe.Invoice.create(
                     customer=customer.id,
@@ -1873,16 +2226,10 @@ class PaymentView(APIView):
                 stripe.Invoice.finalize_invoice(invoice.id)
                 stripe.Invoice.send_invoice(invoice.id)
                 bulk_order.stripe_invoice_id = invoice.id
-                bulk_order.save()
-                # Invoice created and email sent; send bulk order to detailer
-                success, assigned = try_create_bulk_booking_on_detailer(bulk_order)
-                if not success:
-                    pass
-                elif assigned:
-                    bulk_order.assigned_detailers = assigned
-                    bulk_order.save(update_fields=['assigned_detailers'])
-                    # Order and invoice already created; client can still pay. Log only.
+                bulk_order.save(update_fields=['stripe_invoice_id'])
+                record_bulk_complimentary_usage(user, booking_data, bulk_order)
             except stripe.StripeError as e:
+                _rollback_invoice_later_after_crew(bulk_order, invoice=invoice)
                 return Response(
                     {'error': f'Invoice could not be sent: {str(e)}'},
                     status=status.HTTP_502_BAD_GATEWAY,
@@ -1965,8 +2312,44 @@ class PaymentView(APIView):
             ).first()
             
             if payment_transaction:
+                booking = payment_transaction.booking
+                bulk_order = payment_transaction.bulk_order
+                if booking and booking.status == 'cancelled':
+                    refunded_pending = PendingBooking.objects.filter(
+                        stripe_payment_intent_id=payment_intent_id,
+                        slot_conflict_refunded_at__isnull=False,
+                    ).first()
+                    if refunded_pending:
+                        return Response({
+                            'confirmed': False,
+                            'payment_intent_id': payment_intent_id,
+                            'status': 'refunded_slot_unavailable',
+                            'message': 'This time slot was no longer available. Your payment has been refunded. Please choose another slot.',
+                        }, status=status.HTTP_200_OK)
+                if bulk_order and getattr(bulk_order, 'payment_status', None) == 'cancelled':
+                    refunded_pending = PendingBooking.objects.filter(
+                        stripe_payment_intent_id=payment_intent_id,
+                        slot_conflict_refunded_at__isnull=False,
+                    ).first()
+                    if refunded_pending:
+                        return Response({
+                            'confirmed': False,
+                            'payment_intent_id': payment_intent_id,
+                            'status': 'refunded_slot_unavailable',
+                            'message': 'This time slot was no longer available. Your payment has been refunded. Please choose another slot.',
+                        }, status=status.HTTP_200_OK)
+                needs_assignment = bool(booking or bulk_order)
+                assigned = False
+                if booking and isinstance(booking.assigned_detailers, list) and booking.assigned_detailers:
+                    assigned = True
+                if bulk_order and isinstance(bulk_order.assigned_detailers, list) and bulk_order.assigned_detailers:
+                    assigned = True
+                if not needs_assignment:
+                    assigned = True
                 return Response({
                     'confirmed': True,
+                    'assigned': assigned,
+                    'assigning': needs_assignment and not assigned,
                     'payment_intent_id': payment_intent_id,
                     'transaction_id': str(payment_transaction.id),
                     'booking_reference': payment_transaction.booking_reference,
@@ -2090,11 +2473,9 @@ class StripeWebhookView(APIView):
 
     payment_intent.succeeded:
         - Resolves PendingBooking from metadata.pending_booking_id.
-        - For single booking: try_create_booking_on_detailer; if fail, refund and return.
-          If success: create_booking_from_pending, assign_detailer_to_booking, create
-          PaymentTransaction, delete PendingBooking.
-        - For bulk (booking_data.is_bulk): create/update BulkOrder, try_create_bulk_booking_on_detailer,
-          create_bulk_appointments, create PaymentTransaction, delete PendingBooking.
+        - Creates the client appointment / BulkOrder and PaymentTransaction, then returns 200.
+        - Crew job create runs in Celery (``fulfill_paid_booking_on_detailer``); slot failure
+          refunds and cancels the appointment.
         - Other metadata types: fleet subscription (handled in separate methods). Deprecated
           vin_lookup intents are acknowledged without side effects.
 
@@ -2195,42 +2576,29 @@ class StripeWebhookView(APIView):
                     try:
                         pending_booking = PendingBooking.objects.get(id=pending_booking_id)
                     except PendingBooking.DoesNotExist:
+                        already = BookedAppointment.objects.filter(
+                            booking_reference=booking_reference
+                        ).exists() or BulkOrder.objects.filter(
+                            booking_reference=booking_reference
+                        ).exists()
+                        if already:
+                            return Response(
+                                {'status': 'booking already created'},
+                                status=status.HTTP_200_OK,
+                            )
                         return Response(
-                            {'error': 'Pending booking not found'}, 
-                            status=status.HTTP_404_NOT_FOUND
+                            {'error': 'Pending booking not found'},
+                            status=status.HTTP_404_NOT_FOUND,
                         )
-                    
-                    # Check if booking already created (idempotency)
-                    if pending_booking.payment_status == 'succeeded':
-                        return Response({'status': 'booking already created'}, status=status.HTTP_200_OK)
-                    
-                    # Check if booking already exists (in case webhook was called twice)
+
                     booking = None
                     bulk_order = None
                     is_bulk = isinstance(pending_booking.booking_data, dict) and pending_booking.booking_data.get('is_bulk') is True
 
                     if is_bulk:
-                        # Bulk pay-now: BulkOrder + detailer create_bulk_booking; refund if slot rejected.
                         try:
                             bulk_order = BulkOrder.objects.get(booking_reference=booking_reference)
                         except BulkOrder.DoesNotExist:
-                            success, assigned = try_create_bulk_booking_on_detailer(pending_booking)
-                            if not success:
-                                payment_intent_id = payment_intent.get('id')
-                                try:
-                                    stripe.Refund.create(
-                                        payment_intent=payment_intent_id,
-                                        reason='requested_by_customer',
-                                        metadata={
-                                            'booking_reference': booking_reference,
-                                            'refund_reason': 'bulk_slot_unavailable',
-                                        },
-                                    )
-                                except Exception as refund_err:
-                                    pass
-                                pending_booking.slot_conflict_refunded_at = timezone.now()
-                                pending_booking.save(update_fields=['slot_conflict_refunded_at'])
-                                return Response({'status': 'refunded_slot_unavailable'}, status=status.HTTP_200_OK)
                             bd = pending_booking.booking_data
                             user_for_bulk = pending_booking.user
                             address_id = (bd.get('address') or {}).get('id') if isinstance(bd.get('address'), dict) else bd.get('address_id')
@@ -2272,46 +2640,29 @@ class StripeWebhookView(APIView):
                                 discount_applied=Decimal(str(bd.get('discount_applied', 0) or 0)),
                                 number_of_vehicles=int(bd.get('number_of_vehicles', 0)),
                                 order_data=bd,
-                                assigned_detailers=assigned or [],
+                                assigned_detailers=[],
                             )
                             try:
                                 create_bulk_appointments(bulk_order)
-                            except Exception as e:
-                                pass
+                            except Exception:
+                                logger.exception(
+                                    "create_bulk_appointments failed for paid bulk %s",
+                                    booking_reference,
+                                )
                     else:
                         try:
                             booking = BookedAppointment.objects.get(booking_reference=booking_reference)
                         except BookedAppointment.DoesNotExist:
-                            # Single booking: detailer slot check first, then create_booking_from_pending.
-                            success, result = try_create_booking_on_detailer(pending_booking)
-                            if not success:
-                                error_message = result  # (False, error_message)
-                                # Slot conflict or other failure: refund and mark for client
-                                payment_intent_id = payment_intent.get('id')
-                                try:
-                                    stripe.Refund.create(
-                                        payment_intent=payment_intent_id,
-                                        reason='requested_by_customer',
-                                        metadata={
-                                            'booking_reference': booking_reference,
-                                            'refund_reason': 'slot_unavailable',
-                                        },
-                                    )
-                                except Exception as refund_err:
-                                    pass
-                                pending_booking.slot_conflict_refunded_at = timezone.now()
-                                pending_booking.save(update_fields=['slot_conflict_refunded_at'])
-                                return Response({'status': 'refunded_slot_unavailable'}, status=status.HTTP_200_OK)
-                            # Detailer accepted: create client booking and transaction
                             pending_booking.payment_status = 'succeeded'
-                            pending_booking.save()
+                            pending_booking.save(update_fields=['payment_status'])
                             booking = create_booking_from_pending(pending_booking)
-                            # Assign detailer(s) immediately from API response (express = 2, standard = 1)
-                            if result and isinstance(result, list):
-                                try:
-                                    assign_detailers_to_booking(booking, result)
-                                except Exception as assign_err:
-                                    pass
+
+                    if is_bulk and bulk_order:
+                        record_bulk_complimentary_usage(
+                            pending_booking.user,
+                            pending_booking.booking_data or {},
+                            bulk_order,
+                        )
 
                     if not is_bulk and booking:
                         wv = pending_booking.booking_data.get('winner_voucher_id')
@@ -2342,9 +2693,30 @@ class StripeWebhookView(APIView):
                             card_brand=card_details.get('brand'),
                             status='succeeded'
                         )
-                    
-                    pending_booking.delete()
-                    
+
+                    if pending_booking.payment_status != 'succeeded':
+                        pending_booking.payment_status = 'succeeded'
+                        pending_booking.save(update_fields=['payment_status'])
+
+                    from main.tasks.bookings.events import fulfill_paid_booking_on_detailer
+                    from main.utils.observability import log_timed, new_request_id
+                    request_id = new_request_id()
+                    webhook_started = time.monotonic()
+                    fulfill_paid_booking_on_detailer.delay(
+                        str(pending_booking.id),
+                        payment_intent_id,
+                        booking_id=str(booking.id) if booking else None,
+                        bulk_order_id=str(bulk_order.id) if bulk_order else None,
+                        request_id=request_id,
+                    )
+                    log_timed(
+                        "webhook.booking_fulfill_enqueued",
+                        webhook_started,
+                        booking_reference=booking_reference,
+                        request_id=request_id,
+                        is_bulk=is_bulk,
+                    )
+
                     return Response({'status': 'booking created successfully'}, status=status.HTTP_200_OK)
                     
                 except Exception as e:
@@ -2605,7 +2977,7 @@ class StripeWebhookView(APIView):
                 )
 
                 if next_ts:
-                    renewal_dt = datetime.fromtimestamp(int(next_ts), tz=timezone.utc)
+                    renewal_dt = datetime.fromtimestamp(int(next_ts), tz=dt_timezone.utc)
                     renewal_display = renewal_dt.strftime('%B %d, %Y')
                 else:
                     renewal_display = 'your next billing date'
@@ -2649,7 +3021,7 @@ class StripeWebhookView(APIView):
                 else 'Subscription'
             )
             if next_ts:
-                renewal_dt = datetime.fromtimestamp(int(next_ts), tz=timezone.utc)
+                renewal_dt = datetime.fromtimestamp(int(next_ts), tz=dt_timezone.utc)
                 renewal_iso = renewal_dt.isoformat()
             else:
                 renewal_iso = None
@@ -2705,7 +3077,7 @@ class StripeWebhookView(APIView):
 
             metadata = subscription_obj.get('metadata', {}) or {}
             subscription_db_id = metadata.get('subscription_id')
-            billing_id = metadata.get('billing_id')  # Only present for initial payment in metadata string
+            billing_id = metadata.get('billing_id')  # Sticky checkout id; not a renewal signal
             user_id = metadata.get('user_id')
             subscription_type = metadata.get('type')
 
@@ -2741,41 +3113,14 @@ class StripeWebhookView(APIView):
                     'error': 'Subscription not found'
                 }, status=status.HTTP_404_NOT_FOUND)
             
-            # Determine if this is an initial payment or renewal
-            is_renewal = billing_id is None
-            
-            if is_renewal:
-                # For renewals, create a new billing record
-                billing = BillingModel.objects.create(
-                    subscription=subscription,
-                    amount=Decimal(invoice.get('amount_paid', 0)) / 100,  # Convert from cents
-                    billing_date=timezone.now(),
-                    status='paid',
-                    transaction_id=invoice.get('id'),  # Store invoice ID
-                )
-                
-                # Extend subscription end_date based on billing cycle
-                billing_cycle = subscription.plan.billing_cycle
-                if billing_cycle == 'monthly':
-                    subscription.end_date = subscription.end_date + relativedelta(months=1)
-                elif billing_cycle == 'yearly':
-                    subscription.end_date = subscription.end_date + relativedelta(years=1)
-                else:
-                    # Default to monthly
-                    subscription.end_date = subscription.end_date + relativedelta(months=1)
-                if subscription_type == 'b2c_subscription':
-                    subscription.expiring_notice_sent_for_end_date = None
-                    subscription.complimentary_sparkles_used = 0
+            seed_billing = None
+            if billing_id:
+                seed_billing = BillingModel.objects.filter(id=billing_id).first()
+            is_renewal = subscription_invoice_is_renewal(
+                invoice.get('billing_reason'),
+                seed_billing_is_pending=bool(seed_billing and seed_billing.status == 'pending'),
+            )
 
-            else:
-                # For initial payment, get existing billing record
-                try:
-                    billing = BillingModel.objects.get(id=billing_id)
-                except BillingModel.DoesNotExist:
-                    return Response({
-                        'error': 'Billing record not found'
-                    }, status=status.HTTP_404_NOT_FOUND)
-            
             # Get payment intent from invoice
             payment_intent_id = invoice.get('payment_intent')
             payment_intent = None
@@ -2819,15 +3164,60 @@ class StripeWebhookView(APIView):
             existing_transaction = PaymentTransaction.objects.filter(
                 stripe_payment_intent_id=payment_intent_id_str
             ).first()
-            
-            if existing_transaction:
-                # Still update subscription and billing status
+
+            invoice_id = invoice.get('id')
+            invoice_keys = [
+                key for key in (invoice_id, payment_intent_id_str, f"inv_{invoice_id}")
+                if key
+            ]
+            billing_for_invoice = BillingModel.objects.filter(
+                subscription=subscription,
+                transaction_id__in=invoice_keys,
+            ).first()
+            renewal_already_recorded = bool(
+                is_renewal
+                and billing_for_invoice is not None
+                and (seed_billing is None or billing_for_invoice.id != seed_billing.id)
+            )
+
+            if not is_renewal:
+                if not seed_billing:
+                    return Response({
+                        'error': 'Billing record not found'
+                    }, status=status.HTTP_404_NOT_FOUND)
+                billing = seed_billing
+                if existing_transaction:
+                    subscription.status = 'active'
+                    subscription.save()
+                    billing.status = 'paid'
+                    billing.save()
+                    return Response({'status': 'subscription payment already recorded'}, status=status.HTTP_200_OK)
+            elif renewal_already_recorded:
                 subscription.status = 'active'
                 subscription.save()
-                billing.status = 'paid'
-                billing.save()
+                billing_for_invoice.status = 'paid'
+                billing_for_invoice.save()
                 return Response({'status': 'subscription payment already recorded'}, status=status.HTTP_200_OK)
-            
+            else:
+                billing = BillingModel.objects.create(
+                    subscription=subscription,
+                    amount=Decimal(invoice.get('amount_paid', 0)) / 100,
+                    billing_date=timezone.now(),
+                    status='paid',
+                    transaction_id=invoice_id,
+                )
+                billing_cycle = subscription.plan.billing_cycle
+                if billing_cycle == 'monthly':
+                    subscription.end_date = subscription.end_date + relativedelta(months=1)
+                elif billing_cycle == 'yearly':
+                    subscription.end_date = subscription.end_date + relativedelta(years=1)
+                else:
+                    subscription.end_date = subscription.end_date + relativedelta(months=1)
+                if subscription_type == 'b2c_subscription':
+                    subscription.expiring_notice_sent_for_end_date = None
+                    subscription.complimentary_sparkles_used = 0
+                subscription.save()
+
             # Create payment transaction record for subscription
             # Extract payment method details from payment intent or charge
             last_4_digits = None
@@ -2852,19 +3242,21 @@ class StripeWebhookView(APIView):
                         last_4_digits = card_details.get('last4')
                         card_brand = card_details.get('brand')
             
-            # Create PaymentTransaction
-            payment_transaction = PaymentTransaction.objects.create(
-                booking=None,  # Subscriptions don't have bookings
-                user=user,
-                booking_reference=None,  # Subscriptions don't have booking references
-                stripe_payment_intent_id=payment_intent_id_str,
-                transaction_type=subscription_type,
-                amount=Decimal(invoice.get('amount_paid', 0)) / 100,  # Convert from cents
-                currency=invoice.get('currency', 'eur'),
-                last_4_digits=last_4_digits,
-                card_brand=card_brand,
-                status='succeeded'
-            )
+            if existing_transaction:
+                payment_transaction = existing_transaction
+            else:
+                payment_transaction = PaymentTransaction.objects.create(
+                    booking=None,  # Subscriptions don't have bookings
+                    user=user,
+                    booking_reference=None,  # Subscriptions don't have booking references
+                    stripe_payment_intent_id=payment_intent_id_str,
+                    transaction_type=subscription_type,
+                    amount=Decimal(invoice.get('amount_paid', 0)) / 100,  # Convert from cents
+                    currency=invoice.get('currency', 'eur'),
+                    last_4_digits=last_4_digits,
+                    card_brand=card_brand,
+                    status='succeeded'
+                )
             
             # Link payment transaction to billing record
             billing.payment = payment_transaction
@@ -2884,8 +3276,8 @@ class StripeWebhookView(APIView):
             billing.status = 'paid'
             billing.save()
             
-            # Send trial ended email if this is the first payment after trial
-            if trial_just_ended and not is_renewal:
+            # Send trial ended email if this is the first paid invoice after trial
+            if trial_just_ended:
                 from main.tasks import send_trial_ended_email
                 from dateutil.relativedelta import relativedelta
                 
@@ -2991,12 +3383,16 @@ class StripeWebhookView(APIView):
                 try:
                     subscription = FleetSubscription.objects.get(id=subscription_db_id)
                     billing = SubscriptionBilling.objects.get(id=billing_id)
-                    subscription.status = 'active'
-                    subscription.save(update_fields=['status', 'updated_at'])
-                    billing.status = 'paid'
-                    billing.payment = payment_transaction
-                    billing.transaction_id = payment_intent_id
-                    billing.save(update_fields=['status', 'payment', 'transaction_id', 'updated_at'])
+                    # billing_id remains on Stripe subscription metadata after checkout.
+                    # Only activate the still-pending seed row; renewals are applied
+                    # by invoice.payment_succeeded so end_date is extended once.
+                    if billing.status == 'pending':
+                        subscription.status = 'active'
+                        subscription.save(update_fields=['status', 'updated_at'])
+                        billing.status = 'paid'
+                        billing.payment = payment_transaction
+                        billing.transaction_id = payment_intent_id
+                        billing.save(update_fields=['status', 'payment', 'transaction_id', 'updated_at'])
                 except FleetSubscription.DoesNotExist:
                     pass
                 except SubscriptionBilling.DoesNotExist:
@@ -3060,12 +3456,13 @@ class StripeWebhookView(APIView):
                 try:
                     subscription = B2CSubcription.objects.get(id=subscription_db_id)
                     billing = B2CSubcriptionBilling.objects.get(id=billing_id)
-                    subscription.status = 'active'
-                    subscription.save(update_fields=['status'])
-                    billing.status = 'paid'
-                    billing.payment = payment_transaction
-                    billing.transaction_id = payment_intent_id
-                    billing.save(update_fields=['status', 'payment', 'transaction_id'])
+                    if billing.status == 'pending':
+                        subscription.status = 'active'
+                        subscription.save(update_fields=['status'])
+                        billing.status = 'paid'
+                        billing.payment = payment_transaction
+                        billing.transaction_id = payment_intent_id
+                        billing.save(update_fields=['status', 'payment', 'transaction_id'])
                 except B2CSubcription.DoesNotExist:
                     pass
                 except B2CSubcriptionBilling.DoesNotExist:
@@ -3084,7 +3481,7 @@ class StripeWebhookView(APIView):
         """Fulfill gift voucher: code, dates, PaymentTransaction, link user, queue recipient email."""
         from main.models.voucher import generate_gift_voucher_code_candidate
         from main.tasks.emails.voucher_email import send_gift_voucher_email
-        from main.utils.gift_voucher import try_link_gift_voucher_existing_user
+        from main.services.gift_voucher import try_link_gift_voucher_existing_user
 
         try:
             payment_intent_id = payment_intent.get('id')
@@ -3258,38 +3655,36 @@ class StripeWebhookView(APIView):
                 return Response({'error': 'Bulk booking reschedule via fee is not supported'}, status=status.HTTP_400_BAD_REQUEST)
 
             if booking.status in ('completed', 'cancelled', 'in_progress'):
-                try:
-                    stripe.Refund.create(
-                        payment_intent=payment_intent_id,
-                        reason='requested_by_customer',
-                        metadata={'reason': 'reschedule_invalid_status'},
+                if not try_refund_payment_intent(
+                    payment_intent_id, booking_reference, 'reschedule_invalid_status',
+                ):
+                    return Response(
+                        {'error': 'Booking cannot be rescheduled and refund could not be completed'},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     )
-                except Exception:
-                    pass
                 return Response({'status': 'refunded_booking_not_reschedulable'}, status=status.HTTP_200_OK)
 
             events = EventsView()
             valid, err_msg = events._validate_reschedule_slot(booking, new_date, new_time)
             if not valid:
-                try:
-                    stripe.Refund.create(
-                        payment_intent=payment_intent_id,
-                        reason='requested_by_customer',
-                        metadata={
-                            'booking_reference': booking_reference,
-                            'refund_reason': 'reschedule_slot_unavailable',
-                        },
+                if not try_refund_payment_intent(
+                    payment_intent_id, booking_reference, 'reschedule_slot_unavailable',
+                ):
+                    return Response(
+                        {'error': 'Slot unavailable and refund could not be completed'},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     )
-                except Exception as refund_err:
-                    logger.warning("reschedule_fee refund failed: %s", refund_err)
                 return Response({'status': 'refunded_slot_unavailable'}, status=status.HTTP_200_OK)
 
             nd, nt, parse_err = events._parse_reschedule_date_time(new_date, new_time)
             if parse_err:
-                try:
-                    stripe.Refund.create(payment_intent=payment_intent_id, reason='requested_by_customer')
-                except Exception:
-                    pass
+                if not try_refund_payment_intent(
+                    payment_intent_id, booking_reference, 'reschedule_invalid_datetime',
+                ):
+                    return Response(
+                        {'error': 'Invalid reschedule time and refund could not be completed'},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    )
                 return Response({'status': 'refunded_invalid_datetime'}, status=status.HTTP_200_OK)
 
             payment_method_details = payment_intent.get('payment_method_details', {}) or {}
@@ -3377,7 +3772,7 @@ class StripeWebhookView(APIView):
             trial_end_timestamp = subscription.get('trial_end')
             if trial_end_timestamp:
                 from datetime import datetime
-                trial_end_date = datetime.fromtimestamp(trial_end_timestamp, tz=timezone.utc)
+                trial_end_date = datetime.fromtimestamp(trial_end_timestamp, tz=dt_timezone.utc)
             else:
                 trial_end_date = db_subscription.trial_end_date
             
@@ -3473,7 +3868,7 @@ class StripeWebhookView(APIView):
 
                     period_end_ts = subscription.get('current_period_end')
                     if period_end_ts:
-                        access_dt = datetime.fromtimestamp(int(period_end_ts), tz=timezone.utc)
+                        access_dt = datetime.fromtimestamp(int(period_end_ts), tz=dt_timezone.utc)
                         access_display = timezone.localtime(access_dt).strftime('%B %d, %Y')
                     else:
                         access_display = (
@@ -3720,14 +4115,9 @@ class StripeWebhookView(APIView):
             failed_amount = Decimal(invoice.get('amount_due', 0)) / 100
             retry_date = None
             if invoice.get('next_payment_attempt'):
-                retry_date = datetime.fromtimestamp(invoice.get('next_payment_attempt'), tz=timezone.utc)
+                retry_date = datetime.fromtimestamp(invoice.get('next_payment_attempt'), tz=dt_timezone.utc)
 
-            base = (getattr(settings, 'FRONTEND_BASE_URL', None) or '').rstrip('/')
-            update_payment_url = (
-                f"{base}/settings"
-                if base
-                else 'https://prismavalet.com'
-            )
+            update_payment_url = client_web_url('/settings')
 
             if subscription_type == 'b2c_subscription':
                 from main.models import B2CSubcription

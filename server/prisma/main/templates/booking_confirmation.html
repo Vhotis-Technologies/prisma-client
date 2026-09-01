@@ -7,8 +7,31 @@
 <div class="intro-text">
   Thank you for choosing Prisma Car Care. Your booking has been confirmed and we're looking forward to giving your vehicle the care it deserves.
   <br /><br />
+  {% if detailer_name %}
   Your assigned detailer <strong>{{ detailer_name }}</strong> will arrive at the scheduled time.
+  {% else %}
+  We will assign a detailer shortly and they will arrive at the scheduled time.
+  {% endif %}
 </div>
+
+{% if guest_results_url %}
+<p style="margin: 16px 0;">
+  <a href="{{ guest_results_url }}" class="btn-primary">View your booking</a>
+</p>
+<p class="intro-text">
+  After the job, photos and detailer notes will appear on that page.
+  {% if guest_results_expires_days %}
+  This link stays valid for {{ guest_results_expires_days }} days. Do not share it.
+  {% endif %}
+</p>
+{% if guest_claim_url %}
+<p class="intro-text">
+  Want to keep this vehicle and booking in the app?
+  <a href="{{ guest_claim_url }}">Create a password</a>
+  — your garage and history stay with this email.
+</p>
+{% endif %}
+{% endif %}
 
 <div class="details-card">
   <div class="details-title">Booking details</div>
@@ -43,8 +66,15 @@
 <div class="reminders-box">
   <div class="contact-title">Important</div>
   <div class="contact-text">
+    {% if guest_results_url %}
+    To change or cancel this booking, email
+    <a href="mailto:support@prismavalet.com" class="contact-link">support@prismavalet.com</a>
+    with your booking reference. For full details, see our
+    <a href="{{ terms_of_service_url }}" class="terms-of-service-link">Terms of Service</a>.
+    {% else %}
     Cancellation and rescheduling are allowed up to 12 hours before the appointment; cancellations are non-refundable. Cancelled appointments do not count towards promotions. For full details, see our terms of service.
     <a href="{{ terms_of_service_url }}" class="terms-of-service-link">Terms of Service</a>
+    {% endif %}
   </div>
 </div>
 

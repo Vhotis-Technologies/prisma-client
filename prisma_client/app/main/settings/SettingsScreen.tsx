@@ -453,7 +453,7 @@ const SettingScreen = () => {
           ) : (
             <SettingLink
               title="Manage subscription"
-              description="View or change your Prisma subscription"
+              description="View or change your Prisma Car Care subscription"
               onPress={() =>
                 router.push("/main/settings/SubscriptionPlanScreen" as any)
               }

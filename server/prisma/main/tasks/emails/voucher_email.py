@@ -10,7 +10,7 @@ from django.template.loader import render_to_string
 from django.utils import timezone
 
 from main.models import GiftVoucher, WinnerVoucher
-from main.util.graph_mail import send_mail as graph_send_mail
+from main.utils.graph_mail import send_mail as graph_send_mail
 
 
 def _voucher_email_window_context(voucher) -> dict:

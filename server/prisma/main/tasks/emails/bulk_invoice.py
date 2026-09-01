@@ -4,7 +4,7 @@ from django.template.loader import render_to_string
 from django.utils import timezone
 
 from main.models.vehicle import BulkOrder
-from main.util.graph_mail import send_mail as graph_send_mail
+from main.utils.graph_mail import send_mail as graph_send_mail
 
 
 @shared_task

@@ -5,9 +5,9 @@ import { useThemeColor } from "@/hooks/useThemeColor";
 import StyledText from "../helpers/StyledText";
 import StyledButton from "../helpers/StyledButton";
 import { AvailabilityCalendar } from "./AvailabilityCalendar";
-import { API_CONFIG } from "@/constants/Config";
 import { useAlertContext } from "@/app/contexts/AlertContext";
 import { useRescheduleBulkOrderMutation } from "@/app/store/api/fleetApi";
+import { useLazyCheckBulkCapacityQuery } from "@/app/store/api/eventApi";
 import type UpcomingAppointmentProps from "@/app/interfaces/DashboardInterfaces";
 import BulkOrderConfirmationModal from "./BulkOrderConfirmationModal";
 import { formatCurrency } from "@/app/utils/methods";
@@ -31,6 +31,7 @@ const BulkRescheduleComponent: React.FC<BulkRescheduleComponentProps> = ({
   const { setAlertConfig } = useAlertContext();
 
   const [rescheduleBulkOrder, { isLoading: isReschedulingBulk }] = useRescheduleBulkOrderMutation();
+  const [checkCapacity] = useLazyCheckBulkCapacityQuery();
 
   const [rescheduleNewDate, setRescheduleNewDate] = useState("");
   const [rescheduleOptions, setRescheduleOptions] = useState<
@@ -87,18 +88,15 @@ const BulkRescheduleComponent: React.FC<BulkRescheduleComponentProps> = ({
     setRescheduleLoading(true);
     setRescheduleOptions(null);
     try {
-      const url = new URL(`${API_CONFIG.detailerAppUrl}/api/v1/availability/check_bulk_capacity/`);
-      url.searchParams.append("date", rescheduleNewDate.trim().slice(0, 10));
-      url.searchParams.append("workload_minutes", String(workloadMinutes));
-      url.searchParams.append("service_duration", String(duration));
-      url.searchParams.append("country", country);
-      url.searchParams.append("city", city);
-      if (address?.latitude != null && address?.longitude != null) {
-        url.searchParams.append("latitude", String(address.latitude));
-        url.searchParams.append("longitude", String(address.longitude));
-      }
-      const response = await fetch(url.toString(), { method: "GET", headers: { "Content-Type": "application/json" } });
-      const data = await response.json();
+      const data = await checkCapacity({
+        date: rescheduleNewDate.trim().slice(0, 10),
+        workload_minutes: workloadMinutes,
+        service_duration: duration,
+        country,
+        city,
+        latitude: address?.latitude,
+        longitude: address?.longitude,
+      }).unwrap();
       if (data.error || !data.available) {
         setAlertConfig({
           isVisible: true,
@@ -133,7 +131,7 @@ const BulkRescheduleComponent: React.FC<BulkRescheduleComponentProps> = ({
     } finally {
       setRescheduleLoading(false);
     }
-  }, [appointment, rescheduleNewDate, setAlertConfig]);
+  }, [appointment, rescheduleNewDate, checkCapacity, setAlertConfig]);
 
   const confirmBulkReschedule = useCallback(async () => {
     const selected = rescheduleOptions?.[rescheduleSelectedIndex] ?? rescheduleSelectedOption;

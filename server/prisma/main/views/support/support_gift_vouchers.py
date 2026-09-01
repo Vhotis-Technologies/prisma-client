@@ -20,7 +20,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from main.models import GiftVoucher
-from main.utils.gift_voucher import try_link_gift_voucher_existing_user
+from main.services.gift_voucher import try_link_gift_voucher_existing_user
 from main.views.support.support_permission_access import SupportPermissionAccess
 
 

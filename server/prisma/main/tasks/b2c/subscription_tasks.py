@@ -61,7 +61,7 @@ def send_b2c_subscription_expiry_reminders():
 
 
 @shared_task(name='main.tasks.b2c.b2c_subscription_task.create_subscription')
-def create_subscription(user_id, tier_id, billing_cycle):
+def create_subscription(user_id, tier_id, billing_cycle, vehicle_category=None):
     """
     Admin/migration helper: create B2C subscription rows from catalog tier pricing.
 
@@ -71,6 +71,7 @@ def create_subscription(user_id, tier_id, billing_cycle):
         user_id: ``User`` primary key.
         tier_id: ``B2CSubcriptionTier`` primary key.
         billing_cycle: ``'monthly'`` or ``'yearly'``.
+        vehicle_category: ``'sedan'`` or ``'suv_mpv'`` (defaults to SUV/MPV).
 
     Returns:
         B2CSubcription: Newly created active subscription instance.
@@ -79,10 +80,12 @@ def create_subscription(user_id, tier_id, billing_cycle):
 
     user = User.objects.get(id=user_id)
     tier = B2CSubcriptionTier.objects.get(id=tier_id)
-    plan_price = tier.monthlyPrice if billing_cycle == 'monthly' else tier.yearly_price
+    category = vehicle_category or B2CSubcriptionPlan.VEHICLE_CATEGORY_SUV_MPV
+    plan_price = tier.list_price(category, billing_cycle)
     plan, _ = B2CSubcriptionPlan.objects.get_or_create(
         tier=tier,
         billing_cycle=billing_cycle,
+        vehicle_category=category,
         defaults={'price': plan_price},
     )
     plan.price = plan_price

@@ -1,1 +1,1 @@
-"""Shared helpers for bookings, payouts, Redis, legal URLs, support auth, and bulk operations."""
+"""Shared helpers: URLs, Redis, mail, media, phone, rate limits, and support auth."""

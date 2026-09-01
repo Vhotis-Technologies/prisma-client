@@ -6,13 +6,28 @@ Uses Microsoft Graph mail and ``email_legal_context`` for footer links.
 from celery import shared_task
 from django.template.loader import render_to_string
 from datetime import datetime
-from main.util.graph_mail import send_mail as graph_send_mail
+from main.utils.graph_mail import send_mail as graph_send_mail
 from main.models import BulkOrder
 from main.utils.legal_urls import email_legal_context
 
 
 @shared_task
-def send_booking_confirmation_email(user_email, customer_name, booking_reference, vehicle_make, vehicle_model, booking_date, start_time, service_type_name, valet_type_name, total_cost, detailer_name):
+def send_booking_confirmation_email(
+    user_email,
+    customer_name,
+    booking_reference,
+    vehicle_make,
+    vehicle_model,
+    booking_date,
+    start_time,
+    service_type_name,
+    valet_type_name,
+    total_cost,
+    detailer_name,
+        guest_results_url=None,
+        guest_results_expires_days=None,
+        guest_claim_url=None,
+):
     """
     Send single-booking confirmation email after detailer acceptance.
 
@@ -28,6 +43,9 @@ def send_booking_confirmation_email(user_email, customer_name, booking_reference
         valet_type_name: Valet tier label.
         total_cost: Decimal or numeric total.
         detailer_name: Assigned detailer name.
+        guest_results_url: Optional guest portal URL (time-limited photos link).
+        guest_results_expires_days: Lifetime of that link, in days.
+        guest_claim_url: Optional URL to set a password on the guest user.
 
     Returns:
         str: Success or failure message.
@@ -45,6 +63,9 @@ def send_booking_confirmation_email(user_email, customer_name, booking_reference
         valet_type_name=valet_type_name,
         total_cost=total_cost,
         detailer_name=detailer_name,
+        guest_results_url=guest_results_url or '',
+        guest_results_expires_days=guest_results_expires_days,
+        guest_claim_url=guest_claim_url or '',
     )
     html_message = render_to_string('booking_confirmation.html', context)
     try:
@@ -52,6 +73,45 @@ def send_booking_confirmation_email(user_email, customer_name, booking_reference
         return f"Booking confirmation email sent successfully to {user_email}"
     except Exception as e:
         return f"Failed to send booking confirmation email: {str(e)}"
+
+
+@shared_task
+def send_guest_photos_ready_email(
+    user_email,
+    customer_name,
+    booking_reference,
+    guest_results_url,
+    guest_results_expires_days=None,
+    guest_claim_url=None,
+):
+    """
+    Email a guest when job photos or health-check notes are ready.
+
+    Args:
+        user_email: Recipient address.
+        customer_name: Display name.
+        booking_reference: Booking ref for subject line.
+        guest_results_url: Time-limited results portal URL.
+        guest_results_expires_days: Link lifetime in days.
+        guest_claim_url: Optional URL to keep the vehicle in a full account.
+
+    Returns:
+        str: Success or failure message.
+    """
+    subject = f"Your photos are ready – #{booking_reference}"
+    context = email_legal_context(
+        customer_name=customer_name,
+        booking_reference=booking_reference,
+        guest_results_url=guest_results_url or "",
+        guest_results_expires_days=guest_results_expires_days,
+        guest_claim_url=guest_claim_url or "",
+    )
+    html_message = render_to_string("guest_photos_ready.html", context)
+    try:
+        graph_send_mail(subject, html_message, user_email)
+        return f"Guest photos-ready email sent successfully to {user_email}"
+    except Exception as e:
+        return f"Failed to send guest photos-ready email: {str(e)}"
 
 
 def _bulk_order_date_time(order_data):

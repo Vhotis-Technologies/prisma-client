@@ -14,6 +14,8 @@ import { useSnackbar } from "@/app/contexts/SnackbarContext";
 import { useThemeColor } from "@/hooks/useThemeColor";
 import { Ionicons } from "@expo/vector-icons";
 
+const MIN_GIFT_CREDIT_AMOUNT = 50;
+
 export default function GiftVoucherScreen() {
   const backgroundColor = useThemeColor({}, "background");
   const borderColor = useThemeColor({}, "borders");
@@ -46,9 +48,9 @@ export default function GiftVoucherScreen() {
       });
       return;
     }
-    if (!Number.isFinite(parsed) || parsed <= 0) {
+    if (!Number.isFinite(parsed) || parsed < MIN_GIFT_CREDIT_AMOUNT) {
       showSnackbarWithConfig({
-        message: "Enter a valid credit amount.",
+        message: `Minimum gift amount is ${MIN_GIFT_CREDIT_AMOUNT}.`,
         type: "error",
         duration: 3000,
       });
@@ -108,7 +110,7 @@ export default function GiftVoucherScreen() {
 
         <StyledTextInput
           label="Credit amount"
-          info="Recipient can use up to this amount on an eligible booking (same currency as your card charge)."
+          info={`Recipient can use up to this amount on an eligible booking. Minimum ${MIN_GIFT_CREDIT_AMOUNT}.`}
           value={amount}
           onChangeText={setAmount}
           keyboardType="decimal-pad"

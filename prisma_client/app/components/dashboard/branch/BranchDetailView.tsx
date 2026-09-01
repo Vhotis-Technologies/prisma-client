@@ -154,6 +154,14 @@ const BranchDetailView = ({
                   >
                     {admin.email}
                   </StyledText>
+                  {admin.invite_pending && (
+                    <StyledText
+                      variant="labelSmall"
+                      style={{ color: primaryColor, fontWeight: "600" }}
+                    >
+                      Invite pending
+                    </StyledText>
+                  )}
                   {admin.phone && (
                     <StyledText
                       variant="bodySmall"
@@ -509,6 +517,7 @@ export default BranchDetailView;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    paddingBottom: 60,
   },
   branchDetailCard: {
     margin: 10,

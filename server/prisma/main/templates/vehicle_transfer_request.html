@@ -29,11 +29,21 @@
   </div>
 </div>
 
+<p style="margin: 16px 0;">
+  <a href="{{ transfer_url }}" class="btn-primary">Review transfer request</a>
+</p>
+
 <div class="contact-box">
   <div class="contact-title">What to do</div>
   <div class="contact-text">
-    Open the Prisma Car Care app to view this request and approve or reject it. The vehicle stays in your garage until you respond.
+    Use the button above to approve or reject this request in your browser.
+    The vehicle stays in your garage until you respond. You can also open the Prisma Car Care app.
   </div>
+</div>
+
+<div class="contact-text" style="margin-bottom: 20px; word-break: break-all; font-size: 12px; color: #64748b;">
+  Or paste this link into your browser:<br />
+  <a href="{{ transfer_url }}" class="contact-link">{{ transfer_url }}</a>
 </div>
 
 <div class="closing">

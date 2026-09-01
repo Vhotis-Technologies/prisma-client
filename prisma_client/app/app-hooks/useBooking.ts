@@ -10,7 +10,7 @@ import {
   TimeSlot,
   CalendarDay,
 } from "@/app/interfaces/BookingInterfaces";
-import { useEffect, useCallback, useState } from "react";
+import { useEffect, useCallback, useState, useRef } from "react";
 import { MyVehiclesProps } from "@/app/interfaces/GarageInterface";
 import {
   MyAddressProps,
@@ -29,6 +29,7 @@ import {
   useMarkPromotionAsUsedMutation,
   useQuoteBookingMutation,
   useApplyWinnerVoucherMutation,
+  useLazyGetTimeslotsQuery,
 } from "@/app/store/api/eventApi";
 import type {
   BookingQuoteResponse,
@@ -45,7 +46,60 @@ import { router } from "expo-router";
 import { ReturnBookingProps } from "../interfaces/OtherInterfaces";
 import useDashboard from "./useDashboard";
 import usePayment from "./usePayment";
-import { API_CONFIG } from "@/constants/Config";
+type TimeslotsPayload = {
+  slots?: Array<{
+    is_available?: boolean;
+    start_time?: string;
+    end_time?: string;
+  }>;
+  available_slots?: Array<{
+    is_available?: boolean;
+    start_time?: string;
+    end_time?: string;
+  }>;
+  error?: string;
+};
+
+/**
+ * Transforms the raw get_timeslots response into UI slots, dropping any slot that has
+ * already passed. The server already excludes past same-day slots, but this is a cheap
+ * client-side safety net against clock drift or latency between fetch and render.
+ *
+ * @param data - Raw timeslots payload from the API
+ * @param forDate - The date the slots were requested for (used to detect "today")
+ */
+function transformTimeslotResponse(
+  data: TimeslotsPayload,
+  forDate?: dayjs.Dayjs
+): TimeSlot[] {
+  const raw = Array.isArray(data.slots)
+    ? data.slots
+    : Array.isArray(data.available_slots)
+      ? data.available_slots
+      : [];
+  const isToday = Boolean(forDate && forDate.isSame(dayjs(), "day"));
+  const now = new Date();
+  const transformed: TimeSlot[] = [];
+  for (const slot of raw) {
+    if (slot.is_available && slot.start_time && slot.end_time) {
+      if (isToday) {
+        const [hours, minutes] = slot.start_time.split(":").map(Number);
+        if (Number.isFinite(hours) && Number.isFinite(minutes)) {
+          const slotDate = new Date();
+          slotDate.setHours(hours, minutes, 0, 0);
+          if (slotDate <= now) continue;
+        }
+      }
+      transformed.push({
+        startTime: slot.start_time,
+        endTime: slot.end_time,
+        isAvailable: slot.is_available,
+        isSelected: false,
+      });
+    }
+  }
+  return transformed;
+}
 
 /**
  * Formats a Date object to local time string in HH:mm:ss.SSS format
@@ -115,6 +169,7 @@ const useBooking = () => {
   const [rescheduleBooking, { isLoading: isLoadingRescheduleBooking }] =
     useRescheduleBookingMutation();
   const [markPromotionAsUsed] = useMarkPromotionAsUsedMutation();
+  const [fetchTimeslots] = useLazyGetTimeslotsQuery();
 
   const [quoteBookingMut, { isLoading: bookingQuoteLoading }] =
     useQuoteBookingMutation();
@@ -139,7 +194,7 @@ const useBooking = () => {
   const [isProcessingPayment, setIsProcessingPayment] =
     useState<boolean>(false);
   const [paymentConfirmationStatus, setPaymentConfirmationStatus] = useState<
-    "pending" | "confirming" | "confirmed" | "failed"
+    "pending" | "confirming" | "assigning" | "confirmed" | "failed"
   >("pending");
 
   const [winnerVoucherApplied, setWinnerVoucherApplied] = useState<{
@@ -196,6 +251,10 @@ const useBooking = () => {
   const [selectedDay, setSelectedDay] = useState<dayjs.Dayjs>(
     dayjs(selectedDate)
   );
+  // Stable idempotency key for the current booking attempt. Generated once when the
+  // user confirms and reused across retries (network drop, accidental double-tap) so
+  // the server can recognize duplicate submissions instead of creating/charging twice.
+  const bookingReferenceRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (
@@ -203,8 +262,35 @@ const useBooking = () => {
       vehicleBodyStyleRequiresSuvMpvSurcharge(selectedVehicle.body_style)
     ) {
       setIsSUV(true);
+    } else {
+      setIsSUV(false);
     }
-  }, [selectedVehicle?.id, selectedVehicle?.body_style]);
+  }, [selectedVehicle]);
+
+  const resetBooking = useCallback(() => {
+    setSelectedVehicle(null);
+    setSelectedServiceType(null);
+    setSelectedValetType(null);
+    setSelectedAddress(null);
+    setSelectedDate(new Date());
+    setSpecialInstructions("");
+    setCurrentStep(1);
+    setIsSUV(false);
+    setIsExpressService(false);
+    setSelectedAddons([]);
+    setIsAddonModalVisible(false);
+    setIsConfirmationModalVisible(false);
+    setConfirmationBookingData(null);
+    setConfirmationBookingReference("");
+    setIsCancellationModalVisible(false);
+    setCancellationData(null);
+    setCancellationBookingReference("");
+    setWinnerVoucherApplied(null);
+    setWinnerVoucherCode("");
+    setServerQuote(null);
+    setComplimentarySparkleSource(null);
+    bookingReferenceRef.current = null;
+  }, []);
 
   /**
    * Helper function to calculate total service duration including addons
@@ -284,43 +370,16 @@ const useBooking = () => {
       setIsLoadingSlots(true);
 
       try {
-        const url = new URL(
-          `${API_CONFIG.detailerAppUrl}/api/v1/availability/get_timeslots/`
-        );
-        url.searchParams.append("date", date.format("YYYY-MM-DD"));
-        // Calculate total service duration including addon extra time
         const totalServiceDuration = calculateTotalServiceDuration();
-
-        url.searchParams.append(
-          "service_duration",
-          totalServiceDuration.toString()
-        );
-        url.searchParams.append("country", selectedAddress?.country || "");
-        url.searchParams.append("city", selectedAddress?.city || "");
-        url.searchParams.append("is_express_service", isExpressService.toString());
-        // Pass lat/lng for geographic fallback (30km radius) when city match fails
-        if (
-          selectedAddress?.latitude != null &&
-          selectedAddress?.longitude != null
-        ) {
-          url.searchParams.append(
-            "latitude",
-            selectedAddress.latitude.toString()
-          );
-          url.searchParams.append(
-            "longitude",
-            selectedAddress.longitude.toString()
-          );
-        }
-
-        const response = await fetch(url.toString(), {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        });
-
-        const data = await response.json();
+        const data = await fetchTimeslots({
+          date: date.format("YYYY-MM-DD"),
+          service_duration: totalServiceDuration,
+          country: selectedAddress?.country || "",
+          city: selectedAddress?.city || "",
+          is_express_service: isExpressService,
+          latitude: selectedAddress?.latitude,
+          longitude: selectedAddress?.longitude,
+        }).unwrap();
 
         // Check for error messages from the server first
         if (data.error) {
@@ -338,36 +397,7 @@ const useBooking = () => {
           return data;
         }
 
-        // Transform the detailer server response format to our TimeSlot interface
-        const transformedSlots: TimeSlot[] = [];
-
-        // Check for the correct response format (slots array)
-        if (data.slots && Array.isArray(data.slots)) {
-          data.slots.forEach((slot: any, index: number) => {
-            if (slot.is_available && slot.start_time && slot.end_time) {
-              transformedSlots.push({
-                startTime: slot.start_time,
-                endTime: slot.end_time,
-                isAvailable: slot.is_available,
-                isSelected: false, // Reset selection when fetching new slots
-              });
-            }
-          });
-        } else if (
-          data.available_slots &&
-          Array.isArray(data.available_slots)
-        ) {
-          data.available_slots.forEach((slot: any, index: number) => {
-            if (slot.is_available && slot.start_time && slot.end_time) {
-              transformedSlots.push({
-                startTime: slot.start_time,
-                endTime: slot.end_time,
-                isAvailable: slot.is_available,
-                isSelected: false, // Reset selection when fetching new slots
-              });
-            }
-          });
-        }
+        const transformedSlots = transformTimeslotResponse(data, date);
 
         // If no slots were transformed, show a message to the user
         if (transformedSlots.length === 0) {
@@ -394,9 +424,12 @@ const useBooking = () => {
     [
       calculateTotalServiceDuration,
       selectedAddress,
+      isExpressService,
+      fetchTimeslots,
       setAlertConfig,
       setIsVisible,
       showSnackbarWithConfig,
+      resetBooking,
     ]
   );
 
@@ -601,7 +634,7 @@ const useBooking = () => {
         setAvailableTimeSlots([]);
       }
     },
-    [selectedDate, fetchAvailableTimeSlots, isExpressService]
+    [selectedDate, fetchAvailableTimeSlots]
   );
 
   // ============================================================================
@@ -823,46 +856,16 @@ const useBooking = () => {
       // Re-fetch time slots with the new duration
       if (selectedAddress?.country && selectedAddress?.city && selectedDay) {
         try {
-          // Create URL with query parameters for GET request
-          const url = new URL(
-            `${API_CONFIG.detailerAppUrl}/api/v1/availability/get_timeslots/`
-          );
-          url.searchParams.append("date", selectedDay.format("YYYY-MM-DD"));
-          url.searchParams.append(
-            "service_duration",
-            totalServiceDuration.toString()
-          );
-          url.searchParams.append("country", selectedAddress?.country || "");
-          url.searchParams.append("city", selectedAddress?.city || "");
-          // Pass lat/lng for geographic fallback (30km radius) when city match fails
-          if (
-            selectedAddress?.latitude != null &&
-            selectedAddress?.longitude != null
-          ) {
-            url.searchParams.append(
-              "latitude",
-              selectedAddress.latitude.toString()
-            );
-            url.searchParams.append(
-              "longitude",
-              selectedAddress.longitude.toString()
-            );
-          }
+          const data = await fetchTimeslots({
+            date: selectedDay.format("YYYY-MM-DD"),
+            service_duration: totalServiceDuration,
+            country: selectedAddress?.country || "",
+            city: selectedAddress?.city || "",
+            is_express_service: isExpressService,
+            latitude: selectedAddress?.latitude,
+            longitude: selectedAddress?.longitude,
+          }).unwrap();
 
-          const response = await fetch(url.toString(), {
-            method: "GET",
-            headers: {
-              "Content-Type": "application/json",
-            },
-          });
-
-          if (!response.ok) {
-            return;
-          }
-
-          const data = await response.json();
-
-          // Check for error messages from the server first
           if (data.error) {
             setAlertConfig({
               title: "Availability Error",
@@ -877,36 +880,7 @@ const useBooking = () => {
             return;
           }
 
-          // Transform the detailer server response format to our TimeSlot interface
-          const transformedSlots: TimeSlot[] = [];
-
-          // Check for the correct response format (slots array)
-          if (data.slots && Array.isArray(data.slots)) {
-            data.slots.forEach((slot: any, index: number) => {
-              if (slot.is_available && slot.start_time && slot.end_time) {
-                transformedSlots.push({
-                  startTime: slot.start_time,
-                  endTime: slot.end_time,
-                  isAvailable: slot.is_available,
-                  isSelected: false, // Reset selection when fetching new slots
-                });
-              }
-            });
-          } else if (
-            data.available_slots &&
-            Array.isArray(data.available_slots)
-          ) {
-            data.available_slots.forEach((slot: any, index: number) => {
-              if (slot.is_available && slot.start_time && slot.end_time) {
-                transformedSlots.push({
-                  startTime: slot.start_time,
-                  endTime: slot.end_time,
-                  isAvailable: slot.is_available,
-                  isSelected: false, // Reset selection when fetching new slots
-                });
-              }
-            });
-          }
+          const transformedSlots = transformTimeslotResponse(data, selectedDay);
 
           // If no slots were transformed, show a message to the user
           if (transformedSlots.length === 0) {
@@ -938,6 +912,8 @@ const useBooking = () => {
       calculateTotalServiceDuration,
       selectedAddress,
       selectedDay,
+      isExpressService,
+      fetchTimeslots,
       setAlertConfig,
       setIsVisible,
     ]
@@ -1237,14 +1213,14 @@ const useBooking = () => {
    * Price calculation:
    * - Base price: From selected service type
    * - Addon costs: Sum of all selected addon prices
-   * - SUV surcharge: 15% of total price (base + addons) if vehicle is marked as SUV
+   * - SUV surcharge: 20% of total price (base + addons) if vehicle is marked as SUV
    * - Total = Base price + Addon costs + SUV surcharge
    *
    * @returns The total price in euros
    * @type {number}
    *
    * @example
-   * const totalPrice = getTotalPrice(); // Returns 108.75 if base price is 75, addons cost 18.75, and SUV surcharge is 15% of 93.75
+   * const totalPrice = getTotalPrice(); // Returns 112.5 if base price is 75, addons cost 18.75, and SUV surcharge is 20% of 93.75
    */
   const getTotalPrice = useCallback((): number => {
     const basePrice = selectedServiceType?.price || 0;
@@ -1253,7 +1229,7 @@ const useBooking = () => {
       0
     );
     const totalBeforeSurcharge = basePrice + addonCosts;
-    const suvSurcharge = isSUV ? totalBeforeSurcharge * 0.15 : 0;
+    const suvSurcharge = isSUV ? totalBeforeSurcharge * 0.20 : 0;
     const expressServiceFee = isExpressService ? 30 : 0;
     return totalBeforeSurcharge + suvSurcharge + expressServiceFee;
   }, [selectedServiceType, isSUV, isExpressService, selectedAddons]);
@@ -1316,7 +1292,7 @@ const useBooking = () => {
       0
     );
     const totalBeforeSurcharge = basePrice + addonCosts;
-    const suvSurcharge = isSUV ? totalBeforeSurcharge * 0.15 : 0;
+    const suvSurcharge = isSUV ? totalBeforeSurcharge * 0.20 : 0;
     const expressServiceFee = isExpressService ? 30 : 0;
     const totalBeforeDiscount = totalBeforeSurcharge + suvSurcharge + expressServiceFee;
 
@@ -1370,7 +1346,7 @@ const useBooking = () => {
       0
     );
     const totalBeforeSurcharge = basePrice + addonCosts;
-    const suvSurcharge = isSUV ? totalBeforeSurcharge * 0.15 : 0;
+    const suvSurcharge = isSUV ? totalBeforeSurcharge * 0.20 : 0;
     const expressServiceFee = isExpressService ? 30 : 0;
     const totalBeforeDiscount = totalBeforeSurcharge + suvSurcharge + expressServiceFee;
 
@@ -1397,7 +1373,7 @@ const useBooking = () => {
   }, [isExpressService]);
 
   /**
-   * Gets the SUV surcharge amount (15% of base + addons when isSUV is true).
+   * Gets the SUV surcharge amount (20% of base + addons when isSUV is true).
    *
    * @returns SUV surcharge in euros
    */
@@ -1417,7 +1393,7 @@ const useBooking = () => {
       0
     );
     const totalBeforeSurcharge = basePrice + addonCosts;
-    return isSUV ? totalBeforeSurcharge * 0.15 : 0;
+    return isSUV ? totalBeforeSurcharge * 0.20 : 0;
   }, [isSUV, selectedServiceType, user?.is_fleet_owner, user?.is_branch_admin, selectedAddons]);
 
   /**
@@ -1476,7 +1452,7 @@ const useBooking = () => {
       const suvSurcharge = excludeServicePrice
         ? 0
         : isSUV
-          ? subtotal * 0.15
+          ? subtotal * 0.20
           : 0;
 
       const expressServiceFee = isExpressService ? 30 : 0;
@@ -1526,6 +1502,10 @@ const useBooking = () => {
       isSUV,
       isExpressService,
       user?.loyalty_benefits,
+      user?.is_fleet_owner,
+      user?.is_branch_admin,
+      user?.is_dealership,
+      user?.partner_referral_code,
       promotions,
     ]
   );
@@ -1622,7 +1602,7 @@ const useBooking = () => {
       0
     );
     const totalBeforeSurcharge = basePrice + addonCosts;
-    const suvSurcharge = isSUV ? totalBeforeSurcharge * 0.15 : 0;
+    const suvSurcharge = isSUV ? totalBeforeSurcharge * 0.20 : 0;
     const expressServiceFee = isExpressService ? 30 : 0;
 
     return totalBeforeSurcharge + suvSurcharge + expressServiceFee;
@@ -1798,12 +1778,9 @@ const useBooking = () => {
    * const formattedPrice = formatPrice(25); // Returns "€25.00"
    * const formattedPrice = formatPrice(75.5); // Returns "€75.50"
    */
-  const formatPrice = useCallback(
-    (price: number): string => {
-      return formatCurrency(price);
-    },
-    [formatCurrency]
-  );
+  const formatPrice = useCallback((price: number): string => {
+    return formatCurrency(price);
+  }, []);
 
   /**
    * Formats duration in minutes to a human-readable string
@@ -1832,55 +1809,6 @@ const useBooking = () => {
     } else {
       return `${mins}m`;
     }
-  }, []);
-
-  /**
-   * Resets all booking state to initial values
-   *
-   * This method clears all booking selections and returns the booking
-   * process to its initial state. It's typically called after a successful
-   * booking or when the user wants to start over.
-   *
-   * Resets the following state:
-   * - selectedVehicle: null
-   * - selectedServiceType: null
-   * - selectedValetType: null
-   * - selectedAddress: null
-   * - selectedDate: current date
-   * - specialInstructions: empty string
-   * - currentStep: 1
-   * - isSUV: false
-   * - selectedAddons: empty array
-   * - isAddonModalVisible: false
-   * - isConfirmationModalVisible: false
-   * - confirmationBookingData: null
-   *
-   * @example
-   * resetBooking();
-   * // All booking state is reset to initial values
-   */
-  const resetBooking = useCallback(() => {
-    setSelectedVehicle(null);
-    setSelectedServiceType(null);
-    setSelectedValetType(null);
-    setSelectedAddress(null);
-    setSelectedDate(new Date());
-    setSpecialInstructions("");
-    setCurrentStep(1);
-    setIsSUV(false);
-    setIsExpressService(false);
-    setSelectedAddons([]);
-    setIsAddonModalVisible(false);
-    setIsConfirmationModalVisible(false);
-    setConfirmationBookingData(null);
-    setConfirmationBookingReference("");
-    setIsCancellationModalVisible(false);
-    setCancellationData(null);
-    setCancellationBookingReference("");
-    setWinnerVoucherApplied(null);
-    setWinnerVoucherCode("");
-    setServerQuote(null);
-    setComplimentarySparkleSource(null);
   }, []);
 
   /**
@@ -1990,7 +1918,6 @@ const useBooking = () => {
     calculateFinalPrice,
     applyWinnerVoucherMut,
     showSnackbarWithConfig,
-    formatCurrency,
   ]);
 
   useEffect(() => {
@@ -2017,12 +1944,11 @@ const useBooking = () => {
           addon_ids: selectedAddons.map((a) => String(a.id)),
           is_suv: isSUV,
           is_express: isExpressService,
+          body_style: selectedVehicle?.body_style ?? null,
           apply_partner_booking_discount: applyPartnerBookingDiscount,
         }).unwrap();
         if (cancelled) return;
         setServerQuote(res);
-        console.log("res", res);
-        console.log("res.quick_sparkle", serverQuote);
         const elig: ComplimentarySparkleSource[] = [];
         const qs = res.quick_sparkle;
         if (qs?.eligible_loyalty) elig.push("loyalty");
@@ -2047,6 +1973,7 @@ const useBooking = () => {
     selectedAddons,
     isSUV,
     isExpressService,
+    selectedVehicle?.body_style,
     quoteBookingMut,
     applyPartnerBookingDiscount,
   ]);
@@ -2081,6 +2008,9 @@ const useBooking = () => {
    * // Processes payment, webhook creates bookings automatically
    */
   const handleBookingConfirmation = useCallback(async () => {
+    // Re-entrancy guard: closes the race window between a rapid double-tap and the
+    // confirm button actually becoming disabled (state update + re-render is async).
+    if (isLoading || isProcessingPayment) return;
     if (
       selectedVehicle &&
       vehicleBodyStyleRequiresSuvMpvSurcharge(selectedVehicle.body_style) &&
@@ -2088,7 +2018,7 @@ const useBooking = () => {
     ) {
       showSnackbarWithConfig({
         message:
-          "This vehicle's registered body style counts as an SUV or MPV. Turn on SUV / MPV to apply the required 15% surcharge.",
+          "This vehicle's registered body style counts as an SUV or MPV. Turn on SUV / MPV to apply the required 20% surcharge.",
         type: "error",
         duration: 5000,
       });
@@ -2097,8 +2027,13 @@ const useBooking = () => {
     try {
       setIsLoading(true);
       setPaymentConfirmationStatus("pending");
-      // Generate a booking reference
-      const bookingReference = `APT${Date.now()}`;
+      // Reuse the same booking reference across retries of this attempt (dropped
+      // response, accidental double-submit) so the server can dedupe instead of
+      // creating a second booking / consuming a second complimentary wash.
+      if (!bookingReferenceRef.current) {
+        bookingReferenceRef.current = `APT${Date.now()}`;
+      }
+      const bookingReference = bookingReferenceRef.current;
 
       let priceBreakdown = calculateFinalPrice(false);
       let applyFreeQuickSparkle = false;
@@ -2113,6 +2048,7 @@ const useBooking = () => {
             addon_ids: selectedAddons.map((a) => String(a.id)),
             is_suv: isSUV,
             is_express: isExpressService,
+            body_style: selectedVehicle?.body_style ?? null,
             apply_partner_booking_discount: applyPartnerBookingDiscount,
           }).unwrap();
           setServerQuote(freshQuote);
@@ -2261,7 +2197,7 @@ const useBooking = () => {
       setIsProcessingPayment(true);
       const paymentResult = await openPaymentSheet(
         amountToPay,
-        "Prisma Valet",
+        "Prisma Car Care",
         bookingReference,
         bookingDataForClient,
         detailerBookingData
@@ -2312,7 +2248,12 @@ const useBooking = () => {
 
       setPaymentConfirmationStatus("confirming");
       try {
-        await waitForPaymentConfirmation(paymentResult.paymentIntentId);
+        await waitForPaymentConfirmation(
+          paymentResult.paymentIntentId,
+          60000,
+          2500,
+          (status) => setPaymentConfirmationStatus(status)
+        );
         setPaymentConfirmationStatus("confirmed");
         setIsProcessingPayment(false);
 
@@ -2397,6 +2338,8 @@ const useBooking = () => {
     markPromotionAsUsed,
     winnerVoucherApplied,
     applyPartnerBookingDiscount,
+    isLoading,
+    isProcessingPayment,
   ]);
 
   /**

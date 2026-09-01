@@ -1,0 +1,49 @@
+{% extends "base_email.html" %}
+{% block title %}Account ready – Prisma Car Care{% endblock %}
+{% block content %}
+<div class="greeting">You're all set</div>
+
+<div class="intro-text">
+  {% if user_name %}Nice work, {{ user_name }}. {% endif %}
+  Your {{ purpose_label }} account is ready. Sign in with the email below and the password you just created.
+</div>
+
+<div class="details-card">
+  <div class="details-title">Account</div>
+  <div class="details-grid">
+    <div class="detail-row">
+      <div class="detail-item detail-label">Email</div>
+      <div class="detail-item detail-value">{{ user_email }}</div>
+    </div>
+    <div class="detail-row">
+      <div class="detail-item detail-label">Role</div>
+      <div class="detail-item detail-value">{{ purpose_label }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="info-box">
+  <div class="contact-title">Next steps</div>
+  <div class="contact-text">
+    Open the Prisma Car Care app and sign in with your email and the password you chose.
+  </div>
+</div>
+
+<p style="margin: 16px 0;">
+  <a href="prismaclient://onboarding/SigninScreen" class="btn-primary">Open Prisma Car Care app</a>
+</p>
+
+<div class="contact-box">
+  <div class="contact-title">Need help?</div>
+  <div class="contact-text">
+    <a href="mailto:support@prismavalet.com" class="contact-link">support@prismavalet.com</a>
+  </div>
+</div>
+
+<div class="closing">
+  <div class="signature">
+    Best regards,<br />
+    <span class="signature-name">The Prisma Car Care Team</span>
+  </div>
+</div>
+{% endblock %}

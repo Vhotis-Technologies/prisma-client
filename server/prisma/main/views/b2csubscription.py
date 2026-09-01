@@ -84,20 +84,37 @@ class B2CSubscriptionView(APIView):
         return handler(request)
 
     def get_plans(self, request):
-        """Return all B2C subscription tiers for plan picker UI."""
+        """Return all B2C subscription tiers with sedan and SUV/MPV list prices."""
         try:
             tiers = B2CSubcriptionTier.objects.all().order_by('monthlyPrice')
             plans_data = []
             for tier in tiers:
+                sedan_monthly = float(tier.monthlyPriceSedan)
+                sedan_yearly = float(tier.yearly_price_sedan)
+                suv_monthly = float(tier.monthlyPrice)
+                suv_yearly = float(tier.yearly_price)
                 plans_data.append({
                     'id': str(tier.id),
                     'name': tier.name,
                     'tagLine': tier.tagLine or '',
-                    'monthlyPrice': float(tier.monthlyPrice),
-                    'yearlyPrice': float(tier.yearly_price),
+                    # Legacy fields: SUV/MPV prices (unchanged for older clients).
+                    'monthlyPrice': suv_monthly,
+                    'yearlyPrice': suv_yearly,
                     'yearlyBillingText': '',
                     'badge': tier.badge or '',
                     'features': tier.features if tier.features else [],
+                    'serviceDiscountPercent': int(tier.service_discount_percent or 0),
+                    'maxComplimentaryWashes': int(tier.max_complimentary_washes or 0),
+                    'pricesByVehicleCategory': {
+                        B2CSubcriptionTier.VEHICLE_CATEGORY_SEDAN: {
+                            'monthlyPrice': sedan_monthly,
+                            'yearlyPrice': sedan_yearly,
+                        },
+                        B2CSubcriptionTier.VEHICLE_CATEGORY_SUV_MPV: {
+                            'monthlyPrice': suv_monthly,
+                            'yearlyPrice': suv_yearly,
+                        },
+                    },
                 })
             return Response({'plans': plans_data}, status=status.HTTP_200_OK)
         except Exception as e:
@@ -125,9 +142,24 @@ class B2CSubscriptionView(APIView):
             if not subscription:
                 return Response({'subscription': None}, status=status.HTTP_200_OK)
 
+            from main.utils.subscription_sync import (
+                latest_paid_billing_at,
+                sync_local_subscription_from_stripe,
+            )
+            stripe_snap = sync_local_subscription_from_stripe(subscription)
+            last_paid = latest_paid_billing_at(subscription)
+
             billing_cycle = subscription.plan.billing_cycle
             status_map = subscription.status
             frontend_status = 'canceled' if status_map == 'cancelled' else status_map
+            is_trialing = bool(stripe_snap.get('is_trialing'))
+            trial_end = subscription.end_date if is_trialing else None
+            trial_days_remaining = None
+            if is_trialing and trial_end:
+                if trial_end > timezone.now():
+                    trial_days_remaining = max(0, (trial_end - timezone.now()).days)
+                else:
+                    trial_days_remaining = 0
 
             return Response({
                 'subscription': {
@@ -136,9 +168,15 @@ class B2CSubscriptionView(APIView):
                     'status': frontend_status,
                     'renewsOn': subscription.end_date.isoformat() if subscription.end_date else None,
                     'billingCycle': billing_cycle if billing_cycle in ('monthly', 'yearly') else 'monthly',
-                    'trialDaysRemaining': None,
-                    'trialEndDate': None,
-                    'isTrialing': False,
+                    'vehicleCategory': (
+                        subscription.plan.vehicle_category
+                        if subscription.plan
+                        else B2CSubcriptionPlan.VEHICLE_CATEGORY_SUV_MPV
+                    ),
+                    'trialDaysRemaining': trial_days_remaining,
+                    'trialEndDate': trial_end.isoformat() if trial_end else None,
+                    'isTrialing': is_trialing,
+                    'lastPaidOn': last_paid.isoformat() if last_paid else None,
                     'paymentFailureStatus': None,
                     'serialized': B2CSubscriptionSerializer(subscription).data,
                 },
@@ -172,16 +210,18 @@ class B2CSubscriptionView(APIView):
             end_date = now + relativedelta(months=1)
         return {'start_date': now, 'end_date': end_date}
 
-    def _get_or_create_b2c_plan(self, tier, billing_cycle):
-        """Get or create B2CSubcriptionPlan for tier + cycle; sync price from tier."""
-        defaults_price = tier.yearly_price if billing_cycle == 'yearly' else tier.monthlyPrice
+    def _get_or_create_b2c_plan(self, tier, billing_cycle, vehicle_category=None):
+        """Get or create B2CSubcriptionPlan for tier + cycle + vehicle category; sync price from tier."""
+        category = vehicle_category or B2CSubcriptionPlan.VEHICLE_CATEGORY_SUV_MPV
+        defaults_price = tier.list_price(category, billing_cycle)
         plan, created = B2CSubcriptionPlan.objects.get_or_create(
             tier=tier,
             billing_cycle=billing_cycle,
+            vehicle_category=category,
             defaults={'price': defaults_price},
         )
         if not created:
-            plan.price = tier.yearly_price if billing_cycle == 'yearly' else tier.monthlyPrice
+            plan.price = tier.list_price(category, billing_cycle)
             plan.save(update_fields=['price', 'updated_at'])
         return plan
 
@@ -273,11 +313,16 @@ class B2CSubscriptionView(APIView):
 
             amount_in_cents = int(float(amount) * 100)
             interval = 'month' if plan.billing_cycle == 'monthly' else 'year'
+            category_label = plan.get_vehicle_category_display()
+            product_name = (
+                f"{plan.tier.name} — {category_label} "
+                f"({plan.billing_cycle}) Subscription (consumer)"
+            )
             price = stripe.Price.create(
                 unit_amount=amount_in_cents,
                 currency=currency,
                 recurring={'interval': interval},
-                product_data={'name': f"{plan.tier.name} Subscription (consumer)"},
+                product_data={'name': product_name},
             )
 
             stripe_subscription = stripe.Subscription.create(
@@ -288,6 +333,7 @@ class B2CSubscriptionView(APIView):
                     'subscription_id': str(subscription.id),
                     'billing_id': str(billing.id),
                     'type': 'b2c_subscription',
+                    'vehicle_category': plan.vehicle_category,
                 },
                 payment_behavior='default_incomplete',
                 payment_settings={'save_default_payment_method': 'on_subscription'},
@@ -344,8 +390,11 @@ class B2CSubscriptionView(APIView):
                             'stripe_subscription_id': stripe_subscription.id,
                             'invoice_id': invoice.id,
                             'type': 'b2c_subscription',
+                            'vehicle_category': plan.vehicle_category,
                         },
-                        description=f"{plan.tier.name} B2C — {plan.billing_cycle}",
+                        description=(
+                            f"{plan.tier.name} B2C — {category_label} — {plan.billing_cycle}"
+                        ),
                     )
                     billing.transaction_id = payment_intent.id
                     billing.save(update_fields=['transaction_id'])
@@ -372,17 +421,33 @@ class B2CSubscriptionView(APIView):
         """
         Start B2C subscription: free tier activates immediately; paid tier returns Stripe payment sheet.
 
-        Expects tierId and billingCycle (monthly|yearly). Creates pending subscription + billing row for paid path.
+        Expects tierId, billingCycle (monthly|yearly), and vehicleCategory (sedan|suv_mpv).
+        vehicleCategory defaults to suv_mpv for older clients. Creates pending subscription +
+        billing row for the paid path.
         """
         try:
             tier_id = request.data.get('tierId') or request.data.get('tier_id')
             billing_cycle = request.data.get('billingCycle') or request.data.get('billing_cycle')
+            vehicle_category = (
+                request.data.get('vehicleCategory')
+                or request.data.get('vehicle_category')
+                or B2CSubcriptionPlan.VEHICLE_CATEGORY_SUV_MPV
+            )
 
             if not tier_id:
                 return Response({'error': 'tierId is required'}, status=status.HTTP_400_BAD_REQUEST)
             if billing_cycle not in ('monthly', 'yearly'):
                 return Response(
                     {'error': 'billingCycle must be "monthly" or "yearly"'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            valid_categories = {
+                B2CSubcriptionPlan.VEHICLE_CATEGORY_SEDAN,
+                B2CSubcriptionPlan.VEHICLE_CATEGORY_SUV_MPV,
+            }
+            if vehicle_category not in valid_categories:
+                return Response(
+                    {'error': 'vehicleCategory must be "sedan" or "suv_mpv"'},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
@@ -397,7 +462,7 @@ class B2CSubscriptionView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            plan = self._get_or_create_b2c_plan(tier, billing_cycle)
+            plan = self._get_or_create_b2c_plan(tier, billing_cycle, vehicle_category)
             is_free = float(plan.price) == 0
             dates = self._calculate_subscription_dates(billing_cycle)
 
@@ -424,6 +489,7 @@ class B2CSubscriptionView(APIView):
                         'status': 'active',
                         'renewsOn': subscription.end_date.isoformat(),
                         'billingCycle': billing_cycle,
+                        'vehicleCategory': vehicle_category,
                     },
                     'billing': B2CSubscriptionBillingSerializer(billing).data,
                 }, status=status.HTTP_201_CREATED)
@@ -457,6 +523,7 @@ class B2CSubscriptionView(APIView):
                         'status': 'pending',
                         'renewsOn': subscription.end_date.isoformat(),
                         'billingCycle': billing_cycle,
+                        'vehicleCategory': vehicle_category,
                     },
                     'paymentSheet': {
                         'paymentIntent': payment_sheet.get('payment_intent'),
@@ -593,19 +660,47 @@ class B2CSubscriptionView(APIView):
                 cancel_at_period_end = False
 
             if subscription.stripe_subscription_id:
+                # Stripe may have already lost track of this subscription (deleted directly
+                # on Stripe, test-mode data reset, key/mode mismatch, etc.). Treat "no such
+                # subscription" as already-cancelled instead of failing the request.
+                stripe_gone = False
                 if cancel_at_period_end:
-                    stripe.Subscription.modify(
-                        subscription.stripe_subscription_id,
-                        cancel_at_period_end=True,
-                    )
-                    subscription.auto_renew = False
-                    subscription.cancellation_reason = cancellation_reason
-                    subscription.save(update_fields=['auto_renew', 'cancellation_reason'])
+                    try:
+                        stripe.Subscription.modify(
+                            subscription.stripe_subscription_id,
+                            cancel_at_period_end=True,
+                        )
+                    except stripe.error.InvalidRequestError as exc:
+                        if 'No such subscription' not in str(exc):
+                            raise
+                        stripe_gone = True
+                    if stripe_gone:
+                        subscription.status = 'cancelled'
+                        subscription.cancellation_date = timezone.now()
+                        subscription.cancellation_reason = cancellation_reason
+                        subscription.auto_renew = False
+                        subscription.save(
+                            update_fields=[
+                                'status',
+                                'cancellation_date',
+                                'cancellation_reason',
+                                'auto_renew',
+                            ]
+                        )
+                    else:
+                        subscription.auto_renew = False
+                        subscription.cancellation_reason = cancellation_reason
+                        subscription.save(update_fields=['auto_renew', 'cancellation_reason'])
                 else:
-                    stripe.Subscription.delete(subscription.stripe_subscription_id)
+                    try:
+                        stripe.Subscription.delete(subscription.stripe_subscription_id)
+                    except stripe.error.InvalidRequestError as exc:
+                        if 'No such subscription' not in str(exc):
+                            raise
                     subscription.status = 'cancelled'
                     subscription.cancellation_date = timezone.now()
                     subscription.cancellation_reason = cancellation_reason
+                    subscription.auto_renew = False
                     subscription.save(update_fields=['status', 'cancellation_date', 'cancellation_reason', 'auto_renew'])
             else:
                 subscription.status = 'cancelled'

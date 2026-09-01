@@ -21,11 +21,9 @@ interface NotificationItemProps {
 
 const getNotificationIcon = (
   type: NotificationType,
-  status: NotificationStatus
+  _status: NotificationStatus,
+  colors: (typeof Colors)["light"],
 ) => {
-  const colorScheme = useColorScheme();
-  const colors = Colors[colorScheme ?? "light"];
-
   const iconConfig: Record<
     NotificationType,
     { name: keyof typeof Ionicons.glyphMap; color: string }
@@ -110,8 +108,10 @@ export const NotificationItem: React.FC<NotificationItemProps> = ({
   const primaryColor = useThemeColor({}, "primary");
   const iconColor = useThemeColor({}, "icons");
   const { setAlertConfig, setIsVisible } = useAlertContext();
+  const colorScheme = useColorScheme();
+  const themeColors = Colors[colorScheme ?? "light"];
 
-  const icon = getNotificationIcon(notification.type, notification.status);
+  const icon = getNotificationIcon(notification.type, notification.status, themeColors);
   const swipeableRef = useRef<Swipeable>(null);
 
   const handleDelete = () => {

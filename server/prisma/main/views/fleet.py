@@ -3,18 +3,20 @@ Fleet API: branches CRUD, branch admins, fleet dashboard, branch vehicles/spend,
 
 Actions: create_branch, get_branches, create_branch_admin, get_fleet_dashboard, get_branch_vehicles,
 get_branch_spend, update_branch, delete_branch, get_vehicle_bookings, get_branch_admins, etc.
-Uses branch_spend and fleet_analytics utils. Can publish booking_cancelled and send branch admin credentials email.
+Uses branch_spend and fleet_analytics services. Can publish booking_cancelled and send branch admin invite emails.
 """
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
-from main.models import Fleet, Branch, FleetMember, FleetVehicle, Vehicle, VehicleOwnership, BookedAppointment, User, BulkOrder, PaymentTransaction, RefundRecord
-from main.utils.branch_spend import get_branch_spend_for_period
-from main.utils.fleet_analytics import (
+from main.models import AccountInvite, Fleet, Branch, FleetMember, FleetVehicle, Vehicle, VehicleOwnership, BookedAppointment, User, BulkOrder, PaymentTransaction, RefundRecord
+from main.services.branch_spend import get_branch_spend_for_period
+from main.services.fleet_analytics import (
     get_branch_performance, get_spend_trends, get_vehicle_health_scores,
     get_booking_activity, get_common_issues
 )
+from main.services.invite_services import enqueue_account_invite_email
+from django.db import transaction
 from django.db.models import Count, Q
 from django.utils import timezone
 from datetime import datetime, timedelta
@@ -23,7 +25,13 @@ import stripe
 from django.conf import settings
 import logging
 
-from main.tasks import publish_booking_cancelled, send_branch_admin_credentials_email
+from main.tasks import publish_booking_cancelled
+
+
+def _branch_address_str(branch) -> str:
+    """Comma-separated branch address for invite emails."""
+    parts = [branch.address, branch.city, branch.postcode, branch.country]
+    return ", ".join(p for p in parts if p and str(p).strip()) or "—"
 
 
 def bulk_order_job_start_dt(bulk_order):
@@ -149,6 +157,7 @@ def perform_bulk_order_reschedule(bulk_order, request_data):
     """
     import requests
     from django.conf import settings as django_settings
+    from main.utils.detailer_client import detailer_request_headers
 
     log = logging.getLogger("main.views.fleet")
     data = request_data or {}
@@ -194,7 +203,7 @@ def perform_bulk_order_reschedule(bulk_order, request_data):
         "suggested_team_size": suggested_team_size,
     }
     try:
-        response = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=60)
+        response = requests.post(url, json=payload, headers=detailer_request_headers(), timeout=60)
         if response.status_code not in [200, 201]:
             err_body = response.json() if response.content else {}
             error_message = err_body.get("error", response.text or f"HTTP {response.status_code}")
@@ -274,6 +283,8 @@ class FleetView(APIView):
         'get_fleet_admins': 'get_fleet_admins',
         'update_branch_admin': 'update_branch_admin',
         'remove_branch_admin': 'remove_branch_admin',
+        'resend_invite': 'resend_invite',
+        'get_complimentary_availability': 'get_complimentary_availability',
     }
     
     def get(self, request, *args, **kwargs):
@@ -450,85 +461,85 @@ class FleetView(APIView):
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
     
     def create_branch_admin(self, request):
-        """Create a branch admin account"""
+        """Invite a branch admin: create the account with an unusable password and email a set-password link."""
         try:
-            # Check if user is a fleet owner
             if not request.user.is_fleet_owner:
                 return Response({'error': 'Only fleet owners can create branch admins'}, status=status.HTTP_403_FORBIDDEN)
-            
-            # Get the fleet for this user
+
             fleet = Fleet.objects.filter(owner=request.user).first()
             if not fleet:
                 return Response({'error': 'No fleet found for this user'}, status=status.HTTP_404_NOT_FOUND)
-            
-            # Check subscription limit
+
             can_add, error_msg = fleet.can_add_admin()
             if not can_add:
                 return Response({'error': error_msg}, status=status.HTTP_403_FORBIDDEN)
-            
-            # Get admin data
-            name = request.data.get('name')
-            email = request.data.get('email')
-            phone = request.data.get('phone', '')
-            password = request.data.get('password')
+
+            name = (request.data.get('name') or '').strip()
+            email = (request.data.get('email') or '').strip().lower()
+            phone = request.data.get('phone', '') or ''
             branch_id = request.data.get('branch_id')
-            
-            # Validate required fields
-            if not all([name, email, password, branch_id]):
-                return Response({'error': 'Name, email, password, and branch_id are required'}, status=status.HTTP_400_BAD_REQUEST)
-            
-            # Check if branch belongs to this fleet
+
+            if not all([name, email, branch_id]):
+                return Response(
+                    {'error': 'Name, email, and branch_id are required'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
             try:
                 branch = Branch.objects.get(id=branch_id, fleet=fleet)
             except Branch.DoesNotExist:
-                return Response({'error': 'Branch not found or does not belong to your fleet'}, status=status.HTTP_404_NOT_FOUND)
-            
-            # Check if email already exists
-            if User.objects.filter(email=email).exists():
-                return Response({'error': 'User with this email already exists'}, status=status.HTTP_400_BAD_REQUEST)
-            
-            # Create user with branch admin flag
-            user = User.objects.create_user(
-                email=email,
-                password=password,
-                name=name,
-                phone=phone,
-                is_branch_admin=True
-            )
-            
-            # Create fleet member with admin role and branch assignment
-            fleet_member = FleetMember.objects.create(
-                fleet=fleet,
-                user=user,
-                role='admin',
-                branch=branch
-            )
+                return Response(
+                    {'error': 'Branch not found or does not belong to your fleet'},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
 
-            # Send credentials email to the new admin/manager
-            branch_address_parts = [branch.address, branch.city, branch.postcode, branch.country]
-            branch_address_str = ", ".join(p for p in branch_address_parts if p and str(p).strip()) or "—"
-            role_label = "Branch Admin" if fleet_member.role == "admin" else "Branch Manager"
-            send_branch_admin_credentials_email.delay(
-                recipient_email=user.email,
-                recipient_name=user.name,
+            if User.objects.filter(email__iexact=email).exists():
+                return Response(
+                    {'error': 'User with this email already exists'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            with transaction.atomic():
+                user = User.objects.create_user(
+                    email=email,
+                    password=None,
+                    name=name,
+                    phone=phone,
+                    is_branch_admin=True,
+                    has_signup_promotions=False,
+                )
+                FleetMember.objects.create(
+                    fleet=fleet,
+                    user=user,
+                    role='admin',
+                    branch=branch,
+                )
+
+            invite_result = enqueue_account_invite_email(
+                user,
+                AccountInvite.PURPOSE_BRANCH_ADMIN,
+                invited_by=request.user,
                 branch_name=branch.name,
-                branch_address=branch_address_str,
-                password=password,
-                role_label=role_label,
+                branch_address=_branch_address_str(branch),
+                role_label='Branch Admin',
+                display_name=user.name,
             )
 
             return Response({
-                'message': 'Branch admin created successfully',
+                'message': 'Branch admin invited successfully. They will receive an email to set their password.',
+                'email_sent': bool(invite_result.get('email_sent')),
+                'invite_pending': True,
                 'admin': {
-                    'id': user.id,
+                    'id': str(user.id),
                     'name': user.name,
                     'email': user.email,
                     'phone': user.phone,
                     'branch_id': str(branch.id),
                     'branch_name': branch.name,
-                }
+                    'invite_pending': True,
+                },
             }, status=status.HTTP_201_CREATED)
-            
+
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
     
@@ -1174,6 +1185,7 @@ class FleetView(APIView):
                     'email': member.user.email,
                     'phone': member.user.phone,
                     'joined_at': member.joined_at.isoformat(),
+                    'invite_pending': not member.user.has_usable_password(),
                 })
             
             return Response({'admins': admins_data}, status=status.HTTP_200_OK)
@@ -1200,6 +1212,7 @@ class FleetView(APIView):
                     'joined_at': member.joined_at.isoformat(),
                     'branch_id': str(member.branch.id),
                     'branch_name': member.branch.name,
+                    'invite_pending': not member.user.has_usable_password(),
                 })
             return Response({'admins': admins_data}, status=status.HTTP_200_OK)
         except Exception as e:
@@ -1269,4 +1282,108 @@ class FleetView(APIView):
             member.delete()
             return Response({'message': 'Branch admin removed successfully'}, status=status.HTTP_200_OK)
         except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    def resend_invite(self, request):
+        """Resend the set-password invite for a pending branch admin. Fleet owner only."""
+        if not request.user.is_fleet_owner:
+            return Response(
+                {'error': 'Only fleet owners can resend invitations'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        fleet = Fleet.objects.filter(owner=request.user).first()
+        if not fleet:
+            return Response({'error': 'No fleet found for this user'}, status=status.HTTP_404_NOT_FOUND)
+
+        admin_id = request.data.get('admin_id')
+        if not admin_id:
+            return Response({'error': 'admin_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            member = FleetMember.objects.select_related('user', 'branch').get(
+                fleet=fleet, user_id=admin_id, role='admin'
+            )
+        except FleetMember.DoesNotExist:
+            return Response(
+                {'error': 'Admin not found or does not belong to your fleet'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        user = member.user
+        if user.has_usable_password():
+            return Response(
+                {
+                    'error': 'This account is already activated. Ask them to use forgot password if needed.',
+                    'code': 'already_activated',
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        result = enqueue_account_invite_email(
+            user,
+            AccountInvite.PURPOSE_BRANCH_ADMIN,
+            invited_by=request.user,
+            branch_name=member.branch.name,
+            branch_address=_branch_address_str(member.branch),
+            role_label='Branch Admin',
+            display_name=user.name,
+        )
+        return Response(
+            {
+                'message': 'Invitation resent successfully',
+                'email_sent': bool(result.get('email_sent')),
+                'admin_id': str(user.id),
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    def get_complimentary_availability(self, request):
+        """
+        Get fleet complimentary sparkle availability for booking UI.
+        
+        Returns fleet-wide and branch-specific usage for current period.
+        Only for fleet owners and branch admins with active subscription.
+        """
+        try:
+            fleet = Fleet.for_user(request.user)
+            if not fleet:
+                return Response({
+                    'available': False,
+                    'quota': 0,
+                    'used': 0,
+                    'remaining': 0,
+                    'has_subscription': False,
+                    'message': 'No fleet found'
+                }, status=status.HTTP_200_OK)
+            
+            availability = fleet.get_complimentary_sparkle_availability()
+            
+            # If branch admin, add their branch-specific data
+            branch_usage = None
+            if request.user.is_branch_admin:
+                branch = request.user.get_managed_branch()
+                if branch:
+                    branch_usage = {
+                        'branch_id': str(branch.id),
+                        'branch_name': branch.name,
+                        'used_this_period': fleet.get_branch_complimentary_usage(
+                            branch,
+                            availability.get('period_start')
+                        )
+                    }
+            
+            response_data = {
+                **availability,
+                'branch_usage': branch_usage,
+            }
+            
+            # Convert datetime objects to ISO strings
+            if response_data.get('period_start'):
+                response_data['period_start'] = response_data['period_start'].isoformat()
+            if response_data.get('period_end'):
+                response_data['period_end'] = response_data['period_end'].isoformat()
+            
+            return Response(response_data, status=status.HTTP_200_OK)
+        except Exception as e:
+            logging.error(f"Error getting complimentary availability: {str(e)}")
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)

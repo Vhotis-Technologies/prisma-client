@@ -124,7 +124,7 @@ export const useFleetSubscription = () => {
         let currencyCode = isUK ? "GBP" : "EUR";
 
         const paymentSheetParams: Record<string, unknown> = {
-          merchantDisplayName: "Prisma Valet",
+          merchantDisplayName: "Prisma Car Care",
           customerEphemeralKeySecret: ephemeralKey,
           customerId: customer,
           returnURL: "prismaclient://payment-success",
@@ -366,7 +366,7 @@ export const useFleetSubscription = () => {
 
       const { error: initError } = await initPaymentSheet({
         setupIntentClientSecret: setupIntent,
-        merchantDisplayName: "Prisma Valet",
+        merchantDisplayName: "Prisma Car Care",
         customerEphemeralKeySecret: ephemeralKey,
         customerId: customer,
         returnURL: "prismaclient://payment-success",

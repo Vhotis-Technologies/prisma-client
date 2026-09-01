@@ -50,26 +50,16 @@ export const API_CONFIG = {
   websocketUrl: config.websocket_url,
 };
 
-// Google API Keys Configuration
-// Note: The API key should be added to app.json or app.config.js under extra.googleApiKeys
-// Example configuration:
-// {
-//   "extra": {
-//     "googleApiKeys": "YOUR_GOOGLE_PLACES_API_KEY_HERE"
-//   }
-// }
-// The Places API key must have the following APIs enabled:
-// - Places API (New)
-// - Places API (Legacy) - for autocomplete
-// - Geocoding API - for place details
-/** Google Places / Geocoding API key from app config. */
+// Google Places is proxied through the Prisma server (GOOGLE_PLACES_API_KEY env on server).
+// Client apps no longer need a Google API key in app config.
+/** @deprecated No longer used — Places calls go through the server proxy. */
 export const KEY_CONFIGS = {
-  googleApiKeys: config.googleApiKeys || config.googoleApiKeys, // Support both correct and typo'd config keys
+  googleApiKeys: undefined as string | undefined,
 };
 
 /** App name, version, deep-link scheme, and EAS project id. */
 export const APP_CONFIG = {
-  name: Constants.expoConfig?.name || "Prisma Client",
+  name: Constants.expoConfig?.name || "Prisma Car Care",
   version: Constants.expoConfig?.version || "1.0.0",
   scheme: Constants.expoConfig?.scheme || "prismaclient",
   projectId:

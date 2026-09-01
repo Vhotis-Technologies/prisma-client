@@ -28,7 +28,7 @@ from main.services.regcheck_ireland import (
     ireland_payload_for_cache,
     lookup_ireland,
 )
-from main.util.media_helper import get_full_media_url
+from main.utils.media_helper import get_full_media_url
 
 
 LOOKUP_TTL_SECONDS = 900
@@ -112,6 +112,52 @@ class GarageView(APIView):
         'get_pending_transfers': 'get_pending_transfers',
         'create_vehicle_event': 'create_vehicle_event',
     }
+
+    def _resolve_vehicle_access(self, request, vehicle):
+        """
+        Whether this user can update/delete ``vehicle``, plus the rows to change.
+
+        Fleet garage lists cars via ``FleetVehicle``, not only ``VehicleOwnership``
+        for ``request.user``. Branch admins see branch cars owned by the fleet owner.
+        """
+        if request.user.is_fleet_owner:
+            fleet = Fleet.objects.filter(owner=request.user).first()
+            if not fleet:
+                return False, None, None
+            fleet_vehicle = FleetVehicle.objects.filter(fleet=fleet, vehicle=vehicle).first()
+            if not fleet_vehicle:
+                return False, None, None
+            ownership = VehicleOwnership.objects.filter(
+                vehicle=vehicle,
+                owner=request.user,
+                end_date__isnull=True,
+            ).first()
+            return True, ownership, fleet_vehicle
+
+        if request.user.is_branch_admin:
+            managed_branch = request.user.get_managed_branch()
+            if not managed_branch:
+                return False, None, None
+            fleet_vehicle = FleetVehicle.objects.filter(
+                fleet=managed_branch.fleet,
+                branch=managed_branch,
+                vehicle=vehicle,
+            ).first()
+            if not fleet_vehicle:
+                return False, None, None
+            ownership = VehicleOwnership.objects.filter(
+                vehicle=vehicle,
+                owner=managed_branch.fleet.owner,
+                end_date__isnull=True,
+            ).first()
+            return True, ownership, fleet_vehicle
+
+        ownership = VehicleOwnership.objects.filter(
+            vehicle=vehicle,
+            owner=request.user,
+            end_date__isnull=True,
+        ).first()
+        return ownership is not None, ownership, None
 
     def get(self, request, *args, **kwargs):
         """Route GET by action. Passes vehicle_id from URL to handler when present (e.g. update_vehicle, get_vehicle_stats)."""
@@ -243,10 +289,9 @@ class GarageView(APIView):
             'make': payload['make'],
             'model': payload['model'],
             'year': payload['year'],
+            'color': payload.get('color') or None,
             'body_style': payload.get('body_style'),
             'image_url': payload.get('provider_image_url'),
-            'county': payload.get('county'),
-            'description': payload.get('description'),
         }
 
         return Response(
@@ -438,15 +483,7 @@ class GarageView(APIView):
                         model=blob['model'][:100],
                         year=int(blob['year']),
                         color=(blob.get('color') or 'Unknown').strip()[:100] or 'Unknown',
-                        abi_code=(blob.get('abi_code') or '')[:100] if blob.get('abi_code') else None,
                         body_style=(blob.get('body_style') or '')[:100] if blob.get('body_style') else None,
-                        transmission_type=(blob.get('transmission_type') or '')[:100] if blob.get('transmission_type') else None,
-                        fuel_type=(blob.get('fuel_type') or '')[:100] if blob.get('fuel_type') else None,
-                        number_of_doors=blob.get('number_of_doors'),
-                        number_of_seats=blob.get('number_of_seats'),
-                        engine_size=blob.get('engine_size'),
-                        county=(blob.get('county') or '')[:100] if blob.get('county') else None,
-                        registration_provider_payload=blob.get('registration_provider_payload'),
                         owner_count=0,
                     )
                     vehicle.save()
@@ -474,8 +511,6 @@ class GarageView(APIView):
                         registration_number=registration_number,
                         country=canon_country,
                         owner_count=0,
-                        county=None,
-                        registration_provider_payload=None,
                     )
 
                     vehicle.image = uploaded_image
@@ -717,16 +752,9 @@ class GarageView(APIView):
                 return Response({'error': 'Vehicle ID is required'}, status=status.HTTP_400_BAD_REQUEST)
 
             try:
-                # Get the vehicle from the db - check ownership instead of direct user relation
                 vehicle = Vehicle.objects.get(id=vehicle_id)
-                # Verify ownership
-                current_ownership = VehicleOwnership.objects.filter(
-                    vehicle=vehicle,
-                    owner=request.user,
-                    end_date__isnull=True
-                ).first()
-                
-                if not current_ownership:
+                has_access, _ownership, _fleet_vehicle = self._resolve_vehicle_access(request, vehicle)
+                if not has_access:
                     return Response({'error': 'Vehicle not found or access denied'}, status=status.HTTP_404_NOT_FOUND)
             except Vehicle.DoesNotExist:
                 return Response({'error': 'Vehicle not found'}, status=status.HTTP_404_NOT_FOUND)
@@ -761,41 +789,36 @@ class GarageView(APIView):
 
     def delete_vehicle(self, request, vehicle_id=None):
         """
-        Delete (end ownership for) a vehicle. vehicle_id from URL or request. User must be current owner or have
-        permission (branch admin for branch vehicle). Ends VehicleOwnership; may delete Vehicle if no other owners.
+        Remove a vehicle from this user's garage. Consumers end their VehicleOwnership.
+        Fleet owners and branch admins also drop the FleetVehicle row (that is what the
+        fleet garage list uses).
         """
         try:
-            # Get the vehicle_id from URL path first, then fallback to query params
             if vehicle_id is None:
                 vehicle_id = request.query_params.get('vehicle_id')
-            
+
             if not vehicle_id:
                 return Response({'error': 'Vehicle ID is required'}, status=status.HTTP_400_BAD_REQUEST)
-            
-            # Get the vehicle and ownership from the db
+
             try:
                 vehicle = Vehicle.objects.get(id=vehicle_id)
-                # Get current ownership
-                ownership = VehicleOwnership.objects.filter(
-                    vehicle=vehicle,
-                    owner=request.user,
-                    end_date__isnull=True
-                ).first()
-                
-                if not ownership:
-                    return Response({'error': 'Vehicle not found or access denied'}, status=status.HTTP_404_NOT_FOUND)
             except Vehicle.DoesNotExist:
                 return Response({'error': 'Vehicle not found'}, status=status.HTTP_404_NOT_FOUND)
-            
-            # Store vehicle info before ending ownership for the response message
+
+            has_access, ownership, fleet_vehicle = self._resolve_vehicle_access(request, vehicle)
+            if not has_access:
+                return Response({'error': 'Vehicle not found or access denied'}, status=status.HTTP_404_NOT_FOUND)
+
             vehicle_make = vehicle.make
             vehicle_model = vehicle.model
-            
-            # Soft delete: End ownership instead of deleting the vehicle
-            ownership.end_date = timezone.now().date()
-            ownership.save()
-            
-            # Return success message
+
+            with transaction.atomic():
+                if fleet_vehicle:
+                    fleet_vehicle.delete()
+                if ownership:
+                    ownership.end_date = timezone.now().date()
+                    ownership.save(update_fields=['end_date'])
+
             return Response({
                 'message': f'You have successfully removed {vehicle_make} {vehicle_model} from your garage',
             }, status=status.HTTP_200_OK)

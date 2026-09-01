@@ -1,11 +1,17 @@
 """Fleet, branch, subscription - fleet related models."""
+from datetime import timedelta
+from dateutil.relativedelta import relativedelta
 import uuid
 
-from django.db import models
+from django.db import models, transaction
+from django.db.models import Q, Sum
 from django.utils import timezone
 
 from .user import User
 from .vehicle import Vehicle, PaymentTransaction
+
+# Stripe bulk invoices use days_until_due=30; unpaid older than this blocks invoice-later.
+INVOICE_LATER_OVERDUE_DAYS = 30
 
 
 class Fleet(models.Model):
@@ -17,75 +23,270 @@ class Fleet(models.Model):
     description = models.TextField(blank=True)
     has_used_trial = models.BooleanField(default=False)
     trial_used_date = models.DateTimeField(null=True, blank=True)
+    complimentary_sparkle_quota = models.IntegerField(default=4)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f"{self.name} ({self.owner.name})"
 
+    @classmethod
+    def for_user(cls, user):
+        """Fleet owned by this user, or the fleet a branch admin belongs to."""
+        if not user:
+            return None
+        if getattr(user, 'is_fleet_owner', False):
+            return cls.objects.filter(owner=user).first()
+        if getattr(user, 'is_branch_admin', False):
+            membership = FleetMember.objects.filter(user=user).select_related('fleet').first()
+            return membership.fleet if membership else None
+        return None
+
     def get_active_subscription(self):
-        """Return the current active or trialing fleet subscription, if any."""
+        """Return the current active or trialing fleet subscription, if any.
+
+        Trialing counts as subscribed and includes invoice-later and job photos.
+        """
         return self.subscriptions.filter(
             status__in=['active', 'trialing'],
             end_date__gte=timezone.now()
         ).first()
 
-    def check_subscription_limits(self):
-        """Compare tier limits vs current admin/branch/vehicle counts for this fleet."""
+    def has_overdue_invoice_later(self):
+        """True when this fleet has an unpaid invoice-later order older than 30 days."""
+        from .vehicle import BulkOrder
+
+        cutoff = timezone.now() - timedelta(days=INVOICE_LATER_OVERDUE_DAYS)
+        return BulkOrder.objects.filter(
+            payment_status='invoice_later',
+            created_at__lte=cutoff,
+        ).filter(Q(fleet=self) | Q(branch__fleet=self)).exists()
+
+    def invoice_later_eligibility(self):
+        """Whether this fleet may create another Stripe invoice-later bulk order."""
         subscription = self.get_active_subscription()
         if not subscription:
             return {
+                'allowed': False,
+                'code': 'FLEET_SUBSCRIPTION_REQUIRED',
+                'message': (
+                    'Invoice later needs an active fleet subscription. '
+                    'You can still book and pay now.'
+                ),
                 'has_subscription': False,
-                'limits': {'max_admins': 0, 'max_branches': 0, 'max_vehicles': 0},
-                'current': {'admins': 0, 'branches': 0, 'vehicles': 0}
+                'is_trialing': False,
             }
-        tier = subscription.plan.tier
-        limits = tier.get_limits()
+        if self.has_overdue_invoice_later():
+            return {
+                'allowed': False,
+                'code': 'OVERDUE_INVOICE',
+                'message': (
+                    'An invoice is more than 30 days overdue. '
+                    'Pay it to use invoice later again. You can still book and pay now.'
+                ),
+                'has_subscription': True,
+                'is_trialing': subscription.status == 'trialing',
+            }
+        return {
+            'allowed': True,
+            'code': None,
+            'message': '',
+            'has_subscription': True,
+            'is_trialing': subscription.status == 'trialing',
+        }
+
+    @classmethod
+    def invoice_later_eligibility_for_user(cls, user):
+        """Invoice-later gate for fleet owners and branch admins. Partners are not gated."""
+        if not user or not (user.is_fleet_owner or user.is_branch_admin):
+            return {
+                'allowed': True,
+                'code': None,
+                'message': '',
+                'has_subscription': False,
+                'is_trialing': False,
+                'gated': False,
+            }
+        fleet = cls.for_user(user)
+        if not fleet:
+            return {
+                'allowed': False,
+                'code': 'FLEET_SUBSCRIPTION_REQUIRED',
+                'message': (
+                    'Invoice later needs an active fleet subscription. '
+                    'You can still book and pay now.'
+                ),
+                'has_subscription': False,
+                'is_trialing': False,
+                'gated': True,
+            }
+        payload = fleet.invoice_later_eligibility()
+        payload['gated'] = True
+        return payload
+
+    def check_subscription_limits(self):
+        """Fleet plan has no seat caps; unsubscribed fleets can still operate and pay now."""
+        subscription = self.get_active_subscription()
+        limits = {'max_admins': None, 'max_branches': None, 'max_vehicles': None}
         current_admins = FleetMember.objects.filter(fleet=self, role='admin').count()
         current_branches = Branch.objects.filter(fleet=self).count()
         current_vehicles = FleetVehicle.objects.filter(fleet=self).count()
         return {
-            'has_subscription': True,
-            'subscription_tier': tier.name,
+            'has_subscription': bool(subscription),
+            'subscription_tier': subscription.plan.tier.name if subscription and subscription.plan_id else None,
             'limits': limits,
             'current': {'admins': current_admins, 'branches': current_branches, 'vehicles': current_vehicles}
         }
 
     def can_add_admin(self):
-        """Return (allowed, error_message) for adding another fleet admin."""
-        limits_info = self.check_subscription_limits()
-        if not limits_info['has_subscription']:
-            return False, "No active subscription"
-        max_admins = limits_info['limits']['max_admins']
-        if max_admins is None:
-            return True, None
-        if limits_info['current']['admins'] >= max_admins:
-            return False, f"Admin limit reached ({limits_info['current']['admins']}/{max_admins})"
+        """Without subscription, only allow one admin (the onboarding admin)."""
+        subscription = self.get_active_subscription()
+        if subscription:
+            return True, None  # Unlimited with subscription
+        
+        # Count existing admins
+        current_count = FleetMember.objects.filter(fleet=self, role='admin').count()
+        if current_count >= 1:
+            return False, "Subscribe to invite additional branch admins"
         return True, None
 
     def can_add_branch(self):
-        """Return (allowed, error_message) for adding another branch."""
-        limits_info = self.check_subscription_limits()
-        if not limits_info['has_subscription']:
-            return False, "No active subscription"
-        max_branches = limits_info['limits']['max_branches']
-        if max_branches is None:
-            return True, None
-        if limits_info['current']['branches'] >= max_branches:
-            return False, f"Branch limit reached ({limits_info['current']['branches']}/{max_branches})"
+        """Without subscription, only allow one branch (the onboarding branch)."""
+        subscription = self.get_active_subscription()
+        if subscription:
+            return True, None  # Unlimited with subscription
+        
+        # Count existing branches
+        current_count = Branch.objects.filter(fleet=self).count()
+        if current_count >= 1:
+            return False, "Subscribe to add more branches"
         return True, None
 
     def can_add_vehicle(self):
-        """Return (allowed, error_message) for linking another vehicle to the fleet."""
-        limits_info = self.check_subscription_limits()
-        if not limits_info['has_subscription']:
-            return False, "No active subscription"
-        max_vehicles = limits_info['limits']['max_vehicles']
-        if max_vehicles is None:
-            return True, None
-        if limits_info['current']['vehicles'] >= max_vehicles:
-            return False, f"Vehicle limit reached ({limits_info['current']['vehicles']}/{max_vehicles})"
+        """Vehicles are not gated by subscription; booking and pay-now stay available."""
         return True, None
+    
+    def _complimentary_period_end(self, period_start):
+        """Complimentary sparkles reset monthly, even on a yearly plan."""
+        return period_start + relativedelta(months=1)
+
+    def get_complimentary_sparkle_period_start(self):
+        """Current monthly window, anchored to the subscription start date."""
+        subscription = self.get_active_subscription()
+        if not subscription:
+            return None
+
+        now = timezone.now()
+        period_start = subscription.start_date
+        while period_start <= now:
+            next_period = self._complimentary_period_end(period_start)
+            if now < next_period:
+                return period_start
+            period_start = next_period
+        return period_start
+
+    def get_complimentary_sparkle_availability(self):
+        """Get current period sparkle availability for this fleet."""
+        subscription = self.get_active_subscription()
+        if not subscription:
+            return {
+                'available': False,
+                'quota': 0,
+                'used': 0,
+                'remaining': 0,
+                'period_start': None,
+                'period_end': None,
+                'has_subscription': False,
+            }
+
+        period_start = self.get_complimentary_sparkle_period_start()
+        if not period_start:
+            return {
+                'available': False,
+                'quota': 0,
+                'used': 0,
+                'remaining': 0,
+                'period_start': None,
+                'period_end': None,
+                'has_subscription': True,
+            }
+
+        period_end = self._complimentary_period_end(period_start)
+        used_count = (
+            FleetComplimentaryBooking.objects.filter(
+                fleet=self,
+                subscription_period_start=period_start,
+            ).aggregate(total=Sum('vehicles_applied'))['total']
+            or 0
+        )
+
+        return {
+            'available': True,
+            'quota': self.complimentary_sparkle_quota,
+            'used': int(used_count),
+            'remaining': max(0, self.complimentary_sparkle_quota - int(used_count)),
+            'period_start': period_start,
+            'period_end': period_end,
+            'has_subscription': True,
+        }
+
+    def get_branch_complimentary_usage(self, branch, period_start=None):
+        """How many complimentary vehicles a branch has used this period."""
+        if period_start is None:
+            period_start = self.get_complimentary_sparkle_period_start()
+            if not period_start:
+                return 0
+        used = (
+            FleetComplimentaryBooking.objects.filter(
+                fleet=self,
+                branch=branch,
+                subscription_period_start=period_start,
+            ).aggregate(total=Sum('vehicles_applied'))['total']
+            or 0
+        )
+        return int(used)
+
+    def record_complimentary_usage(
+        self,
+        *,
+        vehicles_applied,
+        user,
+        branch=None,
+        bulk_order=None,
+        booking=None,
+        period_start=None,
+    ):
+        """Lock the fleet and record complimentary vehicles used this period.
+
+        Returns the number actually recorded (may be lower if another booking
+        consumed the pool first). Does not raise if the pool is empty.
+        """
+        applied = int(vehicles_applied or 0)
+        if applied < 1:
+            return 0
+        with transaction.atomic():
+            fleet = Fleet.objects.select_for_update().get(pk=self.pk)
+            availability = fleet.get_complimentary_sparkle_availability()
+            remaining = int(availability.get('remaining') or 0)
+            to_apply = min(applied, remaining)
+            if to_apply < 1:
+                return 0
+            window_start = period_start or availability.get('period_start')
+            if not window_start:
+                return 0
+            site = branch or fleet.branches.order_by('created_at').first()
+            if not site:
+                return 0
+            FleetComplimentaryBooking.objects.create(
+                fleet=fleet,
+                branch=site,
+                booking=booking,
+                bulk_order=bulk_order,
+                vehicles_applied=to_apply,
+                subscription_period_start=window_start,
+                created_by=user,
+            )
+            return to_apply
 
 
 class Branch(models.Model):
@@ -151,7 +352,7 @@ class FleetVehicle(models.Model):
 
 
 class SubscriptionTier(models.Model):
-    """Fleet SaaS tier (Starter / Plus / Enterprise) with feature list and reference pricing."""
+    """Single fleet SaaS plan (invoice later + job photos) with feature list and pricing."""
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=100, unique=True)
@@ -172,20 +373,8 @@ class SubscriptionTier(models.Model):
         return f"{self.name} - ${self.monthlyPrice}/month"
 
     def get_limits(self):
-        """Max admins, branches, and vehicles allowed for this tier name (None = unlimited)."""
-        limits = {
-            'Prisma Starter': {'max_admins': 3, 'max_branches': 3, 'max_vehicles': 50},
-            'Prisma Plus': {'max_admins': 10, 'max_branches': 10, 'max_vehicles': 200},
-            'Prisma Enterprise': {'max_admins': None, 'max_branches': None, 'max_vehicles': None},
-        }
-        tier_name_lower = self.name.lower()
-        if 'starter' in tier_name_lower:
-            return limits['Basic']
-        if 'plus' in tier_name_lower:
-            return limits['Plus']
-        if 'enterprise' in tier_name_lower:
-            return limits['Enterprise']
-        return limits['Starter']
+        """No seat caps — subscription gates invoice later and job photos, not fleet size."""
+        return {'max_admins': None, 'max_branches': None, 'max_vehicles': None}
 
 
 class SubscriptionPlan(models.Model):
@@ -279,3 +468,27 @@ class SubscriptionBilling(models.Model):
 
     def __str__(self):
         return f"Billing {self.id} - {self.subscription.fleet.name} - ${self.amount} ({self.status})"
+
+
+class FleetComplimentaryBooking(models.Model):
+    """Tracks fleet complimentary Quick Sparkle usage per subscription period."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    fleet = models.ForeignKey(Fleet, on_delete=models.CASCADE, related_name='complimentary_bookings')
+    branch = models.ForeignKey(Branch, on_delete=models.CASCADE, related_name='complimentary_bookings')
+    booking = models.ForeignKey('BookedAppointment', on_delete=models.CASCADE, null=True, blank=True)
+    bulk_order = models.ForeignKey('BulkOrder', on_delete=models.CASCADE, null=True, blank=True)
+    vehicles_applied = models.PositiveIntegerField(default=1)
+    used_at = models.DateTimeField(auto_now_add=True)
+    subscription_period_start = models.DateTimeField()
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    
+    class Meta:
+        ordering = ['-used_at']
+        indexes = [
+            models.Index(fields=['fleet', 'subscription_period_start']),
+            models.Index(fields=['branch', 'subscription_period_start']),
+        ]
+    
+    def __str__(self):
+        return f"Complimentary sparkle - {self.fleet.name} - {self.branch.name if self.branch else 'No branch'}"

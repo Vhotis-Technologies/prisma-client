@@ -18,7 +18,7 @@ import {
   BookedAppointmentProps,
 } from "@/app/interfaces/BookingInterfaces";
 import { PromotionsProps } from "@/app/interfaces/GarageInterface";
-import { InvoiceListResponse } from "@/app/interfaces/InvoiceInterfaces";
+import { InvoiceListResponse, InvoiceLaterEligibility } from "@/app/interfaces/InvoiceInterfaces";
 
 /** Server booking quote (step 5) — amounts and Quick Sparkle entitlements. */
 export type BookingQuoteAmounts = {
@@ -57,6 +57,14 @@ export type BookingQuickSparkleEntitlements = {
   period_end: string | null;
   period_label: string;
   partner_free_wash?: boolean;
+  plan_vehicle_category?: string | null;
+  covers_vehicle?: boolean;
+};
+
+export type BookingSubscriptionCoverage = {
+  plan_vehicle_category: string | null;
+  covers_vehicle: boolean;
+  message: string | null;
 };
 
 export type BookingQuoteResponse = {
@@ -76,6 +84,7 @@ export type BookingQuoteResponse = {
   };
   partner_booking_offer: PartnerBookingOfferPayload | null;
   vat_rate_percent: number;
+  subscription_coverage?: BookingSubscriptionCoverage | null;
 };
 
 export type ComplimentarySparkleSource = "loyalty" | "subscription" | "partner";
@@ -288,9 +297,13 @@ const createBookingApi = createApi({
     confirmPaymentIntent: builder.mutation<
       {
         confirmed: boolean;
+        assigned?: boolean;
+        assigning?: boolean;
         payment_intent_id: string;
         transaction_id?: string;
         booking_reference?: string;
+        status?: string;
+        message?: string;
       },
       { payment_intent_id: string }
     >({
@@ -454,6 +467,13 @@ const createBookingApi = createApi({
       }),
     }),
 
+    getInvoiceLaterEligibility: builder.query<InvoiceLaterEligibility, void>({
+      query: () => ({
+        url: "/api/v1/payment/get_invoice_later_eligibility/",
+        method: "GET",
+      }),
+    }),
+
     /**
      * Delete a saved payment method
      * ARGS : { payment_method_id: string }
@@ -478,6 +498,7 @@ const createBookingApi = createApi({
         addon_ids: string[];
         is_suv: boolean;
         is_express: boolean;
+        body_style?: string | null;
         apply_partner_booking_discount?: boolean;
       }
     >({
@@ -520,6 +541,93 @@ const createBookingApi = createApi({
       query: () => ({
         url: "/api/v1/events/check_free_wash/",
         method: "GET",
+      }),
+    }),
+
+    /** Crew timeslots via the client proxy (do not call the detailer host from the phone). */
+    getTimeslots: builder.query<
+      {
+        slots?: Array<{
+          is_available?: boolean;
+          start_time?: string;
+          end_time?: string;
+        }>;
+        available_slots?: Array<{
+          is_available?: boolean;
+          start_time?: string;
+          end_time?: string;
+        }>;
+        error?: string;
+      },
+      {
+        date: string;
+        service_duration: number;
+        country: string;
+        city: string;
+        latitude?: number | string | null;
+        longitude?: number | string | null;
+        is_express_service?: boolean;
+      }
+    >({
+      query: (params) => ({
+        url: "/api/v1/events/get_timeslots/",
+        method: "GET",
+        params: {
+          date: params.date,
+          service_duration: params.service_duration,
+          country: params.country,
+          city: params.city,
+          is_express_service: params.is_express_service ? "true" : "false",
+          ...(params.latitude != null && params.latitude !== ""
+            ? { latitude: params.latitude }
+            : {}),
+          ...(params.longitude != null && params.longitude !== ""
+            ? { longitude: params.longitude }
+            : {}),
+        },
+      }),
+    }),
+
+    /** Bulk capacity via the client proxy (do not call the detailer host from the phone). */
+    checkBulkCapacity: builder.query<
+      {
+        available?: boolean;
+        options?: Array<{
+          window: "morning" | "afternoon" | "fullday";
+          best_start_time: string;
+          estimated_finish_time: string;
+          suggested_team_size: number;
+        }>;
+        error?: string;
+      },
+      {
+        date: string;
+        workload_minutes: number;
+        service_duration: number;
+        country: string;
+        city: string;
+        latitude?: number | string | null;
+        longitude?: number | string | null;
+        now?: string;
+      }
+    >({
+      query: (params) => ({
+        url: "/api/v1/events/check_bulk_capacity/",
+        method: "GET",
+        params: {
+          date: params.date,
+          workload_minutes: params.workload_minutes,
+          service_duration: params.service_duration,
+          country: params.country,
+          city: params.city,
+          ...(params.now ? { now: params.now } : {}),
+          ...(params.latitude != null && params.latitude !== ""
+            ? { latitude: params.latitude }
+            : {}),
+          ...(params.longitude != null && params.longitude !== ""
+            ? { longitude: params.longitude }
+            : {}),
+        },
       }),
     }),
 
@@ -574,10 +682,13 @@ export const {
   useLazyCheckFreeWashQuery,
   useConfirmPaymentIntentMutation,
   useCreateBulkOrderInvoiceLaterMutation,
+  useGetInvoiceLaterEligibilityQuery,
   useGetMyBulkInvoicesQuery,
   useApplyWinnerVoucherMutation,
   useApplyGiftVoucherMutation,
   useCreateGiftVoucherPaymentSheetMutation,
   useLazyGetBulkInvoiceCheckoutQuery,
+  useLazyGetTimeslotsQuery,
+  useLazyCheckBulkCapacityQuery,
 } = createBookingApi;
 export default createBookingApi;

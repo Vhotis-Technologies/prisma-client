@@ -11,6 +11,7 @@ import {
   CommonIssueData,
 } from "@/app/interfaces/FleetInterfaces";
 import { API_CONFIG } from "@/constants/Config";
+import * as SecureStore from "expo-secure-store";
 
 export const BULK_CUTOFF_HOURS = 12;
 
@@ -72,7 +73,7 @@ export interface CheckBulkCapacityParams {
   longitude?: number;
 }
 
-/** Check bulk capacity via detailer app availability API. */
+/** Check bulk capacity via the client proxy (not the crew host). */
 export async function checkBulkCapacityAvailability(
   params: CheckBulkCapacityParams
 ): Promise<{
@@ -82,7 +83,7 @@ export async function checkBulkCapacityAvailability(
 }> {
   try {
     const url = new URL(
-      `${API_CONFIG.detailerAppUrl}/api/v1/availability/check_bulk_capacity/`
+      `${API_CONFIG.customerAppUrl}/api/v1/events/check_bulk_capacity/`
     );
     url.searchParams.append("date", params.date.slice(0, 10));
     url.searchParams.append("workload_minutes", String(params.workload_minutes));
@@ -96,9 +97,13 @@ export async function checkBulkCapacityAvailability(
       url.searchParams.append("latitude", String(params.latitude));
       url.searchParams.append("longitude", String(params.longitude));
     }
+    const access = await SecureStore.getItemAsync("access");
     const response = await fetch(url.toString(), {
       method: "GET",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(access ? { Authorization: `Bearer ${access}` } : {}),
+      },
     });
     const data = await response.json();
     if (data.error || !data.available) {

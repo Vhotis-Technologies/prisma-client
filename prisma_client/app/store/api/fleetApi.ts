@@ -21,6 +21,7 @@ import { InvoiceListResponse } from "@/app/interfaces/InvoiceInterfaces";
 const fleetApi = createApi({
   reducerPath: "fleetApi",
   baseQuery: axiosBaseQuery(),
+  tagTypes: ["FleetAdmins", "BranchAdmins"],
   endpoints: (builder) => ({
     /**
      * Create a new branch for the fleet
@@ -51,20 +52,23 @@ const fleetApi = createApi({
     }),
 
     /**
-     * Create a branch admin account
-     * ARGS: BranchAdminCreateProps
-     * RESPONSE: { message: string, admin: { id, name, email, phone, branch_id, branch_name } }
+     * Invite a branch admin (they set their own password via email link).
+     * ARGS: BranchAdminCreateProps (no password)
+     * RESPONSE: { message, email_sent, invite_pending, admin }
      */
     createBranchAdmin: builder.mutation<
       {
         message: string;
+        email_sent: boolean;
+        invite_pending: boolean;
         admin: {
-          id: number;
+          id: string;
           name: string;
           email: string;
           phone: string;
           branch_id: string;
           branch_name: string;
+          invite_pending: boolean;
         };
       },
       BranchAdminCreateProps
@@ -74,6 +78,7 @@ const fleetApi = createApi({
         method: "POST",
         data,
       }),
+      invalidatesTags: ["FleetAdmins", "BranchAdmins"],
     }),
 
     /**
@@ -206,6 +211,9 @@ const fleetApi = createApi({
         url: `/api/v1/fleet/get_branch_admins/${branch_id}/`,
         method: "GET",
       }),
+      providesTags: (_result, _error, arg) => [
+        { type: "BranchAdmins", id: arg.branch_id },
+      ],
     }),
 
     /**
@@ -243,6 +251,7 @@ const fleetApi = createApi({
         url: "/api/v1/fleet/get_fleet_admins/",
         method: "GET",
       }),
+      providesTags: ["FleetAdmins"],
     }),
 
     /**
@@ -258,6 +267,7 @@ const fleetApi = createApi({
         method: "PATCH",
         data,
       }),
+      invalidatesTags: ["FleetAdmins", "BranchAdmins"],
     }),
 
     /**
@@ -273,6 +283,23 @@ const fleetApi = createApi({
         method: "DELETE",
         data: { admin_id },
       }),
+      invalidatesTags: ["FleetAdmins", "BranchAdmins"],
+    }),
+
+    /**
+     * Resend the set-password invite for a pending branch admin. Fleet owner only.
+     * ARGS: { admin_id: string }
+     */
+    resendInvite: builder.mutation<
+      { message: string; email_sent: boolean; admin_id: string },
+      { admin_id: string }
+    >({
+      query: (data) => ({
+        url: "/api/v1/fleet/resend_invite/",
+        method: "POST",
+        data,
+      }),
+      invalidatesTags: ["FleetAdmins", "BranchAdmins"],
     }),
 
     /**
@@ -331,6 +358,7 @@ export const {
   useGetFleetAdminsQuery,
   useUpdateBranchAdminMutation,
   useRemoveBranchAdminMutation,
+  useResendInviteMutation,
   useCancelBulkOrderMutation,
   useRescheduleBulkOrderMutation,
 } = fleetApi;

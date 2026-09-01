@@ -1,1 +1,1 @@
-"""Service-layer helpers: notifications (Expo/email) and Ireland vehicle lookup (RegCheck)."""
+"""Domain services: invites, guest checkout, quotes, vouchers, fleet analytics, notifications, and transfers."""

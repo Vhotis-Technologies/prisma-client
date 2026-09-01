@@ -17,6 +17,7 @@ export interface UserProfileProps {
   phone: string;
   is_fleet_owner?: boolean;
   is_branch_admin?: boolean;
+  is_guest?: boolean;
   is_dealership?: boolean;
   partner_referral_code?: string;
   business_name?: string;

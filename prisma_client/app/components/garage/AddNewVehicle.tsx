@@ -309,14 +309,14 @@ const AddNewVehicleScreen = ({
                 <StyledText variant="bodySmall" style={{ color: textColor }}>
                   Registration: {preview.registration_number}
                 </StyledText>
+                {preview.color ? (
+                  <StyledText variant="bodySmall" style={{ color: textColor }}>
+                    Colour: {preview.color}
+                  </StyledText>
+                ) : null}
                 {preview.body_style ? (
                   <StyledText variant="bodySmall" style={{ color: textColor }}>
                     Body: {preview.body_style}
-                  </StyledText>
-                ) : null}
-                {preview.county ? (
-                  <StyledText variant="bodySmall" style={{ color: textColor }}>
-                    County: {preview.county}
                   </StyledText>
                 ) : null}
               </View>

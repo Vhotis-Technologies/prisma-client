@@ -15,6 +15,7 @@ export type FetchOngoingAppointmentsArg = void | { scope: "my_bookings" };
 export const dashboardApi = createApi({
   reducerPath: "dashboardApi",
   baseQuery: axiosBaseQuery(),
+  tagTypes: ["UpcomingAppointments", "RecentServices", "UserStats"],
   endpoints: (builder) => ({
     /**
      * Fetch the user's stats
@@ -25,6 +26,7 @@ export const dashboardApi = createApi({
         url: "/api/v1/dashboard/get_user_stats/",
         method: "GET",
       }),
+      providesTags: ["UserStats"],
     }),
     /**
      * Upcoming appointments. Pass { scope: "my_bookings" } so branch admins / fleet users only see
@@ -43,6 +45,7 @@ export const dashboardApi = createApi({
             : undefined,
       }),
       transformResponse: (response: UpcomingAppointmentProps[]) => response,
+      providesTags: ["UpcomingAppointments"],
     }),
 
     /**
@@ -70,6 +73,7 @@ export const dashboardApi = createApi({
         method: "GET",
       }),
       transformResponse: (response: RecentServicesProps | null) => response,
+      providesTags: ["RecentServices"],
     }),
 
     /** Submit star rating and optional comment for a completed booking. */

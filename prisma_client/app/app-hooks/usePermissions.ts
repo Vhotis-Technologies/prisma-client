@@ -284,7 +284,7 @@ export const usePermissions = () => {
           isVisible: true,
           title: "Disable Location Access",
           message:
-            "To completely disable location access, please go to your device Settings > Apps > Prisma Valet > Permissions and turn off Location.",
+            "To completely disable location access, please go to your device Settings > Apps > Prisma Car Care > Permissions and turn off Location.",
           type: "warning",
           onConfirm: () => {
             import("expo-linking").then(({ openSettings }) => openSettings());

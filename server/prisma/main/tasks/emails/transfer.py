@@ -2,7 +2,7 @@
 from celery import shared_task
 from django.conf import settings
 from django.template.loader import render_to_string
-from main.util.graph_mail import send_mail as graph_send_mail
+from main.utils.graph_mail import send_mail as graph_send_mail
 
 
 @shared_task
@@ -22,18 +22,24 @@ def send_transfer_request_email(transfer_id, owner_email, requester_name, vehicl
     from main.models import VehicleTransfer
 
     try:
+        from main.utils.legal_urls import email_legal_context, transfer_action_url
+
         transfer = VehicleTransfer.objects.get(id=transfer_id)
 
         subject = f"Vehicle Transfer Request - {vehicle_registration}"
-        html_message = render_to_string('vehicle_transfer_request.html', {
-            'owner_name': transfer.from_owner.name,
-            'requester_name': requester_name,
-            'vehicle_registration': vehicle_registration,
-            'vehicle_make': transfer.vehicle.make,
-            'vehicle_model': transfer.vehicle.model,
-            'vehicle_year': transfer.vehicle.year,
-            'expires_at': transfer.expires_at.strftime('%B %d, %Y at %I:%M %p'),
-        })
+        html_message = render_to_string(
+            "vehicle_transfer_request.html",
+            email_legal_context(
+                owner_name=transfer.from_owner.name,
+                requester_name=requester_name,
+                vehicle_registration=vehicle_registration,
+                vehicle_make=transfer.vehicle.make,
+                vehicle_model=transfer.vehicle.model,
+                vehicle_year=transfer.vehicle.year,
+                expires_at=transfer.expires_at.strftime("%B %d, %Y at %I:%M %p"),
+                transfer_url=transfer_action_url(transfer.id),
+            ),
+        )
 
         graph_send_mail(subject, html_message, owner_email)
         return f"Transfer request email sent successfully to {owner_email}"

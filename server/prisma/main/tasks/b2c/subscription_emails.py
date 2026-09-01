@@ -9,7 +9,7 @@ from django.template.loader import render_to_string
 from django.utils.dateparse import parse_datetime
 from django.utils import timezone as dj_timezone
 
-from main.util.graph_mail import send_mail as graph_send_mail
+from main.utils.graph_mail import send_mail as graph_send_mail
 
 # Stable Celery task names (preserve previous module path after move from main.tasks.emails).
 _B2C_EMAIL_TASK = 'main.tasks.emails.b2c_subscription_emails.{}'
@@ -202,7 +202,7 @@ def send_b2c_subscription_cancelled_email(
         str: Celery result message.
     """
     try:
-        subject = 'Your Prisma subscription has ended'
+        subject = 'Your Prisma Car Care subscription has ended'
         html_message = render_to_string(
             'b2c_subscription_cancelled.html',
             {

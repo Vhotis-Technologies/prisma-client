@@ -2,14 +2,33 @@
 Service history API: list completed/cancelled bookings and booking images.
 
 Actions: get_service_history (user/branch/fleet scoped), get_booking_images.
+
+Images are served through an authenticated proxy endpoint that applies
+watermarks for non-subscribed users.
 """
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-from rest_framework import status
-from main.models import BookedAppointment, BookedAppointmentImage, FleetVehicle, Fleet
-from django.db.models import Q
 import logging
+
+from django.db.models import Q
+from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from main.models import BookedAppointment, BookedAppointmentImage, Fleet, FleetVehicle
+from main.utils.subscription_entitlement import should_watermark_images
+
+
+def _get_image_proxy_url(image_id: str) -> str:
+    """
+    Build the proxy URL for a booking image.
+
+    Args:
+        image_id: UUID of the BookedAppointmentImage.
+
+    Returns:
+        Relative path to the image proxy endpoint (clients prepend their API origin).
+    """
+    return f"/api/v1/images/{image_id}/"
 
 
 class ServiceHistoryView(APIView):
@@ -227,10 +246,12 @@ class ServiceHistoryView(APIView):
                     'error': 'Booking not found or access denied'
                 }, status=status.HTTP_404_NOT_FOUND)
             
-            # Check if user can view vehicle details (subscription check for fleet users)
+            # Check if user can view vehicle details (all fleet users can view, but download/share requires subscription)
             can_view = request.user.can_view_vehicle_details(booking.vehicle)
+            can_download = request.user.can_download_vehicle_details(booking.vehicle)
+            
             if not can_view:
-                # Return empty arrays with access_denied flag for fleet users without subscription
+                # Should not happen now since all fleet users can view
                 return Response({
                     'booking_reference': booking.booking_reference,
                     'before_images_interior': [],
@@ -239,7 +260,9 @@ class ServiceHistoryView(APIView):
                     'after_images_exterior': [],
                     'event_data_management': None,
                     'access_denied': True,
-                    'message': 'Detailed vehicle information is only available with an active fleet subscription.'
+                    'download_allowed': False,
+                    'view_only': False,
+                    'message': 'Access denied'
                 }, status=status.HTTP_200_OK)
             
             # Fetch images grouped by segment
@@ -267,35 +290,39 @@ class ServiceHistoryView(APIView):
                 segment='exterior'
             ).order_by('created_at')
             
-            # Format response with images grouped by segment
+            # Determine if images will be watermarked for this user
+            is_watermarked = should_watermark_images(request.user)
+
+            # Format response with images using proxy URLs
+            # Proxy endpoint handles watermarking based on subscription status
             before_images_interior_data = [
                 {
-                    'id': img.id,
-                    'image_url': img.image_url,
+                    'id': str(img.id),
+                    'image_url': _get_image_proxy_url(img.id),
                     'created_at': img.created_at.isoformat()
                 } for img in before_images_interior
             ]
             
             before_images_exterior_data = [
                 {
-                    'id': img.id,
-                    'image_url': img.image_url,
+                    'id': str(img.id),
+                    'image_url': _get_image_proxy_url(img.id),
                     'created_at': img.created_at.isoformat()
                 } for img in before_images_exterior
             ]
             
             after_images_interior_data = [
                 {
-                    'id': img.id,
-                    'image_url': img.image_url,
+                    'id': str(img.id),
+                    'image_url': _get_image_proxy_url(img.id),
                     'created_at': img.created_at.isoformat()
                 } for img in after_images_interior
             ]
             
             after_images_exterior_data = [
                 {
-                    'id': img.id,
-                    'image_url': img.image_url,
+                    'id': str(img.id),
+                    'image_url': _get_image_proxy_url(img.id),
                     'created_at': img.created_at.isoformat()
                 } for img in after_images_exterior
             ]
@@ -312,7 +339,11 @@ class ServiceHistoryView(APIView):
                 'before_images_exterior': before_images_exterior_data,
                 'after_images_interior': after_images_interior_data,
                 'after_images_exterior': after_images_exterior_data,
-                'event_data_management': event_data
+                'event_data_management': event_data,
+                'access_denied': False,
+                'download_allowed': can_download,
+                'view_only': not can_download,
+                'is_watermarked': is_watermarked,
             }, status=status.HTTP_200_OK)
             
         except Exception as e:

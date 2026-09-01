@@ -1,0 +1,47 @@
+{% extends "base_email.html" %}
+{% block title %}Your photos are ready – Prisma Car Care{% endblock %}
+
+{% block content %}
+<div class="greeting">Hello {{ customer_name }},</div>
+
+<div class="intro-text">
+  Your Prisma Car Care visit is complete. Photos and detailer notes for booking
+  <strong>{{ booking_reference }}</strong> are ready to view and download.
+</div>
+
+<p style="margin: 16px 0;">
+  <a href="{{ guest_results_url }}" class="btn-primary">View photos and notes</a>
+</p>
+
+{% if guest_results_expires_days %}
+<p class="intro-text">
+  This link stays valid for {{ guest_results_expires_days }} days. Do not share it.
+</p>
+{% endif %}
+
+{% if guest_claim_url %}
+<p class="intro-text">
+  Keep this vehicle in your garage:
+  <a href="{{ guest_claim_url }}">create a password</a>
+  with the same email. Your booking history stays attached.
+</p>
+{% endif %}
+
+<div class="contact-box">
+  <div class="contact-title">Need help?</div>
+  <div class="contact-text">
+    Contact us at <a href="mailto:support@prismavalet.com" class="contact-link">support@prismavalet.com</a>
+    with your booking reference.
+  </div>
+</div>
+
+<div class="closing">
+  <div class="closing-text">
+    Thank you for trusting Prisma Car Care with your vehicle.
+  </div>
+  <div class="signature">
+    Best regards,<br />
+    <span class="signature-name">The Prisma Car Care Team</span>
+  </div>
+</div>
+{% endblock %}

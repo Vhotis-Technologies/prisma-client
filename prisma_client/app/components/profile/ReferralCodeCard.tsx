@@ -30,7 +30,7 @@ const ReferralCodeCard: React.FC<ReferralCodeCardProps> = ({
       const promotionalMessage =
         variant === "partner"
           ? `Get one free basic wash and 40% off washes for 60 days! Use my partner code: ${referral}`
-          : `Join Prisma Valet, the best mobile detailing tech integrated service and get 10% off your first wash! Use code: ${referral}`;
+          : `Join Prisma Car Care, the best mobile detailing tech integrated service and get 10% off your first wash! Use code: ${referral}`;
       await Clipboard.setStringAsync(promotionalMessage);
       setCopied(true);
       showSnackbarWithConfig({

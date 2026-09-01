@@ -90,7 +90,7 @@ const usePayment = () => {
    *
    * @param finalPrice - The total price to charge
    * @param bookingReference - The booking reference
-   * @param merchantDisplayName - Optional custom merchant display name (defaults to "Prisma Valet")
+   * @param merchantDisplayName - Optional custom merchant display name (defaults to "Prisma Car Care")
    * @param bookingData - Optional full booking data for client app
    * @param detailerBookingData - Optional formatted data for detailer app
    */
@@ -98,7 +98,7 @@ const usePayment = () => {
     async (
       finalPrice: number,
       bookingReference: string,
-      merchantDisplayName: string = "Prisma Valet",
+      merchantDisplayName: string = "Prisma Car Care",
       bookingData?: any,
       detailerBookingData?: any
     ): Promise<{
@@ -106,7 +106,7 @@ const usePayment = () => {
       freeBooking?: boolean;
       booking_reference?: string;
     }> => {
-      const address = addresses[0];
+      const address = bookingData?.address ?? addresses[0];
       const country = (address?.country ?? "").trim();
       const isUK =
         country === "United Kingdom" ||
@@ -162,7 +162,7 @@ const usePayment = () => {
         throw error;
       }
     },
-    [fetchPaymentSheetDetailsFromServer, initPaymentSheet]
+    [addresses, fetchPaymentSheetDetailsFromServer, initPaymentSheet]
   );
 
   /**
@@ -180,7 +180,7 @@ const usePayment = () => {
   const openPaymentSheet = useCallback(
     async (
       finalPrice: number,
-      merchantDisplayName: string = "Prisma Valet",
+      merchantDisplayName: string = "Prisma Car Care",
       bookingReference: string,
       bookingData?: any,
       detailerBookingData?: any
@@ -327,7 +327,7 @@ const usePayment = () => {
 
         const { error } = await initPaymentSheet({
           paymentIntentClientSecret: paymentIntent,
-          merchantDisplayName: "Prisma Valet",
+          merchantDisplayName: "Prisma Car Care",
           customerEphemeralKeySecret: ephemeralKey,
           customerId: customer,
           returnURL: "prismaclient://payment-success",
@@ -504,9 +504,13 @@ const usePayment = () => {
       paymentIntentId: string
     ): Promise<{
       confirmed: boolean;
+      assigned?: boolean;
+      assigning?: boolean;
       payment_intent_id: string;
       transaction_id?: string;
       booking_reference?: string;
+      status?: string;
+      message?: string;
     }> => {
       try {
         const response = await confirmPaymentIntentMutation({
@@ -533,35 +537,54 @@ const usePayment = () => {
     async (
       paymentIntentId: string,
       maxWaitTime: number = 60000,
-      pollInterval: number = 2500
+      pollInterval: number = 2500,
+      onStatus?: (status: "confirming" | "assigning") => void
     ): Promise<{
       confirmed: boolean;
+      assigned?: boolean;
+      assigning?: boolean;
       payment_intent_id: string;
       transaction_id?: string;
       booking_reference?: string;
     }> => {
       const startTime = Date.now();
+      let lastResult: {
+        confirmed: boolean;
+        assigned?: boolean;
+        assigning?: boolean;
+        payment_intent_id: string;
+        transaction_id?: string;
+        booking_reference?: string;
+      } | null = null;
 
       return new Promise((resolve, reject) => {
         const poll = async () => {
           try {
             const result = await confirmPaymentIntent(paymentIntentId);
+            lastResult = result;
 
-            if (result.confirmed) {
-              resolve(result);
-              return;
-            }
-
-            if ((result as any).status === "refunded_slot_unavailable") {
+            if ((result as { status?: string }).status === "refunded_slot_unavailable") {
               const msg =
-                (result as any).message ||
+                result.message ||
                 "This time slot was no longer available. Your payment has been refunded. Please choose another slot.";
               reject(new Error(msg));
               return;
             }
 
-            // Check if we've exceeded max wait time
+            if (result.confirmed && result.assigned) {
+              resolve(result);
+              return;
+            }
+
+            if (result.confirmed && result.assigning) {
+              onStatus?.("assigning");
+            }
+
             if (Date.now() - startTime >= maxWaitTime) {
+              if (lastResult?.confirmed) {
+                resolve(lastResult);
+                return;
+              }
               reject(
                 new Error(
                   "Payment confirmation timeout - webhook did not confirm payment within the expected time"
@@ -570,14 +593,12 @@ const usePayment = () => {
               return;
             }
 
-            // Schedule next poll
             setTimeout(poll, pollInterval);
           } catch (error) {
             reject(error);
           }
         };
 
-        // Start polling
         poll();
       });
     },

@@ -1,7 +1,7 @@
 """Celery task: activity-bonus promotional email via Microsoft Graph."""
 from celery import shared_task
 from django.template.loader import render_to_string
-from main.util.graph_mail import send_mail as graph_send_mail
+from main.utils.graph_mail import send_mail as graph_send_mail
 
 
 @shared_task

@@ -141,6 +141,28 @@ class AuthenticationView(CreateAPIView):
                     except User.DoesNotExist:
                         return Response({'error': 'Invalid referral code'}, status=status.HTTP_400_BAD_REQUEST)
 
+            email = (data.get('email') or '').strip().lower()
+            existing = User.objects.filter(email__iexact=email).first() if email else None
+            if existing is not None:
+                if existing.is_guest:
+                    return Response(
+                        {
+                            'error': (
+                                'This email was used for a guest booking. Open the link we emailed '
+                                'to set a password — your vehicle and history will stay in the garage.'
+                            ),
+                            'code': 'guest_unclaimed',
+                        },
+                        status=status.HTTP_409_CONFLICT,
+                    )
+                return Response(
+                    {
+                        'error': 'An account already exists for this email. Sign in instead.',
+                        'code': 'email_registered',
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+
             # Call the user model to create a new user
             user = User.objects.create_user(
                 name=data['name'],
@@ -262,6 +284,7 @@ class AuthenticationView(CreateAPIView):
                     'phone': user.phone,
                     'is_fleet_owner': user.is_fleet_owner,
                     'is_branch_admin': user.is_branch_admin,
+                    'is_guest': user.is_guest,
                     'is_dealership': is_dealership,
                     'partner_referral_code': partner_referral_code,
                     'business_name': partner_business_name,

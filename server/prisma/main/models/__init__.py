@@ -15,6 +15,7 @@ from .user import (
     TermsAndConditions,
     PrivacyPolicy,
     PasswordResetToken,
+    AccountInvite,
 )
 from .vehicle import (
     Vehicle,
@@ -32,6 +33,7 @@ from .vehicle import (
     BulkOrder,
     PaymentTransaction,
     RefundRecord,
+    GuestAccessToken,
 )
 from .fleet import (
     Fleet,
@@ -42,6 +44,7 @@ from .fleet import (
     SubscriptionPlan,
     FleetSubscription,
     SubscriptionBilling,
+    FleetComplimentaryBooking,
 )
 from .partner import (
     Partner,
@@ -60,12 +63,15 @@ from .b2c import B2CSubcriptionTier, B2CSubcriptionPlan, B2CSubcription, B2CSubc
 __all__ = [
     'User', 'UserManager', 'Referral', 'Address', 'LoyaltyProgram', 'Promotions',
     'Notification', 'TermsAndConditions', 'PrivacyPolicy', 'PasswordResetToken',
+    'AccountInvite',
     'Vehicle', 'VehicleOwnership', 'VehicleEvent', 'VehicleTransfer',
     'ServiceType', 'ValetType', 'DetailerProfile', 'AddOns',
     'BookedAppointment', 'BookedAppointmentImage', 'EventDataManagement',
     'PendingBooking', 'BulkOrder', 'PaymentTransaction', 'RefundRecord',
+    'GuestAccessToken',
     'Fleet', 'Branch', 'FleetMember', 'FleetVehicle',
     'SubscriptionTier', 'SubscriptionPlan', 'FleetSubscription', 'SubscriptionBilling',
+    'FleetComplimentaryBooking',
     'Partner', 'PartnerBankAccount', 'PartnerPayoutRequest', 'ReferralAttribution', 'CommissionPayout', 'CommissionEarning',
     'PartnerMetricsCache', 'CommissionAdminLog',
     'Ticket', 'TicketUpdate',

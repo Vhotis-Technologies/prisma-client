@@ -1,0 +1,63 @@
+{% extends "base_email.html" %}
+{% block title %}You're invited – Prisma Car Care{% endblock %}
+{% block content %}
+<div class="greeting">Hello {{ recipient_name }},</div>
+
+<div class="intro-text">
+  Your fleet owner has invited you as a {{ role_label }} on Prisma Car Care.
+  Choose your own password with the button below to activate your account.
+</div>
+
+<div class="details-card">
+  <div class="details-title">Your branch</div>
+  <div class="details-grid">
+    <div class="detail-row">
+      <div class="detail-item detail-label">Branch</div>
+      <div class="detail-item detail-value">{{ branch_name }}</div>
+    </div>
+    <div class="detail-row">
+      <div class="detail-item detail-label">Address</div>
+      <div class="detail-item detail-value">{{ branch_address }}</div>
+    </div>
+    <div class="detail-row">
+      <div class="detail-item detail-label">Email</div>
+      <div class="detail-item detail-value">{{ recipient_email }}</div>
+    </div>
+  </div>
+</div>
+
+<p style="margin: 16px 0;">
+  <a href="{{ invite_url }}" class="btn-primary">Set your password &amp; activate</a>
+</p>
+
+<div class="reminders-box">
+  <div class="contact-title">Important</div>
+  <div class="contact-text">
+    This invitation expires in {{ expires_in }} and can only be used once.
+    After you set a password, open the Prisma Car Care app and sign in with
+    <strong>{{ recipient_email }}</strong>.
+  </div>
+</div>
+
+<div class="contact-text" style="margin-bottom: 20px; word-break: break-all; font-size: 12px; color: #64748b;">
+  Or paste this link into your browser:<br />
+  <a href="{{ invite_url }}" class="contact-link">{{ invite_url }}</a>
+</div>
+
+<div class="contact-box">
+  <div class="contact-title">Need help?</div>
+  <div class="contact-text">
+    Contact us at <a href="mailto:support@prismavalet.com" class="contact-link">support@prismavalet.com</a>
+  </div>
+</div>
+
+<div class="closing">
+  <div class="contact-text" style="margin-bottom: 12px;">
+    If you didn't expect this invitation, you can ignore it or contact your fleet owner.
+  </div>
+  <div class="signature">
+    Best regards,<br />
+    <span class="signature-name">The Prisma Car Care Team</span>
+  </div>
+</div>
+{% endblock %}

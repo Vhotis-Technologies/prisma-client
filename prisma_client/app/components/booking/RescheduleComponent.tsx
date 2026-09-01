@@ -5,8 +5,8 @@ import { useThemeColor } from "@/hooks/useThemeColor";
 import StyledText from "../helpers/StyledText";
 import StyledButton from "../helpers/StyledButton";
 import { TimeSlot } from "@/app/interfaces/BookingInterfaces";
-import { API_CONFIG } from "@/constants/Config";
 import { useAlertContext } from "@/app/contexts/AlertContext";
+import { useLazyGetTimeslotsQuery } from "@/app/store/api/eventApi";
 import TimeSlotPicker from "./TimeSlotPicker";
 
 interface RescheduleComponentProps {
@@ -49,6 +49,7 @@ const RescheduleComponent: React.FC<RescheduleComponentProps> = ({
 
   // Alert context
   const { setAlertConfig, setIsVisible } = useAlertContext();
+  const [fetchTimeslots] = useLazyGetTimeslotsQuery();
 
   // State management
   const [selectedDate, setSelectedDate] = useState<dayjs.Dayjs>(
@@ -86,31 +87,14 @@ const RescheduleComponent: React.FC<RescheduleComponentProps> = ({
       setIsLoadingSlots(true);
 
       try {
-        const url = new URL(
-          `${API_CONFIG.detailerAppUrl}/api/v1/availability/get_timeslots/`
-        );
-        url.searchParams.append("date", date.format("YYYY-MM-DD"));
-        url.searchParams.append("service_duration", serviceDuration.toString());
-        url.searchParams.append("country", userCountry);
-        url.searchParams.append("city", userCity);
-        // Pass lat/lng for geographic fallback (30km radius) when city match fails
-        if (userLatitude != null && userLongitude != null) {
-          url.searchParams.append("latitude", userLatitude.toString());
-          url.searchParams.append("longitude", userLongitude.toString());
-        }
-
-        const response = await fetch(url.toString(), {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const data = await response.json();
+        const data = await fetchTimeslots({
+          date: date.format("YYYY-MM-DD"),
+          service_duration: serviceDuration,
+          country: userCountry,
+          city: userCity,
+          latitude: userLatitude,
+          longitude: userLongitude,
+        }).unwrap();
 
         // Check for error messages from the server (e.g. no detailers in area)
         if (data.error) {
@@ -180,7 +164,7 @@ const RescheduleComponent: React.FC<RescheduleComponentProps> = ({
         setIsLoadingSlots(false);
       }
     },
-    [userCountry, userCity, userLatitude, userLongitude, serviceDuration, setAlertConfig, setIsVisible]
+    [userCountry, userCity, userLatitude, userLongitude, serviceDuration, fetchTimeslots, setAlertConfig, setIsVisible]
   );
 
   /**

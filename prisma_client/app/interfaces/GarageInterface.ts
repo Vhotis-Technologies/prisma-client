@@ -23,10 +23,9 @@ export interface LookupVehiclePreview {
   make: string;
   model: string;
   year: number;
+  color?: string | null;
   body_style?: string | null;
   image_url?: string | null;
-  county?: string | null;
-  description?: string | null;
 }
 
 export interface LookupVehicleRegistrationResponse {

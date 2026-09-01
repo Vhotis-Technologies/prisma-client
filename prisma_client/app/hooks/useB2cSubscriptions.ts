@@ -2,7 +2,7 @@
  * Consumer (B2C) subscription: plans, create/cancel, payment method via Stripe.
  * Use for non–fleet-owner users on SubscriptionPlanScreen and related UI.
  */
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { router } from "expo-router";
 import {
   useGetB2cCurrentSubscriptionQuery,
@@ -18,11 +18,14 @@ import { useStripe } from "@stripe/stripe-react-native";
 import { useSnackbar } from "@/app/contexts/SnackbarContext";
 import { useAddresses } from "@/app/app-hooks/useAddresses";
 import usePayment from "@/app/app-hooks/usePayment";
+import useVehicles from "@/app/app-hooks/useVehicles";
 import { APP_ENV } from "@/constants/Config";
 import {
+  B2cVehicleCategory,
   CreateSubscriptionResponse,
   CurrentSubscriptionView,
 } from "@/app/interfaces/SubscriptionInterfaces";
+import { vehicleBodyStyleRequiresSuvMpvSurcharge } from "@/app/utils/vehicleBodyStyle";
 
 /** Skip B2C subscription queries when user is a fleet owner. */
 const skipForFleetOwner = (isFleetOwner: boolean | undefined) => !!isFleetOwner;
@@ -39,6 +42,7 @@ export const useB2cSubscriptions = () => {
   const { showSnackbarWithConfig } = useSnackbar();
   const { addresses } = useAddresses();
   const { waitForPaymentConfirmation } = usePayment();
+  const { vehicles } = useVehicles();
 
   const {
     data: subscriptionPayload,
@@ -81,10 +85,34 @@ export const useB2cSubscriptions = () => {
   const [selectedBillingCycle, setSelectedBillingCycle] = useState<
     "monthly" | "yearly"
   >("monthly");
+  const [selectedVehicleCategory, setSelectedVehicleCategory] =
+    useState<B2cVehicleCategory>("sedan");
+  const vehicleCategoryTouchedRef = useRef(false);
+  /** After cancel-to-upgrade, keep the target class selected for the next subscribe. */
+  const pendingVehicleClassAfterCancelRef = useRef<B2cVehicleCategory | null>(
+    null,
+  );
+  const [cancelModalMode, setCancelModalMode] = useState<
+    "standard" | "vehicle_class"
+  >("standard");
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [isCanceling, setIsCanceling] = useState(false);
   const [isUpdatingPayment, setIsUpdatingPayment] = useState(false);
+
+  /** Default Sedan vs SUV/MPV from active plan, else garage body styles. */
+  useEffect(() => {
+    if (skip || vehicleCategoryTouchedRef.current) return;
+    const fromSub = currentSubscription?.vehicleCategory;
+    if (fromSub === "sedan" || fromSub === "suv_mpv") {
+      setSelectedVehicleCategory(fromSub);
+      return;
+    }
+    const needsSuv = vehicles.some((v) =>
+      vehicleBodyStyleRequiresSuvMpvSurcharge(v.body_style),
+    );
+    setSelectedVehicleCategory(needsSuv ? "suv_mpv" : "sedan");
+  }, [skip, currentSubscription?.vehicleCategory, vehicles]);
 
   const hasActiveB2cSubscription = useMemo(() => {
     if (skip) return false;
@@ -109,7 +137,7 @@ export const useB2cSubscriptions = () => {
         const currencyCode = isUK ? "GBP" : "EUR";
 
         const paymentSheetParams = {
-          merchantDisplayName: "Prisma Valet",
+          merchantDisplayName: "Prisma Car Care",
           customerEphemeralKeySecret: ephemeralKey,
           customerId: customer,
           returnURL: "prismaclient://payment-success",
@@ -178,12 +206,32 @@ export const useB2cSubscriptions = () => {
       return;
     }
 
+    const activeStatus = subscriptionPayload?.subscription?.status;
+    if (
+      activeStatus === "active" ||
+      activeStatus === "pending" ||
+      activeStatus === "past_due"
+    ) {
+      const currentCategory =
+        subscriptionPayload?.subscription?.vehicleCategory ?? "suv_mpv";
+      const switchingClass = currentCategory !== selectedVehicleCategory;
+      showSnackbarWithConfig({
+        message: switchingClass
+          ? "Cancel your current plan first, then subscribe with the new vehicle class."
+          : "You already have a subscription. Cancel it before starting a new one.",
+        type: "warning",
+        duration: 5000,
+      });
+      return;
+    }
+
     setIsProcessingPayment(true);
 
     try {
       const response = (await createSubscription({
         tierId: selectedTierId,
         billingCycle: selectedBillingCycle,
+        vehicleCategory: selectedVehicleCategory,
       }).unwrap()) as CreateSubscriptionResponse;
 
       if (response.paymentSheet) {
@@ -297,6 +345,7 @@ export const useB2cSubscriptions = () => {
   }, [
     selectedTierId,
     selectedBillingCycle,
+    selectedVehicleCategory,
     createSubscription,
     abandonIncompleteCheckout,
     initializeSubscriptionPaymentSheet,
@@ -304,6 +353,8 @@ export const useB2cSubscriptions = () => {
     refetchSubscription,
     showSnackbarWithConfig,
     waitForPaymentConfirmation,
+    subscriptionPayload?.subscription?.status,
+    subscriptionPayload?.subscription?.vehicleCategory,
   ]);
 
   /** Cancel B2C subscription (end of period or immediately). */
@@ -316,13 +367,29 @@ export const useB2cSubscriptions = () => {
         }).unwrap();
         await refetchSubscription();
         setShowCancelModal(false);
-        showSnackbarWithConfig({
-          message: cancelAtPeriodEnd
-            ? "Subscription will be cancelled at the end of the billing period."
-            : "Subscription cancelled successfully.",
-          type: "success",
-          duration: 5000,
-        });
+        const pendingClass = pendingVehicleClassAfterCancelRef.current;
+        if (pendingClass && !cancelAtPeriodEnd) {
+          vehicleCategoryTouchedRef.current = true;
+          setSelectedVehicleCategory(pendingClass);
+          pendingVehicleClassAfterCancelRef.current = null;
+          showSnackbarWithConfig({
+            message: `Plan cancelled. Select a tier and subscribe to ${
+              pendingClass === "sedan" ? "Sedan" : "SUV / MPV"
+            }.`,
+            type: "success",
+            duration: 6000,
+          });
+        } else {
+          pendingVehicleClassAfterCancelRef.current = null;
+          showSnackbarWithConfig({
+            message: cancelAtPeriodEnd
+              ? "Subscription will be cancelled at the end of the billing period."
+              : "Subscription cancelled successfully.",
+            type: "success",
+            duration: 5000,
+          });
+        }
+        setCancelModalMode("standard");
       } catch (error: unknown) {
         const err = error as { data?: { error?: string }; message?: string };
         showSnackbarWithConfig({
@@ -357,7 +424,7 @@ export const useB2cSubscriptions = () => {
 
       const { error: initError } = await initPaymentSheet({
         setupIntentClientSecret: setupIntent,
-        merchantDisplayName: "Prisma Valet",
+        merchantDisplayName: "Prisma Car Care",
         customerEphemeralKeySecret: ephemeralKey,
         customerId: customer,
         returnURL: "prismaclient://payment-success",
@@ -452,6 +519,71 @@ export const useB2cSubscriptions = () => {
     [selectedTierId]
   );
 
+  /** Sedan vs SUV/MPV — drives displayed prices and subscribe payload. */
+  const handleVehicleCategoryChange = useCallback(
+    (category: B2cVehicleCategory) => {
+      vehicleCategoryTouchedRef.current = true;
+      setSelectedVehicleCategory(category);
+    },
+    [],
+  );
+
+  /**
+   * Cancel-first vehicle-class switch: lock target class, open cancel modal.
+   * After immediate cancel, user can subscribe to the new class.
+   */
+  const handleStartVehicleClassChange = useCallback(
+    (targetCategory: B2cVehicleCategory) => {
+      pendingVehicleClassAfterCancelRef.current = targetCategory;
+      vehicleCategoryTouchedRef.current = true;
+      setSelectedVehicleCategory(targetCategory);
+      setCancelModalMode("vehicle_class");
+      setShowCancelModal(true);
+    },
+    [],
+  );
+
+  const openCancelModal = useCallback((mode: "standard" | "vehicle_class" = "standard") => {
+    setCancelModalMode(mode);
+    if (mode === "standard") {
+      pendingVehicleClassAfterCancelRef.current = null;
+    }
+    setShowCancelModal(true);
+  }, []);
+
+  const closeCancelModal = useCallback(() => {
+    setShowCancelModal(false);
+    setCancelModalMode("standard");
+    pendingVehicleClassAfterCancelRef.current = null;
+  }, []);
+
+  /** Boolean setter for shared SubscriptionPlanScreen (fleet-compatible). */
+  const setShowCancelModalCompat = useCallback(
+    (visible: boolean) => {
+      if (visible) openCancelModal("standard");
+      else closeCancelModal();
+    },
+    [openCancelModal, closeCancelModal],
+  );
+
+  const needsCancelBeforeSubscribe = useMemo(() => {
+    const status = subscriptionPayload?.subscription?.status;
+    return (
+      status === "active" || status === "pending" || status === "past_due"
+    );
+  }, [subscriptionPayload?.subscription?.status]);
+
+  const isSwitchingVehicleClass = useMemo(() => {
+    if (!needsCancelBeforeSubscribe) return false;
+    const current =
+      subscriptionPayload?.subscription?.vehicleCategory ?? "suv_mpv";
+    return current !== selectedVehicleCategory;
+  }, [
+    needsCancelBeforeSubscribe,
+    subscriptionPayload?.subscription?.vehicleCategory,
+    selectedVehicleCategory,
+  ]);
+
   return {
     isFleetOwner,
     hasActiveB2cSubscription,
@@ -464,6 +596,7 @@ export const useB2cSubscriptions = () => {
     refetchSubscription,
     selectedTierId,
     selectedBillingCycle,
+    selectedVehicleCategory,
     setSelectedTierId,
     setSelectedBillingCycle,
     isProcessingPayment,
@@ -471,9 +604,15 @@ export const useB2cSubscriptions = () => {
     isCanceling,
     isUpdatingPayment,
     showCancelModal,
-    setShowCancelModal,
+    setShowCancelModal: setShowCancelModalCompat,
+    closeCancelModal,
+    cancelModalMode,
+    needsCancelBeforeSubscribe,
+    isSwitchingVehicleClass,
     handleTierSelect,
     handleBillingCycleChange,
+    handleVehicleCategoryChange,
+    handleStartVehicleClassChange,
     handleSubscribe,
     handleCancelSubscription,
     handleUpdatePaymentMethod,

@@ -59,12 +59,12 @@ class NotificationsView(APIView):
         """Return all notifications for the authenticated user. Each with id, title, message, type, status, timestamp, is_read."""
         try:
             # Scope to current user only
-            notifications = Notification.objects.filter(user=request.user)
+            notifications = Notification.objects.filter(user=request.user).order_by('-timestamp')
             notifications_data = []
             
             for notification in notifications:
                 notifications_data.append({
-                    'id': notification.id,
+                    'id': str(notification.id),
                     'title': notification.title,
                     'message': notification.message,
                     'type': notification.type,

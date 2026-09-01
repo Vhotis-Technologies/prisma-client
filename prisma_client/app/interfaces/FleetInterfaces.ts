@@ -40,7 +40,6 @@ export interface BranchAdminCreateProps {
   name: string;
   email: string;
   phone: string;
-  password: string;
   branch_id: string;
 }
 
@@ -176,6 +175,7 @@ export interface BranchAdmin {
   email: string;
   phone: string;
   joined_at: string;
+  invite_pending?: boolean;
 }
 
 export interface FleetAdmin extends BranchAdmin {

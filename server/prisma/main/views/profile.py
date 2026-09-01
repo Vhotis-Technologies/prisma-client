@@ -2,13 +2,79 @@
 Profile API: addresses CRUD, profile get/update, push/email/marketing notification tokens.
 
 Actions: get_addresses, add_new_address, update_address, delete_address,
-update_push_notification_token, update_email_notification_token, update_marketing_email_token, get_profile.
+update_push_notification_token, update_email_notification_token, update_marketing_email_token,
+get_profile, update_profile.
 """
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework import status
-from main.models import Address, BookedAppointment, User, Fleet, Branch, FleetMember
+from main.models import Address, BookedAppointment, User, Fleet, Branch, FleetMember, Partner, LoyaltyProgram
+
+
+def serialize_user_profile(user):
+    """Build the profile payload shared by get_profile and update_profile."""
+    address = Address.objects.filter(user=user).first()
+    loyalty = (
+        LoyaltyProgram.objects.filter(user=user).first()
+        if user.is_b2c_user()
+        else None
+    )
+    loyalty_benefits = loyalty.get_tier_benefits() if loyalty else None
+
+    try:
+        partner_profile = user.partner_profile
+        is_dealership = partner_profile is not None
+        partner_referral_code = partner_profile.referral_code if is_dealership else None
+        partner_business_name = partner_profile.business_name if is_dealership else None
+    except Partner.DoesNotExist:
+        is_dealership = False
+        partner_referral_code = None
+        partner_business_name = None
+
+    business_name = partner_business_name
+    if not business_name and user.is_fleet_owner:
+        fleet = Fleet.objects.filter(owner=user).first()
+        business_name = fleet.name if fleet else None
+
+    managed_branch = None
+    if user.is_branch_admin:
+        managed_branch_obj = user.get_managed_branch()
+        if managed_branch_obj:
+            managed_branch = {
+                "id": str(managed_branch_obj.id),
+                "name": managed_branch_obj.name,
+                "address": managed_branch_obj.address,
+                "postcode": managed_branch_obj.postcode,
+                "city": managed_branch_obj.city,
+            }
+
+    return {
+        "id": str(user.id),
+        "name": user.name,
+        "email": user.email,
+        "phone": user.phone,
+        "is_fleet_owner": user.is_fleet_owner,
+        "is_branch_admin": user.is_branch_admin,
+        "is_guest": user.is_guest,
+        "is_dealership": is_dealership,
+        "partner_referral_code": partner_referral_code,
+        "business_name": business_name,
+        "managed_branch": managed_branch,
+        "address": {
+            "address": address.address if address else "",
+            "post_code": address.post_code if address else "",
+            "city": address.city if address else "",
+            "country": address.country if address else "",
+        },
+        "push_notification_token": user.allow_push_notifications,
+        "email_notification_token": user.allow_email_notifications,
+        "marketing_email_token": user.allow_marketing_emails,
+        "loyalty_tier": loyalty.current_tier if loyalty else "",
+        "loyalty_benefits": loyalty_benefits,
+        "referral_code": user.referral_code if user.referral_code else "",
+    }
+
 
 class ProfileView(APIView):
     """
@@ -29,6 +95,7 @@ class ProfileView(APIView):
         'update_email_notification_token': 'update_email_notification_token',
         'update_marketing_email_token': 'update_marketing_email_token',
         'get_profile': 'get_profile',
+        'update_profile': 'update_profile',
     }
 
     def get(self, request, *args, **kwargs):
@@ -272,8 +339,8 @@ class ProfileView(APIView):
                             'post_code': branch.postcode or '',
                             'city': branch.city or '',
                             'country': branch.country or '',
-                            'latitude': None,
-                            'longitude': None
+                            'latitude': float(branch.latitude) if branch.latitude is not None else None,
+                            'longitude': float(branch.longitude) if branch.longitude is not None else None,
                         })
             
             # Check if user is a fleet admin (branch admin)
@@ -287,8 +354,8 @@ class ProfileView(APIView):
                         'post_code': branch.postcode or '',
                         'city': branch.city or '',
                         'country': branch.country or '',
-                        'latitude': None,
-                        'longitude': None
+                        'latitude': float(branch.latitude) if branch.latitude is not None else None,
+                        'longitude': float(branch.longitude) if branch.longitude is not None else None,
                     })
             
             # For regular users, return their saved addresses
@@ -393,55 +460,68 @@ class ProfileView(APIView):
         partner info (if dealership), recent service count, referral_code.
         """
         try:
-            # Get the user's profile
-            user = request.user
-            
-            # Get user's address if exists
-            address = Address.objects.filter(user=user).first()
-            
-            # Get user's loyalty program if exists
-            from main.models import LoyaltyProgram
-            loyalty = (
-                LoyaltyProgram.objects.filter(user=user).first()
-                if user.is_b2c_user()
-                else None
-            )
-            loyalty_benefits = loyalty.get_tier_benefits() if loyalty else None
-            
-            from main.models import Partner
-            try:
-                partner_profile = user.partner_profile
-                is_dealership = partner_profile is not None
-                partner_referral_code = partner_profile.referral_code if is_dealership else None
-                partner_business_name = partner_profile.business_name if is_dealership else None
-            except Partner.DoesNotExist:
-                is_dealership = False
-                partner_referral_code = None
-                partner_business_name = None
+            return Response({'profile': serialize_user_profile(request.user)}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-            user_profile = {
-                'id': user.id,
-                'name': user.name,
-                'email': user.email,
-                'phone': user.phone,
-                'is_fleet_owner': user.is_fleet_owner,
-                'is_branch_admin': user.is_branch_admin,
-                'is_dealership': is_dealership,
-                'partner_referral_code': partner_referral_code,
-                'business_name': partner_business_name,
-                'address': {
-                    'address': address.address if address else '',
-                    'post_code': address.post_code if address else '',
-                    'city': address.city if address else '',
-                    'country': address.country if address else '',
-                },
-                'push_notification_token': user.allow_push_notifications,
-                'email_notification_token': user.allow_email_notifications,
-                'marketing_email_token': user.allow_marketing_emails,
-                'loyalty_tier': loyalty.current_tier if loyalty else '',
-                'loyalty_benefits': loyalty_benefits,
-                'referral_code': user.referral_code if user.referral_code else '',
-            }
-            return Response({'profile': user_profile}, status=status.HTTP_200_OK)
+    def update_profile(self, request):
+        """Update name, phone, email, and business_name. Branch admins are rejected with 403."""
+        user = request.user
+        if user.is_branch_admin:
+            return Response(
+                {'error': 'Branch admins cannot update this profile.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+            name = request.data.get('name')
+            phone = request.data.get('phone')
+            email = request.data.get('email')
+            business_name = request.data.get('business_name')
+
+            if name is not None:
+                name = str(name).strip()
+                if not name:
+                    return Response({'error': 'Name is required'}, status=status.HTTP_400_BAD_REQUEST)
+                if len(name) > 155:
+                    return Response({'error': 'Name is too long'}, status=status.HTTP_400_BAD_REQUEST)
+                user.name = name
+
+            if phone is not None:
+                phone = str(phone).strip()
+                if len(phone) > 15:
+                    return Response({'error': 'Phone is too long'}, status=status.HTTP_400_BAD_REQUEST)
+                user.phone = phone
+
+            if email is not None:
+                email = str(email).strip().lower()
+                if not email:
+                    return Response({'error': 'Email is required'}, status=status.HTTP_400_BAD_REQUEST)
+                if User.objects.filter(email__iexact=email).exclude(pk=user.pk).exists():
+                    return Response(
+                        {'error': 'That email is already in use'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                user.email = email
+
+            user.save()
+
+            if business_name is not None:
+                cleaned_business = str(business_name).strip()
+                if user.is_fleet_owner:
+                    fleet = Fleet.objects.filter(owner=user).first()
+                    if fleet and cleaned_business:
+                        fleet.name = cleaned_business
+                        fleet.save(update_fields=['name'])
+                else:
+                    try:
+                        partner = user.partner_profile
+                        if cleaned_business:
+                            partner.business_name = cleaned_business
+                            partner.save(update_fields=['business_name'])
+                    except Partner.DoesNotExist:
+                        pass
+
+            return Response({'profile': serialize_user_profile(user)}, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)

@@ -48,12 +48,12 @@ from main.models import (
     VehicleOwnership,
     VehicleTransfer,
 )
-from main.util.media_helper import get_full_media_url
-from main.util.vehicle_transfer_actions import (
+from main.utils.media_helper import get_full_media_url
+from main.services.vehicle_transfer_actions import (
     apply_vehicle_transfer_approval,
     apply_vehicle_transfer_rejection,
 )
-from main.utils.booking_quote import (
+from main.services.booking_quote import (
     get_loyalty_progress_snapshot,
     get_subscription_quick_sparkle_snapshot,
 )
@@ -298,12 +298,12 @@ def _user_primary_address(user: User) -> Address | None:
 
 
 def _support_subscription_status(db_status: str) -> str:
-    """Map DB subscription status to support-app terminated/expired/active."""
+    """Map DB subscription status to the support desk pill (do not paint pending/trial as Active)."""
     if db_status in ("cancelled",):
         return "terminated"
-    if db_status in ("expired",):
-        return "expired"
-    return "active"
+    if db_status in ("expired", "trialing", "pending", "past_due", "active"):
+        return db_status
+    return db_status or "expired"
 
 
 def _latest_b2c_subscription(user: User) -> B2CSubcription | None:
@@ -317,7 +317,7 @@ def _latest_b2c_subscription(user: User) -> B2CSubcription | None:
     )
 
 
-def _serialize_b2c_subscription(sub: B2CSubcription | None) -> dict:
+def _serialize_b2c_subscription(sub: B2CSubcription | None, *, sync_from_stripe: bool = False) -> dict:
     """Support payload shape matches :func:`_serialize_fleet_subscription` (no consumer trials in model)."""
     if not sub:
         return {
@@ -334,15 +334,21 @@ def _serialize_b2c_subscription(sub: B2CSubcription | None) -> dict:
     billing = (plan.billing_cycle if plan else "monthly") or "monthly"
     if billing not in ("monthly", "yearly"):
         billing = "monthly"
+    from main.utils.subscription_sync import latest_paid_billing_at, sync_local_subscription_from_stripe
+
+    stripe_snap = sync_local_subscription_from_stripe(sub) if sync_from_stripe else {}
+    last_paid = latest_paid_billing_at(sub)
     out_status = _support_subscription_status(sub.status)
     terminated_at = _iso(sub.cancellation_date) if sub.cancellation_date else None
+    is_trial = bool(stripe_snap.get("is_trialing")) if stripe_snap else False
     return {
         "subtype": subtype,
         "billing_type": billing,
         "started_at": _iso(sub.start_date),
         "ends_at": _iso(sub.end_date),
-        "is_trial": False,
+        "is_trial": is_trial,
         "trial_ends_at": None,
+        "last_paid_at": _iso(last_paid) if last_paid else None,
         "status": out_status,
         "terminated_at": terminated_at if out_status == "terminated" else None,
     }
@@ -350,6 +356,8 @@ def _serialize_b2c_subscription(sub: B2CSubcription | None) -> dict:
 
 def _serialize_fleet_subscription(
     sub: FleetSubscription | None,
+    *,
+    sync_from_stripe: bool = False,
 ) -> dict:
     """Fleet subscription block for support customer payloads."""
     if not sub:
@@ -367,7 +375,11 @@ def _serialize_fleet_subscription(
     billing = (plan.billing_cycle if plan else "monthly") or "monthly"
     if billing not in ("monthly", "yearly"):
         billing = "monthly"
-    is_trial = sub.status == "trialing" or bool(sub.trial_end_date)
+    from main.utils.subscription_sync import latest_paid_billing_at, sync_local_subscription_from_stripe
+
+    stripe_snap = sync_local_subscription_from_stripe(sub) if sync_from_stripe else {}
+    last_paid = latest_paid_billing_at(sub)
+    is_trial = bool(stripe_snap.get("is_trialing") or sub.status == "trialing")
     trial_ends = _iso(sub.trial_end_date) if sub.trial_end_date else None
     out_status = _support_subscription_status(sub.status)
     terminated_at = _iso(sub.cancellation_date) if sub.cancellation_date else None
@@ -378,23 +390,45 @@ def _serialize_fleet_subscription(
         "ends_at": _iso(sub.end_date),
         "is_trial": is_trial,
         "trial_ends_at": trial_ends,
+        "last_paid_at": _iso(last_paid) if last_paid else None,
         "status": out_status,
         "terminated_at": terminated_at if out_status == "terminated" else None,
     }
 
 
 def _b2c_user_query():
-    """End-user accounts: not linked as partner, not fleet/branch ops, not staff.
-
-    Same idea as fleet/partner list endpoints: broad recent slice, no booking/ownership gate
-    (those filters excluded signups and produced empty B2C lists in dev).
-    """
+    """End-user accounts: not linked as partner, not fleet/branch ops, not staff."""
     partner_user_ids = Partner.objects.values_list("user_id", flat=True)
     return (
         User.objects.exclude(id__in=partner_user_ids)
         .filter(is_fleet_owner=False, is_branch_admin=False, is_staff=False)
         .order_by("-created_at")[:400]
     )
+
+
+def _guest_user_query():
+    """Unclaimed guest checkout accounts (shadow users with ``is_guest=True``)."""
+    partner_user_ids = Partner.objects.values_list("user_id", flat=True)
+    return (
+        User.objects.exclude(id__in=partner_user_ids)
+        .filter(
+            is_guest=True,
+            is_fleet_owner=False,
+            is_branch_admin=False,
+            is_staff=False,
+        )
+        .order_by("-created_at")[:400]
+    )
+
+
+def _b2c_account_fields(user: User) -> dict:
+    """Guest vs member flags for support customer payloads."""
+    is_guest = bool(getattr(user, "is_guest", False))
+    return {
+        "is_guest": is_guest,
+        "account_status": "guest" if is_guest else "member",
+        "can_claim": is_guest,
+    }
 
 
 def _b2c_booking_stats(user: User) -> tuple[int, Decimal, int, int, str | None]:
@@ -426,6 +460,7 @@ def _serialize_b2c_list_item(user: User) -> dict:
             "email": user.email or "",
             "phone": user.phone or "",
         },
+        **_b2c_account_fields(user),
         "loyalty_tier": tier,
         "total_spend": _float_or_0(total_spend),
         "total_bookings": total_bookings,
@@ -473,8 +508,10 @@ def _serialize_b2c_detail(user: User) -> dict:
         _float_or_0(total_spend) / completed if completed else 0.0
     )
     vehicles_out = _vehicles_for_user(user)
+    b2c_sub = _latest_b2c_subscription(user)
     return {
         **base,
+        "subscription": _serialize_b2c_subscription(b2c_sub, sync_from_stripe=True),
         "address": {
             "address": addr.address if addr else "",
             "city": addr.city if addr else "",
@@ -589,7 +626,7 @@ def _serialize_fleet_detail(fleet: Fleet) -> dict:
         )
     return {
         **base,
-        "subscription": _serialize_fleet_subscription(sub),
+        "subscription": _serialize_fleet_subscription(sub, sync_from_stripe=True),
         "total_spend": _float_or_0(total_spend),
         "total_bookings": total_bookings,
         "referral_code": (owner.referral_code if owner else "") or "",
@@ -887,6 +924,9 @@ class SupportCustomersView(APIView):
         segment = (request.query_params.get("segment") or "b2c").strip().lower()
         if segment == "b2c":
             qs_list = list(_b2c_user_query())
+            customers = [_serialize_b2c_list_item(u) for u in qs_list]
+        elif segment == "guests":
+            qs_list = list(_guest_user_query())
             customers = [_serialize_b2c_list_item(u) for u in qs_list]
         elif segment in ("fleets", "fleet"):
             fleets = Fleet.objects.select_related("owner").order_by("-created_at")[:300]

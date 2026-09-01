@@ -18,12 +18,15 @@ class UserManager(BaseUserManager):
     """Creates users and superusers with normalized email as username."""
 
     def create_user(self, email, password=None, **extra_fields):
-        """Create a standard user with hashed password."""
+        """Create a user. ``password=None`` leaves an unusable password (invite flow)."""
         if not email:
             raise ValueError("Email is required")
         email = self.normalize_email(email)
         user = self.model(email=email, **extra_fields)
-        user.set_password(password)
+        if password:
+            user.set_password(password)
+        else:
+            user.set_unusable_password()
         user.save(using=self._db)
         return user
 
@@ -35,7 +38,7 @@ class UserManager(BaseUserManager):
 
 
 class User(AbstractUser):
-    """Prisma client account: B2C consumer, fleet owner, branch admin, or partner-linked user."""
+    """Prisma client account: B2C consumer, guest checkout, fleet owner, branch admin, or partner-linked user."""
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=155)
@@ -48,6 +51,11 @@ class User(AbstractUser):
     is_superuser = models.BooleanField(default=False)
     is_fleet_owner = models.BooleanField(default=False)
     is_branch_admin = models.BooleanField(default=False)
+    is_guest = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="Shadow checkout account: no password, no loyalty, results via emailed token.",
+    )
     notification_token = models.CharField(max_length=255, blank=True, null=True)
     allow_marketing_emails = models.BooleanField(default=False)
     allow_push_notifications = models.BooleanField(default=True)
@@ -107,8 +115,10 @@ class User(AbstractUser):
         return self.is_fleet_owner or self.is_branch_admin
 
     def is_b2c_user(self):
-        """Consumer accounts eligible for loyalty; fleet staff/partners are excluded."""
+        """Consumer accounts eligible for loyalty; fleet staff, partners, and guests are excluded."""
         from main.models import FleetMember, Partner
+        if self.is_guest:
+            return False
         if self.is_fleet_owner or self.is_branch_admin:
             return False
         if FleetMember.objects.filter(user=self).exists():
@@ -118,7 +128,23 @@ class User(AbstractUser):
         return True
 
     def can_view_vehicle_details(self, vehicle=None):
-        """Fleet users need an active subscription to view vehicle detail in the app."""
+        """Fleet users can always view job photos, even without subscription."""
+        from main.models import Fleet, FleetMember
+        if not (self.is_fleet_owner or self.is_branch_admin):
+            return True
+        fleet = None
+        if self.is_fleet_owner:
+            fleet = Fleet.objects.filter(owner=self).first()
+        else:
+            membership = FleetMember.objects.filter(user=self).first()
+            fleet = membership.fleet if membership else None
+        if not fleet:
+            return False
+        # All fleet users can view
+        return True
+    
+    def can_download_vehicle_details(self, vehicle=None):
+        """Fleet users need an active subscription to download or share job photos."""
         from main.models import Fleet, FleetMember
         if not (self.is_fleet_owner or self.is_branch_admin):
             return True
@@ -179,7 +205,7 @@ class User(AbstractUser):
         if is_new_user and not self.referral_code:
             self.referral_code = self.create_referral_code()
         super().save(*args, **kwargs)
-        if is_new_user and self.has_signup_promotions:
+        if is_new_user and self.has_signup_promotions and not self.is_guest:
             valid_until = (datetime.now() + timedelta(days=30)).date()
             Promotions.objects.create(
                 user=self,
@@ -421,3 +447,49 @@ class PasswordResetToken(models.Model):
 
     def __str__(self):
         return f"Password reset token for {self.user.email}"
+
+
+class AccountInvite(models.Model):
+    """Single-use, expiring token for invitees to set their own password.
+
+    Raw token is emailed once; only ``token_hash`` is stored.
+    """
+
+    PURPOSE_BRANCH_ADMIN = "branch_admin"
+    PURPOSE_CHOICES = [
+        (PURPOSE_BRANCH_ADMIN, "Branch admin"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="account_invites",
+    )
+    token_hash = models.CharField(max_length=64, unique=True, db_index=True)
+    purpose = models.CharField(max_length=32, choices=PURPOSE_CHOICES)
+    invited_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="account_invites_sent",
+    )
+    expires_at = models.DateTimeField()
+    used_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "account_invites"
+        ordering = ["-created_at"]
+
+    def is_expired(self):
+        """True when ``expires_at`` is in the past."""
+        return timezone.now() >= self.expires_at
+
+    def is_valid(self):
+        """True when unused and not expired."""
+        return self.used_at is None and not self.is_expired()
+
+    def __str__(self):
+        return f"Invite {self.purpose} → {self.user.email}"

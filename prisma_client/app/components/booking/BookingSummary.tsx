@@ -43,6 +43,9 @@ interface BookingSummaryProps {
   total?: number;
   coolingOffConsent: boolean;
   onCoolingOffConsentChange: (agreed: boolean) => void;
+  /** Shown when Sedan plan does not cover an SUV/MPV booking. */
+  subscriptionCoverageMessage?: string | null;
+  onUpgradeSubscriptionPress?: () => void;
 }
 
 const BookingSummary: React.FC<BookingSummaryProps> = ({
@@ -71,6 +74,8 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
   total,
   coolingOffConsent,
   onCoolingOffConsentChange,
+  subscriptionCoverageMessage,
+  onUpgradeSubscriptionPress,
 }) => {
   const srv = priceSummaryBreakdown ?? null;
   const cardColor = useThemeColor({}, "cards");
@@ -453,7 +458,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
                   variant="bodyMedium"
                   style={[styles.priceLabel, { color: textColor }]}
                 >
-                  SUV Surcharge:
+                  SUV Surcharge (20%):
                 </StyledText>
                 <StyledText
                   variant="bodyMedium"
@@ -546,6 +551,44 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
                 >
                   −{formatPrice(srv.subscriptionDiscountIncVat)}
                 </StyledText>
+              </View>
+            )}
+
+            {!!subscriptionCoverageMessage && (
+              <View
+                style={[
+                  styles.coverageNotice,
+                  { borderColor: borderColor, backgroundColor: cardColor },
+                ]}
+              >
+                <Ionicons
+                  name="information-circle-outline"
+                  size={18}
+                  color={primaryPurpleColor}
+                  style={{ marginTop: 2 }}
+                />
+                <View style={styles.coverageNoticeBody}>
+                  <StyledText
+                    variant="bodySmall"
+                    style={[styles.coverageNoticeText, { color: textColor }]}
+                  >
+                    {subscriptionCoverageMessage}
+                  </StyledText>
+                  {onUpgradeSubscriptionPress ? (
+                    <TouchableOpacity
+                      onPress={onUpgradeSubscriptionPress}
+                      style={styles.coverageCta}
+                      accessibilityRole="button"
+                    >
+                      <StyledText
+                        variant="labelMedium"
+                        style={{ color: primaryPurpleColor, fontWeight: "600" }}
+                      >
+                        Open subscription settings
+                      </StyledText>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
               </View>
             )}
 
@@ -810,6 +853,29 @@ const styles = StyleSheet.create({
   },
   loyaltyValue: {
     fontWeight: "600",
+  },
+  coverageNotice: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  coverageNoticeBody: {
+    flex: 1,
+    gap: 8,
+  },
+  coverageNoticeText: {
+    flex: 1,
+    lineHeight: 18,
+    opacity: 0.9,
+  },
+  coverageCta: {
+    alignSelf: "flex-start",
+    paddingVertical: 2,
   },
   consentRow: {
     flexDirection: "row",

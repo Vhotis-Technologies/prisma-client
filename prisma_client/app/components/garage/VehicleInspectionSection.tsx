@@ -132,6 +132,7 @@ const VehicleInspectionSection = ({
 
   const score = healthScore;
   const scoreColor = getHealthScoreColor(score);
+  const inspectionDate = inspection.appointment_date || inspection.inspected_at;
 
   return (
     <View style={[styles.container, { marginHorizontal: 20, marginBottom: 16 }]}>
@@ -153,14 +154,14 @@ const VehicleInspectionSection = ({
             >
               Latest Inspection
             </StyledText>
-            {(inspection.appointment_date || inspection.inspected_at) && (
+            {inspectionDate ? (
               <StyledText
                 variant="bodySmall"
                 style={[styles.dateText, { color: textColor }]}
               >
-                {formatDate(inspection.appointment_date || inspection.inspected_at)}
+                {formatDate(inspectionDate)}
               </StyledText>
-            )}
+            ) : null}
           </View>
           <View style={styles.headerRight}>
             {score !== null && (

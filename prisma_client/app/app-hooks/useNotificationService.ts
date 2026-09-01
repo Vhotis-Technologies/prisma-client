@@ -8,6 +8,14 @@ import { Platform } from "react-native";
 import { usePermissions } from "./usePermissions";
 import Constants from "expo-constants";
 import { APP_CONFIG } from "@/constants/Config";
+import store from "@/app/store/main_store";
+import { dashboardApi } from "@/app/store/api/dashboardApi";
+
+const BOOKING_PUSH_TYPES = new Set([
+  "booking_confirmed",
+  "appointment_started",
+  "cleaning_completed",
+]);
 
 /**
  * Notification service hook that handles push notifications
@@ -178,12 +186,28 @@ export const useNotificationService = () => {
       notificationListener.current =
         Notifications.addNotificationReceivedListener((notification) => {
           setNotification(notification);
+          const type = notification.request.content.data?.type;
+          if (typeof type === "string" && BOOKING_PUSH_TYPES.has(type)) {
+            store.dispatch(
+              dashboardApi.util.invalidateTags([
+                "UpcomingAppointments",
+                "RecentServices",
+              ])
+            );
+          }
         });
 
       responseListener.current =
         Notifications.addNotificationResponseReceivedListener((response) => {
-          // Handle notification tap here
-          // You can navigate to specific screens based on the notification data
+          const type = response.notification.request.content.data?.type;
+          if (typeof type === "string" && BOOKING_PUSH_TYPES.has(type)) {
+            store.dispatch(
+              dashboardApi.util.invalidateTags([
+                "UpcomingAppointments",
+                "RecentServices",
+              ])
+            );
+          }
         });
 
       return;

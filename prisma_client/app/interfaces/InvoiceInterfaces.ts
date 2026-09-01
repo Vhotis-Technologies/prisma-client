@@ -33,3 +33,12 @@ export interface InvoiceListItem {
 export interface InvoiceListResponse {
   invoices: InvoiceListItem[];
 }
+
+export type InvoiceLaterEligibility = {
+  allowed: boolean;
+  code: "FLEET_SUBSCRIPTION_REQUIRED" | "OVERDUE_INVOICE" | null;
+  message: string;
+  has_subscription: boolean;
+  is_trialing: boolean;
+  gated: boolean;
+};

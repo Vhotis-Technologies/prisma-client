@@ -56,11 +56,7 @@ const CreateBranchAdminScreen = () => {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [selectedBranchId, setSelectedBranchId] = useState<string>("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [showBranchModal, setShowBranchModal] = useState(false);
 
   const { data: branchesData } = useGetBranchesQuery();
@@ -108,36 +104,6 @@ const CreateBranchAdminScreen = () => {
       });
       return;
     }
-    if (!password) {
-      setAlertConfig({
-        isVisible: true,
-        title: "Error",
-        message: "Password is required",
-        type: "error",
-        onConfirm: () => setIsVisible(false),
-      });
-      return;
-    }
-    if (password.length < 6) {
-      setAlertConfig({
-        isVisible: true,
-        title: "Error",
-        message: "Password must be at least 6 characters",
-        type: "error",
-        onConfirm: () => setIsVisible(false),
-      });
-      return;
-    }
-    if (password !== confirmPassword) {
-      setAlertConfig({
-        isVisible: true,
-        title: "Error",
-        message: "Passwords do not match",
-        type: "error",
-        onConfirm: () => setIsVisible(false),
-      });
-      return;
-    }
     if (!selectedBranchId) {
         setAlertConfig({
         isVisible: true,
@@ -154,14 +120,14 @@ const CreateBranchAdminScreen = () => {
         name: name.trim(),
         email: email.trim().toLowerCase(),
         phone: phone.trim(),
-        password,
         branch_id: selectedBranchId,
       }).unwrap();
 
       setAlertConfig({
         isVisible: true,
-        title: "Success",
-        message: "Branch admin created successfully",
+        title: "Invitation sent",
+        message:
+          "They'll get an email to set their own password and complete registration.",
         type: "success",
         onConfirm: () => {
           setIsVisible(false);
@@ -173,7 +139,7 @@ const CreateBranchAdminScreen = () => {
       setAlertConfig({
         isVisible: true,
         title: "Error",
-        message: err?.data?.error || "Failed to create branch admin",
+        message: err?.data?.error || "Failed to send invitation",
         type: "error",
         onConfirm: () => setIsVisible(false),
       });
@@ -356,48 +322,20 @@ const CreateBranchAdminScreen = () => {
           </TouchableOpacity>
         </Modal>
 
-        {/* Password Input */}
-        <View style={styles.inputContainer}>
-          <StyledTextInput
-            label="Password"
-            value={password}
-            onChangeText={setPassword}
-            placeholder="Enter password"
-            placeholderTextColor={textColor + "80"}
-            secureTextEntry={!showPassword}
-          />
-          <TouchableOpacity
-            onPress={() => setShowPassword(!showPassword)}
-            style={styles.eyeButton}
+        <View
+          style={[
+            styles.inviteHint,
+            { backgroundColor: primaryColor + "12", borderColor: primaryColor + "40" },
+          ]}
+        >
+          <Ionicons name="mail-outline" size={20} color={primaryColor} />
+          <StyledText
+            variant="bodySmall"
+            style={{ color: textColor, flex: 1 }}
           >
-            <Ionicons
-              name={showPassword ? "eye-off" : "eye"}
-              size={20}
-              color={textColor + "80"}
-            />
-          </TouchableOpacity>
-        </View>
-
-        {/* Confirm Password Input */}
-        <View style={[styles.inputContainer, styles.passwordContainer]}>
-          <StyledTextInput
-            label="Confirm Password"
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-            placeholder="Confirm password"
-            placeholderTextColor={textColor + "80"}
-            secureTextEntry={!showConfirmPassword}
-          />
-          <TouchableOpacity
-            onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-            style={styles.eyeButton}
-          >
-            <Ionicons
-              name={showConfirmPassword ? "eye-off" : "eye"}
-              size={20}
-              color={textColor + "80"}
-            />
-          </TouchableOpacity>
+            They'll get an email to set their own password and complete
+            registration. You don't choose a password for them.
+          </StyledText>
         </View>
 
         {/* Submit Button */}
@@ -414,7 +352,7 @@ const CreateBranchAdminScreen = () => {
           </View>
         )}
         <StyledButton
-          title="Create Branch Admin"
+          title="Send invitation"
           onPress={handleSubmit}
           isLoading={isLoading}
           disabled={limitsReached.admins}
@@ -524,14 +462,13 @@ const styles = StyleSheet.create({
   emptyStateText: {
     textAlign: "center",
   },
-  passwordContainer: {
-    position: "relative",
-  },
-  eyeButton: {
-    position: "absolute",
-    right: 12,
-    top: 30,
-    padding: 5,
+  inviteHint: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
   },
   limitWarning: {
     flexDirection: "row",

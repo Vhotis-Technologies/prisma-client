@@ -19,6 +19,7 @@ import { useB2cSubscriptions } from "@/app/hooks/useB2cSubscriptions";
 import { useAppSelector, RootState } from "@/app/store/main_store";
 import { SubscriptionTierProps } from "@/app/interfaces/SubscriptionInterfaces";
 import { useFetchPerksSummaryQuery } from "@/app/store/api/dashboardApi";
+import { formatB2cVehicleCategoryLabel } from "@/app/utils/vehicleBodyStyle";
 
 const SubscriptionPlanScreen = () => {
   const backgroundColor = useThemeColor({}, "background");
@@ -65,7 +66,6 @@ const SubscriptionPlanScreen = () => {
     plans,
     currentSubscription,
     isLoadingPlans,
-    isLoadingSubscription,
     plansError,
     selectedTierId,
     selectedBillingCycle,
@@ -82,9 +82,27 @@ const SubscriptionPlanScreen = () => {
     handleUpdatePaymentMethod,
   } = isFleetOwner ? fleetHook : b2cHook;
 
-  const selectedTier = plans?.find(
-    (tier: SubscriptionTierProps) => tier.id === selectedTierId,
-  );
+  const selectedVehicleCategory = isFleetOwner
+    ? undefined
+    : b2cHook.selectedVehicleCategory;
+  const handleVehicleCategoryChange = isFleetOwner
+    ? undefined
+    : b2cHook.handleVehicleCategoryChange;
+  const handleStartVehicleClassChange = isFleetOwner
+    ? undefined
+    : b2cHook.handleStartVehicleClassChange;
+  const cancelModalMode = isFleetOwner ? "standard" : b2cHook.cancelModalMode;
+  const needsCancelBeforeSubscribe = isFleetOwner
+    ? false
+    : b2cHook.needsCancelBeforeSubscribe;
+  const isSwitchingVehicleClass = isFleetOwner
+    ? false
+    : b2cHook.isSwitchingVehicleClass;
+  const currentVehicleCategory = currentSubscription?.vehicleCategory;
+  const showSedanUpgradeBanner =
+    !isFleetOwner &&
+    currentSubscription?.status === "active" &&
+    currentVehicleCategory === "sedan";
 
   return (
     <View style={[styles.container, { backgroundColor }]}>
@@ -162,10 +180,43 @@ const SubscriptionPlanScreen = () => {
               <StyledText
                 style={[styles.currentSubscriptionText, { color: primaryColor }]}
                 variant="bodyMedium"
-                children={`You currently have an active ${currentSubscription.currentPlan} subscription. Selecting a new plan will replace your current subscription.`}
+                children={
+                  currentSubscription.vehicleCategory
+                    ? `You currently have an active ${currentSubscription.currentPlan} (${formatB2cVehicleCategoryLabel(currentSubscription.vehicleCategory)}) subscription. To change vehicle class, cancel first and then subscribe again.`
+                    : `You currently have an active ${currentSubscription.currentPlan} subscription. Cancel your current plan before starting a new one.`
+                }
               />
             </View>
           )}
+
+        {/* Sedan → SUV/MPV upgrade path (cancel-first) */}
+        {showSedanUpgradeBanner && handleStartVehicleClassChange && (
+          <View
+            style={[
+              styles.upgradeBanner,
+              { backgroundColor: primaryColor + "12", borderColor: primaryColor },
+            ]}
+          >
+            <Ionicons name="car-sport-outline" size={22} color={primaryColor} />
+            <View style={styles.upgradeBannerContent}>
+              <StyledText
+                style={[styles.upgradeBannerTitle, { color: primaryColor }]}
+                variant="bodyMedium"
+                children="Need coverage for SUV / MPV?"
+              />
+              <StyledText
+                style={[styles.upgradeBannerText, { color: textColor }]}
+                variant="bodySmall"
+                children="Sedan plans do not cover larger vehicles. Cancel your Sedan plan, then subscribe to SUV / MPV at the matching price."
+              />
+              <StyledButton
+                title="Switch to SUV / MPV"
+                variant="tonal"
+                onPress={() => handleStartVehicleClassChange("suv_mpv")}
+              />
+            </View>
+          </View>
+        )}
 
         {/* Subscription Management Section */}
         {currentSubscription &&
@@ -229,7 +280,7 @@ const SubscriptionPlanScreen = () => {
                 </View>
 
                 {((currentSubscription.isTrialing &&
-                  currentSubscription.trialEndDate) ||
+                  (currentSubscription.trialEndDate || currentSubscription.renewsOn)) ||
                   currentSubscription.renewsOn) && (
                   <View style={styles.managementRow}>
                     <StyledText
@@ -245,10 +296,11 @@ const SubscriptionPlanScreen = () => {
                       style={[styles.managementValue, { color: textColor }]}
                       variant="bodyMedium"
                       children={
-                        currentSubscription.isTrialing &&
-                        currentSubscription.trialEndDate
+                        currentSubscription.isTrialing
                           ? new Date(
-                              currentSubscription.trialEndDate,
+                              currentSubscription.trialEndDate ||
+                                currentSubscription.renewsOn ||
+                                "",
                             ).toLocaleDateString()
                           : currentSubscription.renewsOn
                             ? new Date(
@@ -259,6 +311,23 @@ const SubscriptionPlanScreen = () => {
                     />
                   </View>
                 )}
+
+                <View style={styles.managementRow}>
+                  <StyledText
+                    style={[styles.managementLabel, { color: textColor }]}
+                    variant="bodyMedium"
+                    children="Last Paid:"
+                  />
+                  <StyledText
+                    style={[styles.managementValue, { color: textColor }]}
+                    variant="bodyMedium"
+                    children={
+                      currentSubscription.lastPaidOn
+                        ? new Date(currentSubscription.lastPaidOn).toLocaleDateString()
+                        : "Never"
+                    }
+                  />
+                </View>
 
                 <View style={styles.managementRow}>
                   <StyledText
@@ -279,6 +348,23 @@ const SubscriptionPlanScreen = () => {
                     }
                   />
                 </View>
+
+                {!isFleetOwner && currentSubscription.vehicleCategory && (
+                  <View style={styles.managementRow}>
+                    <StyledText
+                      style={[styles.managementLabel, { color: textColor }]}
+                      variant="bodyMedium"
+                      children="Vehicle class:"
+                    />
+                    <StyledText
+                      style={[styles.managementValue, { color: textColor }]}
+                      variant="bodyMedium"
+                      children={formatB2cVehicleCategoryLabel(
+                        currentSubscription.vehicleCategory,
+                      )}
+                    />
+                  </View>
+                )}
 
                 {showComplimentary && (
                   <View style={styles.complimentaryBlock}>
@@ -385,6 +471,88 @@ const SubscriptionPlanScreen = () => {
           </View>
         ) : plans && plans.length > 0 ? (
           <View style={styles.plansContainer}>
+            {!isFleetOwner && handleVehicleCategoryChange && selectedVehicleCategory && (
+              <View style={styles.vehicleCategorySection}>
+                <StyledText
+                  style={[styles.vehicleCategoryTitle, { color: textColor }]}
+                  variant="titleMedium"
+                  children="Vehicle class"
+                />
+                <StyledText
+                  style={[styles.vehicleCategoryHint, { color: textColor }]}
+                  variant="bodySmall"
+                  children="Sedan plans cover saloon cars only. SUV/MPV plans cover larger vehicles and sedans. Switching class requires cancelling your current plan first."
+                />
+                <View style={styles.vehicleCategoryToggle}>
+                  <Pressable
+                    onPress={() => handleVehicleCategoryChange("sedan")}
+                    style={[
+                      styles.vehicleCategoryOption,
+                      {
+                        backgroundColor:
+                          selectedVehicleCategory === "sedan"
+                            ? primaryColor + "20"
+                            : "transparent",
+                        borderColor:
+                          selectedVehicleCategory === "sedan"
+                            ? primaryColor
+                            : borderColor,
+                      },
+                    ]}
+                  >
+                    <StyledText
+                      style={[
+                        styles.vehicleCategoryOptionText,
+                        {
+                          color:
+                            selectedVehicleCategory === "sedan"
+                              ? primaryColor
+                              : textColor,
+                          fontWeight:
+                            selectedVehicleCategory === "sedan" ? "600" : "400",
+                        },
+                      ]}
+                      variant="bodyMedium"
+                      children="Sedan"
+                    />
+                  </Pressable>
+                  <Pressable
+                    onPress={() => handleVehicleCategoryChange("suv_mpv")}
+                    style={[
+                      styles.vehicleCategoryOption,
+                      {
+                        backgroundColor:
+                          selectedVehicleCategory === "suv_mpv"
+                            ? primaryColor + "20"
+                            : "transparent",
+                        borderColor:
+                          selectedVehicleCategory === "suv_mpv"
+                            ? primaryColor
+                            : borderColor,
+                      },
+                    ]}
+                  >
+                    <StyledText
+                      style={[
+                        styles.vehicleCategoryOptionText,
+                        {
+                          color:
+                            selectedVehicleCategory === "suv_mpv"
+                              ? primaryColor
+                              : textColor,
+                          fontWeight:
+                            selectedVehicleCategory === "suv_mpv"
+                              ? "600"
+                              : "400",
+                        },
+                      ]}
+                      variant="bodyMedium"
+                      children="SUV / MPV"
+                    />
+                  </Pressable>
+                </View>
+              </View>
+            )}
             {plans.map((tier: SubscriptionTierProps) => {
               const canStartTrial = currentSubscription?.canStartTrial ?? true;
               const isEarlyAdopter =
@@ -403,6 +571,7 @@ const SubscriptionPlanScreen = () => {
                   onBillingCycleChange={(cycle) =>
                     handleBillingCycleChange(tier.id, cycle)
                   }
+                  vehicleCategory={selectedVehicleCategory}
                   canStartTrial={canStartTrial && selectedTierId === tier.id}
                   isEarlyAdopter={isEarlyAdopter}
                 />
@@ -428,7 +597,22 @@ const SubscriptionPlanScreen = () => {
       {selectedTierId && (
         <View style={[styles.footer, { borderTopColor: borderColor }]}>
           <Pressable
-            onPress={handleSubscribe}
+            onPress={() => {
+              if (
+                needsCancelBeforeSubscribe &&
+                isSwitchingVehicleClass &&
+                handleStartVehicleClassChange &&
+                selectedVehicleCategory
+              ) {
+                handleStartVehicleClassChange(selectedVehicleCategory);
+                return;
+              }
+              if (needsCancelBeforeSubscribe) {
+                setShowCancelModal(true);
+                return;
+              }
+              void handleSubscribe();
+            }}
             disabled={isProcessingPayment || isCreatingSubscription}
             style={[
               styles.subscribeButton,
@@ -446,9 +630,13 @@ const SubscriptionPlanScreen = () => {
                 style={styles.subscribeButtonText}
                 variant="labelLarge"
                 children={
-                  currentSubscription?.canStartTrial
-                    ? "Start Trial"
-                    : "Subscribe Now"
+                  needsCancelBeforeSubscribe && isSwitchingVehicleClass
+                    ? "Cancel to switch vehicle class"
+                    : needsCancelBeforeSubscribe
+                      ? "Cancel current plan first"
+                      : currentSubscription?.canStartTrial
+                        ? "Start Trial"
+                        : "Subscribe Now"
                 }
               />
             )}
@@ -460,14 +648,19 @@ const SubscriptionPlanScreen = () => {
         visible={showCancelModal}
         onClose={() => setShowCancelModal(false)}
         modalType="center"
-        title="Cancel Subscription"
+        title={
+          cancelModalMode === "vehicle_class"
+            ? "Switch vehicle class"
+            : "Cancel Subscription"
+        }
         showCloseButton={true}
         component={
           <CancelSubscriptionModal
             onClose={() => setShowCancelModal(false)}
             onCancelAtPeriodEnd={
               currentSubscription?.isTrialing ||
-              currentSubscription?.status === "pending"
+              currentSubscription?.status === "pending" ||
+              cancelModalMode === "vehicle_class"
                 ? undefined
                 : () => handleCancelSubscription(true)
             }
@@ -475,6 +668,7 @@ const SubscriptionPlanScreen = () => {
             isTrialing={currentSubscription?.isTrialing}
             isPendingCheckout={currentSubscription?.status === "pending"}
             isCanceling={isCanceling}
+            isVehicleClassUpgrade={cancelModalMode === "vehicle_class"}
           />
         }
       />
@@ -503,6 +697,29 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     lineHeight: 20,
+  },
+  upgradeBanner: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginHorizontal: 16,
+    marginBottom: 8,
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 10,
+  },
+  upgradeBannerContent: {
+    flex: 1,
+    gap: 8,
+  },
+  upgradeBannerTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  upgradeBannerText: {
+    fontSize: 13,
+    lineHeight: 18,
+    opacity: 0.85,
   },
   trialStatusBanner: {
     flexDirection: "row",
@@ -685,6 +902,35 @@ const styles = StyleSheet.create({
     padding: 5,
     gap: 5,
     paddingBottom: 70,
+  },
+  vehicleCategorySection: {
+    marginHorizontal: 11,
+    marginBottom: 8,
+    gap: 8,
+  },
+  vehicleCategoryTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+  vehicleCategoryHint: {
+    fontSize: 13,
+    opacity: 0.7,
+    lineHeight: 18,
+  },
+  vehicleCategoryToggle: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  vehicleCategoryOption: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: "center",
+  },
+  vehicleCategoryOptionText: {
+    fontSize: 14,
   },
 });
 

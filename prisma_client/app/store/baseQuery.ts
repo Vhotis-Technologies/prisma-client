@@ -32,6 +32,7 @@ export const axiosBaseQuery = (): BaseQueryFn => {
       const publicEndpoints = [
         "/api/v1/authentication/login/",
         "/api/v1/authentication/refresh/",
+        "/api/v1/places/",
       ];
 
       // Check if data is FormData (React Native compatible check)

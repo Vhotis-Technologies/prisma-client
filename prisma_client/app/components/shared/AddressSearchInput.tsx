@@ -13,11 +13,11 @@ import { Ionicons } from "@expo/vector-icons";
 import {
   getPlacePredictions,
   getPlaceDetails,
+  isPlacesAvailable,
   placeDetailsToRoutePoint,
   parseAddressComponents,
   PlacePrediction,
 } from "@/app/app-hooks/useGooglePlaces";
-import { KEY_CONFIGS } from "@/constants/Config";
 
 export interface AddressSearchResult {
   address: string;
@@ -57,16 +57,19 @@ const AddressSearchInput: React.FC<AddressSearchInputProps> = ({
   const [selectedAddress, setSelectedAddress] = useState<AddressSearchResult | null>(
     initialSelectedAddress ?? null
   );
+  const [placesReady, setPlacesReady] = useState<boolean | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    void isPlacesAvailable().then(setPlacesReady);
+  }, []);
 
   useEffect(() => {
     setSelectedAddress(initialSelectedAddress ?? null);
   }, [initialSelectedAddress]);
 
-  const hasApiKey = !!KEY_CONFIGS.googleApiKeys;
-
   const searchAddresses = useCallback(async (input: string) => {
-    if (!hasApiKey || !input || input.trim().length < 2) {
+    if (!placesReady || !input || input.trim().length < 2) {
       setSuggestions([]);
       return;
     }
@@ -84,7 +87,7 @@ const AddressSearchInput: React.FC<AddressSearchInputProps> = ({
     } finally {
       setIsLoading(false);
     }
-  }, [hasApiKey]);
+  }, [placesReady]);
 
   useEffect(() => {
     if (debounceRef.current) {
@@ -111,7 +114,7 @@ const AddressSearchInput: React.FC<AddressSearchInputProps> = ({
 
   const handleSelectPrediction = useCallback(
     async (prediction: PlacePrediction) => {
-      if (!hasApiKey) return;
+      if (!placesReady) return;
 
       setIsLoading(true);
       setError(null);
@@ -146,7 +149,7 @@ const AddressSearchInput: React.FC<AddressSearchInputProps> = ({
         setIsLoading(false);
       }
     },
-    [hasApiKey, onSelect]
+    [placesReady, onSelect]
   );
 
   const handleChange = useCallback(() => {
@@ -155,11 +158,11 @@ const AddressSearchInput: React.FC<AddressSearchInputProps> = ({
     setSuggestions([]);
   }, []);
 
-  if (!hasApiKey) {
+  if (placesReady === false) {
     return (
       <View style={[styles.container, { borderColor }]}>
         <StyledText variant="bodySmall" style={{ color: textColor }}>
-          Google Places API key not configured. Address search unavailable.
+          Address search is not available. The server Places API key may not be configured.
         </StyledText>
       </View>
     );

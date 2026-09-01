@@ -295,84 +295,6 @@ class SupportPayoutsView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        try:
-            payout_request = PartnerPayoutRequest.objects.select_related(
-                "partner", "partner__user"
-            ).get(pk=payout_request_id)
-        except PartnerPayoutRequest.DoesNotExist:
-            return Response(
-                {"error": "Payout request not found"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        if payout_request.status == "paid":
-            return Response(
-                {
-                    "data": {
-                        "message": "Already paid",
-                        "payout_request": _serialize_payout_request(payout_request),
-                    }
-                },
-                status=status.HTTP_200_OK,
-            )
-
-        if payout_request.status not in ("pending", "processing"):
-            return Response(
-                {"error": f"Cannot mark {payout_request.status} payout as paid"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        partner = payout_request.partner
-        requested_amount = Decimal(payout_request.amount_requested or 0)
-
-        if confirmed_amount_raw is not None:
-            try:
-                confirmed_decimal = Decimal(str(confirmed_amount_raw))
-            except (TypeError, ValueError):
-                return Response(
-                    {"error": "confirmed_amount must be numeric"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-            if confirmed_decimal != requested_amount:
-                return Response(
-                    {
-                        "error": "confirmed_amount does not match the requested amount on record. "
-                        "Refresh and try again.",
-                        "expected": float(requested_amount),
-                    },
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-        approved_earnings_qs = CommissionEarning.objects.filter(
-            partner=partner, status="approved"
-        ).order_by("created_at")
-        approved_balance = approved_earnings_qs.aggregate(
-            s=Sum("commission_amount")
-        )["s"] or Decimal("0")
-
-        if approved_balance <= 0:
-            return Response(
-                {"error": "Partner has no approved commission to pay out."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if requested_amount <= 0:
-            return Response(
-                {"error": "Payout amount must be greater than zero."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if requested_amount > approved_balance:
-            return Response(
-                {
-                    "error": "Approved balance is lower than the requested amount. "
-                    "The partner may have had a reversal since this request was created.",
-                    "approved_balance": float(approved_balance),
-                    "amount_requested": float(requested_amount),
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
         notes_parts = [f"Paid request {payout_request_id}"]
         if payment_reference:
             notes_parts.append(f"Payment ref: {payment_reference}")
@@ -383,6 +305,84 @@ class SupportPayoutsView(APIView):
         final_notes = " | ".join(notes_parts)
 
         with transaction.atomic():
+            try:
+                payout_request = PartnerPayoutRequest.objects.select_related(
+                    "partner", "partner__user"
+                ).select_for_update().get(pk=payout_request_id)
+            except PartnerPayoutRequest.DoesNotExist:
+                return Response(
+                    {"error": "Payout request not found"},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            if payout_request.status == "paid":
+                return Response(
+                    {
+                        "data": {
+                            "message": "Already paid",
+                            "payout_request": _serialize_payout_request(payout_request),
+                        }
+                    },
+                    status=status.HTTP_200_OK,
+                )
+
+            if payout_request.status not in ("pending", "processing"):
+                return Response(
+                    {"error": f"Cannot mark {payout_request.status} payout as paid"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            partner = payout_request.partner
+            requested_amount = Decimal(payout_request.amount_requested or 0)
+
+            if confirmed_amount_raw is not None:
+                try:
+                    confirmed_decimal = Decimal(str(confirmed_amount_raw))
+                except (TypeError, ValueError):
+                    return Response(
+                        {"error": "confirmed_amount must be numeric"},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                if confirmed_decimal != requested_amount:
+                    return Response(
+                        {
+                            "error": "confirmed_amount does not match the requested amount on record. "
+                            "Refresh and try again.",
+                            "expected": float(requested_amount),
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+            approved_earnings_qs = CommissionEarning.objects.filter(
+                partner=partner, status="approved"
+            ).order_by("created_at")
+            approved_balance = approved_earnings_qs.aggregate(
+                s=Sum("commission_amount")
+            )["s"] or Decimal("0")
+
+            if approved_balance <= 0:
+                return Response(
+                    {"error": "Partner has no approved commission to pay out."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if requested_amount <= 0:
+                return Response(
+                    {"error": "Payout amount must be greater than zero."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if requested_amount > approved_balance:
+                return Response(
+                    {
+                        "error": "Approved balance is lower than the requested amount. "
+                        "The partner may have had a reversal since this request was created.",
+                        "approved_balance": float(approved_balance),
+                        "amount_requested": float(requested_amount),
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
             payout_request.status = "paid"
             payout_request.paid_at = timezone.now()
             payout_request.admin_notes = final_notes

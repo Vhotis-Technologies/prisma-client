@@ -17,6 +17,8 @@ import LinearGradientComponent from "../components/helpers/LinearGradientCompone
 import { useThemeContext } from "../contexts/ThemeProvider";
 import { BlurView } from "expo-blur";
 import { BackButton } from "@/app/components/shared/BackButton";
+import { canUsePersonalGarage } from "@/app/utils/account";
+import { useBookingLiveUpdates } from "@/app/app-hooks/useBookingLiveUpdates";
 
 /* This is the custom header component visible at the top of the main layout */
 const CustomHeader = ({ name }: { name: string }) => {
@@ -87,7 +89,9 @@ export default function MainLayout() {
     20 + TAB_BAR_BOTTOM_OFFSET + (insets.bottom ?? 0);
 
   const user = useAppSelector((state: RootState) => state.auth.user);
+  useBookingLiveUpdates();
   const pathname = usePathname();
+  const showGarageTab = canUsePersonalGarage(user);
 
   const isDashboardActive =
     pathname.includes("/dashboard") ||
@@ -165,6 +169,7 @@ export default function MainLayout() {
                   color={isBookingsActive ? primaryColor : iconColor}
                 />
               </Pressable>
+              {showGarageTab ? (
               <Pressable
                 onPress={() => router.push("/main/garage/GarageScreen")}
                 style={[
@@ -180,6 +185,7 @@ export default function MainLayout() {
                   color={isGarageActive ? primaryColor : iconColor}
                 />
               </Pressable>
+              ) : null}
               <Pressable
                 onPress={() => router.push("/main/history/HistoryScreen")}
                 style={[

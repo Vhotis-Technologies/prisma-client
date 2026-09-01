@@ -145,7 +145,7 @@ def lookup_ireland(registration_number: str, *, username: str | None = None) -> 
         username: RegCheck account username; defaults to ``settings.CAR_REG_USERNAME``.
 
     Returns:
-        dict: Normalized make/model/year and metadata plus ``registration_provider_payload``.
+        dict: Minimised make/model/year/colour/body style plus a one-shot image URL.
 
     Raises:
         RegcheckIrelandError: On config, validation, upstream, parse, or incomplete data errors.
@@ -181,40 +181,29 @@ def lookup_ireland(registration_number: str, *, username: str | None = None) -> 
 
     js_raw = _find_vehicle_json_text(xml_text)
     data = _parse_vehicle_json(js_raw)
-    for _k in ('VehicleIdentificationNumber', 'VechileIdentificationNumber', 'VIN'):
-        data.pop(_k, None)
 
     year = _parse_int_soft(data.get("RegistrationYear"))
+    make = _ctv(data.get("CarMake")) or _ctv(data.get("MakeDescription")) or ""
+    model = _ctv(data.get("CarModel")) or _ctv(data.get("ModelDescription")) or ""
+    if not make and not model:
+        desc = str(data.get("Description") or "").strip()
+        if desc:
+            parts = desc.split(None, 1)
+            make = parts[0][:100] if parts else "Unknown"
+            model = (parts[1][:100] if len(parts) > 1 else "Unknown")
 
+    # GDPR minimisation: keep only fields the garage uses. Do not retain the raw
+    # RegCheck dump (keepers, tax, VIN, ABI, county, engine spec, etc.).
     normalized: dict[str, Any] = {
         "registration_number": reg,
         "country": "Ireland",
-        "make": _ctv(data.get("CarMake")) or _ctv(data.get("MakeDescription")) or "",
-        "model": _ctv(data.get("CarModel")) or _ctv(data.get("ModelDescription")) or "",
+        "make": make,
+        "model": model,
         "year": year,
         "color": (str(data.get("Colour") or data.get("Color") or "").strip()),
-        "abi_code": (str(data.get("ABICode") or "").strip() or None),
         "body_style": _ctv(data.get("BodyStyle")) or None,
-        "transmission_type": _ctv(data.get("Transmission")) or None,
-        "fuel_type": _ctv(data.get("FuelType")) or None,
-        "number_of_doors": _parse_int_soft(_ctv(data.get("NumberOfDoors"))),
-        "number_of_seats": _parse_int_soft(_ctv(data.get("NumberOfSeats"))),
-        "engine_size": _parse_int_soft(_ctv(data.get("EngineSize"))),
-        "driver_side": _ctv(data.get("DriverSide")) or None,
-        "wheel_pan": _parse_int_soft(_ctv(data.get("WheelPlan"))),
-        "weight": _parse_int_soft(_ctv(data.get("Weight"))),
-        "county": (str(data.get("County") or "").strip() or None),
-        "registration_provider_payload": data,
         "provider_image_url": (str(data.get("ImageUrl") or "").strip() or None),
-        "description": (str(data.get("Description") or "").strip() or None),
     }
-
-    if not normalized["make"] and not normalized["model"]:
-        desc = normalized.get("description") or ""
-        if desc:
-            parts = desc.split(None, 1)
-            normalized["make"] = parts[0][:100] if parts else "Unknown"
-            normalized["model"] = (parts[1][:100] if len(parts) > 1 else "Unknown")
 
     missing_core = []
     if not normalized["make"]:
@@ -271,17 +260,28 @@ def download_provider_image(image_url: str) -> tuple[bytes, str]:
     return raw, ctype.split(";")[0].strip()
 
 
+# Cached only long enough to confirm add-vehicle (LOOKUP_TTL_SECONDS). Image URL
+# is used once to download the photo and is not written to the vehicle row.
+_LOOKUP_CACHE_KEYS = (
+    "registration_number",
+    "country",
+    "make",
+    "model",
+    "year",
+    "color",
+    "body_style",
+    "provider_image_url",
+)
+
+
 def ireland_payload_for_cache(payload: dict[str, Any]) -> dict[str, Any]:
     """
-    Strip non-cacheable keys before storing lookup result in Django cache.
+    Keep only garage fields before storing a lookup result in Django cache.
 
     Args:
-        payload: Normalized lookup dict (may include transient keys).
+        payload: Normalized lookup dict.
 
     Returns:
-        dict: Copy safe for JSON serialization.
+        dict: Minimised copy (no keeper/tax/VIN/raw provider dump).
     """
-    out = dict(payload)
-    out.pop("_image_download_error", None)
-    out.pop("vin_plain", None)
-    return out
+    return {key: payload.get(key) for key in _LOOKUP_CACHE_KEYS}

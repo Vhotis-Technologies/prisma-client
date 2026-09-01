@@ -45,6 +45,7 @@ from main.views.events import EventsView
 from main.views.fleet import perform_bulk_order_cancellation, perform_bulk_order_reschedule
 from main.views.payment import assign_detailers_to_booking
 from main.views.support.support_permission_access import SupportPermissionAccess
+from main.services.guest import guest_booking_support_fields, support_resend_guest_portal_email
 
 logger = logging.getLogger(__name__)
 
@@ -232,6 +233,7 @@ def _serialize_bulk_order_summary(bulk_order: BulkOrder, appointments: list) -> 
         "status": _roll_up_bulk_status(appointments),
         "client_name": user.name or "",
         "client_type": _client_type(user),
+        **_guest_fields_for_user(user),
         "vehicle_count": bulk_order.number_of_vehicles,
         "total_amount": float(bulk_order.total_amount or 0),
     }
@@ -281,10 +283,22 @@ def _bulk_order_payment_summary(bulk_order: BulkOrder) -> dict:
 
 
 def _client_type(user) -> str:
-    """``Corporate`` for fleet accounts, else ``Individual``."""
+    """``Guest``, ``Corporate`` (fleet), or ``Individual``."""
+    if getattr(user, "is_guest", False):
+        return "Guest"
     if user.is_fleet_user():
         return "Corporate"
     return "Individual"
+
+
+def _guest_fields_for_user(user) -> dict:
+    """Guest account flags for support list rows (bulk order headers, etc.)."""
+    is_guest = bool(getattr(user, "is_guest", False))
+    return {
+        "is_guest": is_guest,
+        "client_user_id": str(user.id) if user else "",
+        "account_status": "guest" if is_guest else "member",
+    }
 
 
 def _loyalty(user):
@@ -398,6 +412,7 @@ def _serialize_booking_summary(booking: BookedAppointment) -> dict:
         "status": _display_status(booking.status),
         "client_name": user.name or "",
         "client_type": _client_type(user),
+        **_guest_fields_for_user(user),
     }
 
 
@@ -415,6 +430,7 @@ def _serialize_booking_detail(booking: BookedAppointment) -> dict:
     appt = getattr(booking, "appointment_date", None)
     payload = {
         **_serialize_booking_summary(booking),
+        **guest_booking_support_fields(booking),
         "appointment_date_iso": appt.isoformat() if appt else "",
         "start_time_hhmm": booking.start_time.strftime("%H:%M") if booking.start_time else "",
         "client_email": user.email or "",
@@ -560,6 +576,9 @@ class SupportBookingsView(APIView):
         "reassign_booking": "_patch_reassign_booking",
         "reassign_bulk_order": "_patch_reassign_bulk_order",
     }
+    post_action_handler = {
+        "resend_guest_results_email": "_post_resend_guest_results_email",
+    }
 
     def get(self, request, *args, **kwargs):
         """Dispatch GET by URL ``action`` to :attr:`get_action_handler`."""
@@ -576,6 +595,54 @@ class SupportBookingsView(APIView):
             return Response({"error": "Invalid action"}, status=status.HTTP_400_BAD_REQUEST)
         handler = getattr(self, self.patch_action_handler[action])
         return handler(request, **kwargs)
+
+    def post(self, request, *args, **kwargs):
+        """Dispatch POST by URL ``action`` to :attr:`post_action_handler`."""
+        action = kwargs.get("action")
+        if action not in self.post_action_handler:
+            return Response({"error": "Invalid action"}, status=status.HTTP_400_BAD_REQUEST)
+        handler = getattr(self, self.post_action_handler[action])
+        return handler(request, **kwargs)
+
+    def _post_resend_guest_results_email(self, request, **kwargs):
+        """
+        Rotate the guest results token and resend the portal email.
+
+        Body:
+            booking_id: Appointment primary key.
+
+        Returns:
+            200 with ``email_kind`` (``confirmation`` or ``photos_ready``).
+        """
+        booking_id = request.data.get("booking_id")
+        if not booking_id:
+            return Response({"error": "booking_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            booking = BookedAppointment.objects.select_related(
+                "user",
+                "vehicle",
+                "service_type",
+                "valet_type",
+                "detailer",
+            ).prefetch_related("job_images").get(pk=booking_id)
+        except BookedAppointment.DoesNotExist:
+            return Response({"error": "Booking not found"}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            email_kind = support_resend_guest_portal_email(booking)
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        label = (
+            "photos-ready email"
+            if email_kind == "photos_ready"
+            else "booking confirmation with results link"
+        )
+        return Response(
+            {
+                "message": f"Guest portal {label} queued for {booking.user.email}.",
+                "email_kind": email_kind,
+            },
+            status=status.HTTP_200_OK,
+        )
 
     def _get_bookings_list(self, request, **kwargs):
         """
@@ -700,6 +767,7 @@ class SupportBookingsView(APIView):
                 "client_email": user.email or "",
                 "client_phone": getattr(user, "phone", None) or "",
                 "client_type": _client_type(user),
+                **_guest_fields_for_user(user),
                 "address": _address_payload(bulk.address) if bulk.address_id else None,
             },
             "appointments": [_serialize_booking_detail(b) for b in appts],

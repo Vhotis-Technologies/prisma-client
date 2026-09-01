@@ -1,9 +1,10 @@
 /**
- * Google Places autocomplete and place details for address search. Uses KEY_CONFIGS and fetch; not a route.
+ * Google Places autocomplete and place details via the Prisma server proxy.
+ * The API key stays server-side; clients never call Google directly.
  */
 // @expo-router-ignore - This is a utility file, not a route
 import { useState, useCallback } from "react";
-import { KEY_CONFIGS } from "../../constants/Config";
+import { API_CONFIG } from "../../constants/Config";
 
 export interface PlacePrediction {
   description: string;
@@ -42,6 +43,53 @@ export interface PlaceDetailsApiResponse {
   status: string;
 }
 
+type PlacesStatusResponse = {
+  configured: boolean;
+};
+
+let configuredCache: boolean | null = null;
+
+function apiBase(): string {
+  return String(API_CONFIG.customerAppUrl || "").replace(/\/$/, "");
+}
+
+/** Whether the server has Google Places configured. */
+export async function isPlacesAvailable(): Promise<boolean> {
+  if (configuredCache !== null) return configuredCache;
+  const base = apiBase();
+  if (!base) {
+    configuredCache = false;
+    return false;
+  }
+  try {
+    const response = await fetch(`${base}/api/v1/places/status/`);
+    if (!response.ok) {
+      configuredCache = false;
+      return false;
+    }
+    const data = (await response.json()) as PlacesStatusResponse;
+    configuredCache = Boolean(data.configured);
+    return configuredCache;
+  } catch {
+    configuredCache = false;
+    return false;
+  }
+}
+
+async function placesGet<T>(path: string, params: Record<string, string>): Promise<T> {
+  const base = apiBase();
+  if (!base) {
+    throw new Error("API URL is not configured");
+  }
+  const query = new URLSearchParams(params).toString();
+  const response = await fetch(`${base}/api/v1/places/${path}/?${query}`);
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error || "Address search failed");
+  }
+  return response.json() as Promise<T>;
+}
+
 /**
  * Get place predictions (autocomplete) as user types
  * @param input - User input text
@@ -54,32 +102,21 @@ export async function getPlacePredictions(
   location?: { latitude: number; longitude: number },
   radius: number = 50000
 ): Promise<PlacePrediction[]> {
-  if (!KEY_CONFIGS.googleApiKeys) {
-    console.error("Google Maps API key not configured");
-    return [];
-  }
-
   if (!input || input.length < 2) {
     return [];
   }
 
   try {
-    let url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(
-      input
-    )}&key=${KEY_CONFIGS.googleApiKeys}`;
-
-    // Add location bias if provided (helps prioritize results near user)
+    const params: Record<string, string> = { input };
     if (location) {
-      url += `&location=${location.latitude},${location.longitude}&radius=${radius}`;
+      params.latitude = String(location.latitude);
+      params.longitude = String(location.longitude);
+      params.radius = String(radius);
     }
-
-    const response = await fetch(url);
-    const data: PlacesApiResponse = await response.json();
-
+    const data = await placesGet<PlacesApiResponse>("autocomplete", params);
     if (data.status !== "OK" && data.status !== "ZERO_RESULTS") {
       return [];
     }
-
     return data.predictions || [];
   } catch (error) {
     console.error("Error fetching place predictions:", error);
@@ -95,28 +132,17 @@ export async function getPlacePredictions(
 export async function getPlaceDetails(
   placeId: string
 ): Promise<PlaceDetails | null> {
-  if (!KEY_CONFIGS.googleApiKeys) {
+  if (!placeId) {
     return null;
   }
 
   try {
-    const fields = [
-      "place_id",
-      "formatted_address",
-      "geometry",
-      "name",
-      "address_components",
-    ].join(",");
-
-    const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=${fields}&key=${KEY_CONFIGS.googleApiKeys}`;
-
-    const response = await fetch(url);
-    const data: PlaceDetailsApiResponse = await response.json();
-
-    if (data.status !== "OK") {
+    const data = await placesGet<PlaceDetailsApiResponse>("details", {
+      place_id: placeId,
+    });
+    if (data.status !== "OK" || !data.result) {
       return null;
     }
-
     return data.result;
   } catch (error) {
     console.error("Error fetching place details:", error);
@@ -201,7 +227,10 @@ export function parseAddressComponents(placeDetails: PlaceDetails): {
     "Meadow",
   ];
   const localityComponent = findComponent("locality");
-  const sublocalityComponent = findComponent("sublocality");
+  const postalTownComponent = findComponent("postal_town");
+  const sublocalityComponent =
+    findComponent("sublocality") || findComponent("sublocality_level_1");
+  const neighborhoodComponent = findComponent("neighborhood");
   const adminLevel1 = findComponent("administrative_area_level_1");
   const adminLevel2 = findComponent("administrative_area_level_2");
   const localityName = localityComponent?.long_name || "";
@@ -216,13 +245,15 @@ export function parseAddressComponents(placeDetails: PlaceDetails): {
   } else {
     cityComponent =
       localityComponent ||
+      postalTownComponent ||
       sublocalityComponent ||
+      neighborhoodComponent ||
       adminLevel2 ||
       adminLevel1;
   }
   let city = cityComponent?.long_name || "";
 
-  // Normalize Irish Dublin counties to "Dublin" for matching
+  // Irish forms use the postal district (D12, D15) as city, not "Dublin".
   const DUBLIN_COUNTIES = [
     "South Dublin",
     "Dún Laoghaire-Rathdown",
@@ -231,11 +262,34 @@ export function parseAddressComponents(placeDetails: PlaceDetails): {
     "Dublin City",
     "County Dublin",
   ];
-  if (
-    country === "Ireland" &&
-    DUBLIN_COUNTIES.some((c) => city.toLowerCase().includes(c.toLowerCase()))
-  ) {
-    city = "Dublin";
+  const DUBLIN_ROUTING_KEY = /^D(?:6W|0[1-9]|1[0-8]|20|22|24)$/;
+  const dublinFromEircode = (() => {
+    const routing = post_code.trim().toUpperCase().replace(/\s+/g, "").slice(0, 3);
+    return DUBLIN_ROUTING_KEY.test(routing) ? routing : null;
+  })();
+  const dublinFromText = (text: string) => {
+    if (!text) return null;
+    if (/Dublin\s*6W\b/i.test(text)) return "D6W";
+    const match = text.match(/Dublin\s+(\d{1,2})\b/i);
+    if (!match) return null;
+    const key = `D${String(Number(match[1])).padStart(2, "0")}`;
+    return DUBLIN_ROUTING_KEY.test(key) ? key : null;
+  };
+  const cityLooksDublin =
+    city.toLowerCase() === "dublin" ||
+    DUBLIN_COUNTIES.some((c) => city.toLowerCase().includes(c.toLowerCase()));
+  if (country === "Ireland" || country === "IE") {
+    const district =
+      dublinFromEircode ||
+      dublinFromText(placeDetails.formatted_address) ||
+      dublinFromText(sublocalityComponent?.long_name || "") ||
+      dublinFromText(neighborhoodComponent?.long_name || "") ||
+      dublinFromText(postalTownComponent?.long_name || "");
+    if (district && (cityLooksDublin || !city)) {
+      city = district;
+    } else if (cityLooksDublin) {
+      city = "Dublin";
+    }
   }
 
   return {
@@ -301,7 +355,7 @@ export function useGooglePlaces() {
 
       const parsed = parseAddressComponents(placeDetails);
       return parsed;
-    } catch (err) {
+    } catch {
       return null;
     }
   }, []);

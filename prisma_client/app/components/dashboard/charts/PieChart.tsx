@@ -30,79 +30,17 @@ const PieChart: React.FC<PieChartProps> = ({
 
   const segments = useMemo(() => {
     if (total === 0) return [];
-    
-    let currentAngle = -90; // Start from top
+
     return data.map((item) => {
       const percentage = (item.value / total) * 100;
-      const angle = (percentage / 100) * 360;
-      const startAngle = currentAngle;
-      currentAngle += angle;
-
       return {
         ...item,
         percentage,
-        startAngle,
-        angle,
       };
     });
   }, [data, total]);
 
-  const renderSegment = (segment: typeof segments[0], index: number) => {
-    if (segment.percentage === 0) return null;
-
-    const radius = maxSize / 2;
-    const largeArcFlag = segment.angle > 180 ? 1 : 0;
-
-    // Calculate start and end points
-    const startAngleRad = (segment.startAngle * Math.PI) / 180;
-    const endAngleRad = ((segment.startAngle + segment.angle) * Math.PI) / 180;
-
-    const x1 = radius + radius * Math.cos(startAngleRad);
-    const y1 = radius + radius * Math.sin(startAngleRad);
-    const x2 = radius + radius * Math.cos(endAngleRad);
-    const y2 = radius + radius * Math.sin(endAngleRad);
-
-    // For React Native, we'll use a simpler approach with View and rotation
-    // This is a simplified version - for a true pie chart, SVG would be better
-    // but we're avoiding external libraries
-    return (
-      <View
-        key={index}
-        style={[
-          styles.segmentContainer,
-          {
-            width: maxSize,
-            height: maxSize,
-          },
-        ]}
-      >
-        <View
-          style={[
-            styles.segment,
-            {
-              width: maxSize / 2,
-              height: maxSize,
-              backgroundColor: segment.color,
-              transform: [{ rotate: `${segment.startAngle}deg` }],
-            },
-          ]}
-        />
-        <View
-          style={[
-            styles.segmentMask,
-            {
-              width: maxSize / 2,
-              height: maxSize,
-              transform: [{ rotate: `${segment.startAngle + segment.angle}deg` }],
-            },
-          ]}
-        />
-      </View>
-    );
-  };
-
-  // Render pie chart using a simpler bar-based visualization
-  // For React Native without SVG, we'll use a horizontal bar representation
+  // Horizontal bar representation (React Native without SVG)
   const renderPieChart = () => {
     return (
       <View style={styles.barChartContainer}>

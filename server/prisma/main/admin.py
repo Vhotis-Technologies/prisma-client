@@ -11,13 +11,13 @@ from django.core.exceptions import ValidationError
 from django import forms
 from django.db import models
 from django.utils import timezone
-from .models import User, Vehicle, VehicleOwnership, VehicleEvent, Fleet, FleetMember, FleetVehicle, VehicleTransfer, ServiceType, ValetType, DetailerProfile, BookedAppointment, Address, AddOns, Notification, LoyaltyProgram, Promotions, PaymentTransaction, RefundRecord, TermsAndConditions, PrivacyPolicy, Referral, Branch, SubscriptionTier, SubscriptionPlan, FleetSubscription, SubscriptionBilling, EventDataManagement, BookedAppointmentImage, Partner, PartnerBankAccount, PartnerPayoutRequest, ReferralAttribution, CommissionEarning, CommissionPayout, PartnerMetricsCache, CommissionAdminLog, PendingBooking, BulkOrder, WinnerVoucher, GiftVoucher, B2CSubcriptionTier, B2CSubcriptionPlan, B2CSubcription, B2CSubcriptionBilling
+from .models import User, Vehicle, VehicleOwnership, VehicleEvent, Fleet, FleetMember, FleetVehicle, VehicleTransfer, ServiceType, ValetType, DetailerProfile, BookedAppointment, Address, AddOns, Notification, LoyaltyProgram, Promotions, PaymentTransaction, RefundRecord, TermsAndConditions, PrivacyPolicy, Referral, AccountInvite, Branch, SubscriptionTier, SubscriptionPlan, FleetSubscription, SubscriptionBilling, EventDataManagement, BookedAppointmentImage, Partner, PartnerBankAccount, PartnerPayoutRequest, ReferralAttribution, CommissionEarning, CommissionPayout, PartnerMetricsCache, CommissionAdminLog, PendingBooking, BulkOrder, WinnerVoucher, GiftVoucher, B2CSubcriptionTier, B2CSubcriptionPlan, B2CSubcription, B2CSubcriptionBilling, GuestAccessToken
 
 
 
 # Branding for the Django admin site (staff-only operations console)
 admin.site.site_header = "Prisma Car Care Admin"
-admin.site.site_title = "Prisma Admin"
+admin.site.site_title = "Prisma Car Care Admin"
 admin.site.index_title = "Welcome to Prisma Car Care Admin Panel"
 
 
@@ -191,12 +191,14 @@ class UserAdmin(DjangoUserAdmin):
         'name',
         'phone',
         'is_active',
+        'is_guest',
         'is_staff',
         'is_fleet_owner',
         'is_branch_admin',
     )
     list_filter = (
         'is_active',
+        'is_guest',
         'is_staff',
         'is_superuser',
         'is_fleet_owner',
@@ -217,6 +219,7 @@ class UserAdmin(DjangoUserAdmin):
     fieldsets = (
         (None, {'fields': ('email', 'password')}),
         ('Personal', {'fields': ('name', 'phone')}),
+        ('Guest checkout', {'fields': ('is_guest',)}),
         ('Fleet & branch', {'fields': ('is_fleet_owner', 'is_branch_admin')}),
         ('Referrals', {'fields': ('referral_code', 'referred_by')}),
         (
@@ -495,16 +498,39 @@ class BranchAdmin(admin.ModelAdmin):
 class B2CSubcriptionTierAdmin(admin.ModelAdmin):
     """B2C subscription tiers (reference pricing, features)."""
     form = B2CSubcriptionTierForm
-    list_display = ('name', 'monthlyPrice', 'yearly_price', 'created_at')
+    list_display = (
+        'name',
+        'service_discount_percent',
+        'max_complimentary_washes',
+        'monthlyPriceSedan',
+        'monthlyPrice',
+        'yearly_price_sedan',
+        'yearly_price',
+        'created_at',
+    )
     search_fields = ('name', 'tagLine')
     readonly_fields = ('id', 'created_at', 'updated_at')
     fieldsets = (
         ('Basic information', {'fields': ('name', 'tagLine', 'badge')}),
-        ('Reference pricing', {
+        ('Booking benefits', {
             'description': (
-                'List prices for catalog display only. Billing uses the amounts on each '
-                'B2C subscription plan row (monthly / yearly). No separate discount applies '
-                'to subscription list price.'
+                'Percent off paid bookings, and complimentary Prisma Quick Sparkle washes per '
+                'billing period, for active subscribers on this tier. Applied server-side in the '
+                'booking quote (not on subscription list price).'
+            ),
+            'fields': ('service_discount_percent', 'max_complimentary_washes'),
+        }),
+        ('Sedan reference pricing', {
+            'description': (
+                'List prices for sedan / saloon catalog display. Billing uses the matching '
+                'B2C subscription plan row (tier + cycle + vehicle category).'
+            ),
+            'fields': ('monthlyPriceSedan', 'yearly_price_sedan'),
+        }),
+        ('SUV / MPV reference pricing', {
+            'description': (
+                'List prices for SUV / MPV catalog display (legacy monthlyPrice / yearly_price). '
+                'Billing uses the matching plan row.'
             ),
             'fields': ('monthlyPrice', 'yearly_price'),
         }),
@@ -522,9 +548,9 @@ class B2CSubcriptionTierAdmin(admin.ModelAdmin):
 
 @admin.register(B2CSubcriptionPlan)
 class B2CSubcriptionPlanAdmin(admin.ModelAdmin):
-    """B2C billable plans per tier and cycle."""
-    list_display = ('tier', 'billing_cycle', 'price', 'created_at')
-    list_filter = ('billing_cycle', 'tier', 'created_at')
+    """B2C billable plans per tier, cycle, and vehicle category."""
+    list_display = ('tier', 'billing_cycle', 'vehicle_category', 'price', 'created_at')
+    list_filter = ('billing_cycle', 'vehicle_category', 'tier', 'created_at')
     search_fields = ('tier__name',)
     readonly_fields = ('id', 'created_at', 'updated_at')
     autocomplete_fields = ('tier',)
@@ -849,3 +875,73 @@ class GiftVoucherAdmin(admin.ModelAdmin):
     search_fields = ('code', 'assigned_email', 'purchased_by__email')
     readonly_fields = ('id', 'created_at', 'updated_at', 'email_sent_at')
     raw_id_fields = ('assigned_user', 'consumed_booking', 'purchased_by', 'payment_transaction')
+
+
+@admin.register(AccountInvite)
+class AccountInviteAdmin(admin.ModelAdmin):
+    """Read-only invite tokens (raw token is never stored)."""
+
+    list_display = (
+        "user",
+        "purpose",
+        "invited_by",
+        "expires_at",
+        "used_at",
+        "created_at",
+    )
+    list_filter = ("purpose", "used_at", "expires_at")
+    search_fields = ("user__email", "user__name", "invited_by__email")
+    readonly_fields = (
+        "id",
+        "user",
+        "token_hash",
+        "purpose",
+        "invited_by",
+        "expires_at",
+        "used_at",
+        "created_at",
+    )
+    raw_id_fields = ("user", "invited_by")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(GuestAccessToken)
+class GuestAccessTokenAdmin(admin.ModelAdmin):
+    """Read-only guest results tokens (raw token is never stored)."""
+
+    list_display = (
+        "user",
+        "booking",
+        "expires_at",
+        "revoked_at",
+        "last_used_at",
+        "created_at",
+    )
+    list_filter = ("expires_at", "revoked_at")
+    search_fields = (
+        "user__email",
+        "user__name",
+        "booking__booking_reference",
+    )
+    readonly_fields = (
+        "id",
+        "user",
+        "booking",
+        "token_hash",
+        "expires_at",
+        "revoked_at",
+        "last_used_at",
+        "created_at",
+    )
+    raw_id_fields = ("user", "booking")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False

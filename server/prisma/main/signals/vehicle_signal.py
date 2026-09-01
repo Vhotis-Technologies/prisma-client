@@ -14,7 +14,7 @@ from main.models import (
     VehicleEvent,
 )
 from main.tasks import send_promotional_email, send_push_notification
-from main.utils.bulk_notifications import try_send_bulk_client_confirmation_notifications
+from main.services.bulk_notifications import try_send_bulk_client_confirmation_notifications
 
 
 @receiver(post_save, sender=BookedAppointment)

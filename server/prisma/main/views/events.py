@@ -2,12 +2,11 @@
 Events/booking API view for Prisma Car Care client app.
 
 Provides GET/POST/PATCH/DELETE actions: get_service_type, get_valet_type, get_add_ons,
-get_promotions, mark_promotion_used, check_free_wash, quote_booking, book_appointment, cancel_booking,
-reschedule_booking, reschedule_intent, get_payment_methods, delete_payment_method.
+get_promotions, mark_promotion_used, check_free_wash, quote_booking, check_bulk_capacity,
+get_timeslots, book_appointment, cancel_booking, reschedule_booking, reschedule_intent, get_payment_methods,
+delete_payment_method.
 
-- book_appointment (_book_appointment): Legacy path that creates BookedAppointment directly
-  from request (used when not using the payment sheet flow). Resolves vehicle, valet, service,
-  address (or branch), applies free Quick Sparkle, creates booking and add-ons.
+- book_appointment (_book_appointment): Retired. Returns HTTP 410; use the payment sheet flow.
 - cancel_booking: Cancels by booking_reference, tiered refund (>24h full, 12–24h half, ≤12h none),
   publishes to Redis for detailer, processes Stripe refund.
 - reschedule_booking / reschedule_intent: Validate slot; free reschedule if >=12h before start.
@@ -21,7 +20,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 from main.models import BookedAppointment, BookedAppointmentImage, ServiceType, ValetType, AddOns, Address, DetailerProfile, Vehicle, Promotions, PaymentTransaction, RefundRecord, User, Branch, Partner
-from main.utils.booking_quote import (
+from main.services.booking_quote import (
     build_quick_sparkle_entitlements,
     quote_booking_for_user,
     validate_complimentary_choice,
@@ -36,6 +35,7 @@ from django.conf import settings
 from datetime import datetime
 from django.utils import timezone
 from main.tasks import publish_booking_cancelled, publish_booking_rescheduled, send_push_notification
+from main.utils.detailer_client import detailer_request_headers
 import logging
 import traceback
 
@@ -47,7 +47,7 @@ class EventsView(APIView):
     Booking catalog and lifecycle: services, valets, quotes, book/cancel/reschedule, payment methods.
 
     Action-routed via ``events/<action>/``. Primary paid flow uses payment view + webhook;
-    ``book_appointment`` is the legacy direct-create path.
+    ``book_appointment`` returns 410 (retired direct-create path).
     """
 
     permission_classes = [IsAuthenticated]
@@ -65,10 +65,12 @@ class EventsView(APIView):
         'get_payment_methods' : 'get_payment_methods',
         'delete_payment_method' : 'delete_payment_method',
         'quote_booking' : 'quote_booking',
+        'check_bulk_capacity' : 'check_bulk_capacity',
+        'get_timeslots' : 'get_timeslots',
     }
     
     def get(self, request, *args, **kwargs):
-        """Route GET by action (e.g. get_service_type, get_valet_type, get_add_ons, get_promotions, check_free_wash, get_payment_methods)."""
+        """Route GET by action (e.g. get_service_type, get_valet_type, get_add_ons, get_promotions, check_free_wash, get_payment_methods, check_bulk_capacity, get_timeslots)."""
         action = kwargs.get('action')
         if action not in self.action_handlers:
             return Response({'error': 'Invalid action'}, status=status.HTTP_400_BAD_REQUEST)
@@ -76,7 +78,7 @@ class EventsView(APIView):
         return handler(request)
     
     def post(self, request, *args, **kwargs):
-        """Route POST by action (e.g. book_appointment, mark_promotion_used)."""
+        """Route POST by action (e.g. book_appointment, mark_promotion_used, check_bulk_capacity)."""
         action = kwargs.get('action')
         if action not in self.action_handlers: 
             return Response({'error': 'Invalid action'}, status=status.HTTP_400_BAD_REQUEST)
@@ -537,7 +539,7 @@ class EventsView(APIView):
             params["latitude"] = str(latitude)
             params["longitude"] = str(longitude)
         try:
-            resp = requests.get(url, params=params, headers={'Content-Type': 'application/json'}, timeout=15)
+            resp = requests.get(url, params=params, headers=detailer_request_headers(), timeout=15)
             if resp.status_code != 200:
                 return None, resp.text or f"HTTP {resp.status_code}"
             data = resp.json()
@@ -780,234 +782,14 @@ class EventsView(APIView):
     
 
     def _book_appointment(self, request):
-        """
-        Legacy booking creation: create BookedAppointment directly from request (no payment sheet).
-
-        Expects booking_data with vehicle, valet_type, service_type, address (or IDs), date,
-        start_time, duration, total_amount, subtotal_amount, vat_amount, addons,
-        booking_reference, status, optional applied_free_quick_sparkle, is_express_service.
-        Resolves address from Address or Branch; applies free Quick Sparkle (loyalty/partner) if set.
-        Creates BookedAppointment (detailer=None), adds add-ons, sends push notification.
-        Returns appointment_id. Used when client does not go through create_payment_sheet + webhook.
-        """
-        logger = logging.getLogger('main.views.booking')
-        appointment = None
-        
-        logger.info(f"Starting booking appointment creation for user: {request.user.id}")
-        logger.info(f"Request data: {request.data}")
-        
-        try:
-            # Get the booking data from the request
-            booking_data = request.data.get('booking_data', request.data)
-            logger.info(f"Booking data extracted: {booking_data}")
-
-            # Detailer will be assigned later via Redis/detailer app
-            # No longer creating detailer profile at booking time
-            logger.info("Booking will be created without detailer assignment (pending status)")
-            
-            # Get existing objects by ID
-            try:
-                vehicle_id = booking_data.get('vehicle', {}).get('id')
-                valet_type_id = booking_data.get('valet_type', {}).get('id')
-                service_type_id = booking_data.get('service_type', {}).get('id')
-                address_id = booking_data.get('address', {}).get('id')
-                vehicle = Vehicle.objects.get(id=vehicle_id)
-                valet_type = ValetType.objects.get(id=valet_type_id)
-                logger.info(f"Valet type found: {valet_type.id} - {valet_type.name}")
-                
-                logger.info(f"Looking up service type ID: {service_type_id}")
-                service_type = ServiceType.objects.get(id=service_type_id)
-                logger.info(f"Service type found: {service_type.id} - {service_type.name}")
-                
-                logger.info(f"Looking up address ID: {address_id}")
-                # Try to get Address by ID first (for regular addresses)
-                try:
-                    address = Address.objects.get(id=address_id)
-                    logger.info(f"Address found: {address.id} - {address.address}")
-                except (Address.DoesNotExist, ValueError):
-                    # If not found, check if it's a branch ID (UUID)
-                    # Branch addresses are UUIDs, Address IDs are integers
-                    try:
-                        # Try to parse as UUID to see if it's a branch ID
-                        branch_uuid = uuid.UUID(str(address_id))
-                        branch = Branch.objects.get(id=branch_uuid)
-                        logger.info(f"Branch found: {branch.id} - {branch.address}")
-                        # Create or get Address from branch data
-                        # Check if address already exists for this user from this branch
-                        address, created = Address.objects.get_or_create(
-                            user=request.user,
-                            address=branch.address or '',
-                            post_code=branch.postcode or '',
-                            city=branch.city or '',
-                            country=branch.country or '',
-                            defaults={
-                                'latitude': branch.latitude,
-                                'longitude': branch.longitude
-                            }
-                        )
-                        if created:
-                            logger.info(f"Created Address from branch: {address.id} - {address.address}")
-                        else:
-                            logger.info(f"Using existing Address from branch: {address.id} - {address.address}")
-                    except (Branch.DoesNotExist, ValueError, TypeError) as e:
-                        logger.error(f"Address not found and not a valid branch ID: {str(e)}")
-                        raise ValueError(f"Address with ID {address_id} not found")
-                
-            except Exception as e:
-                logger.error(f"Error fetching related objects: {str(e)}")
-                raise e
-            
-            # Convert date string to date object
-            try:
-                logger.info("Converting date string...")
-                date_str = booking_data.get('date')
-                logger.info(f"Date string: {date_str}")
-                appointment_date = datetime.strptime(date_str, '%Y-%m-%d').date()
-                logger.info(f"Appointment date converted: {appointment_date}")
-            except Exception as e:
-                logger.error(f"Error converting date: {str(e)}")
-                raise e
-            
-            # Convert start_time string to time object
-            try:
-                logger.info("Converting start time...")
-                start_time_str = booking_data.get('start_time')
-                logger.info(f"Start time string: {start_time_str}")
-                start_time = None
-                if start_time_str:
-                    start_time = datetime.strptime(start_time_str, '%H:%M:%S.%f').time()
-                    logger.info(f"Start time converted: {start_time}")
-                else:
-                    logger.info("No start time provided")
-            except Exception as e:
-                logger.error(f"Error converting start time: {str(e)}")
-                raise e
-
-            booking_data_clean = booking_data if isinstance(booking_data, dict) else {}
-            err_cq = validate_complimentary_choice(request.user, booking_data_clean)
-            if err_cq:
-                return Response({'error': err_cq}, status=status.HTTP_400_BAD_REQUEST)
-            err_fin = validate_booking_financials(request.user, booking_data_clean)
-            if err_fin:
-                return Response({'error': err_fin}, status=status.HTTP_400_BAD_REQUEST)
-
-            applied_free_wash = bool(booking_data.get('applied_free_quick_sparkle', False))
-            complimentary_source_booking = booking_data.get('complimentary_quick_sparkle_source')
-            consumed_tag = ''
-            if applied_free_wash and is_quick_sparkle_service_name(service_type.name):
-                ok_c, consumed_tag = consume_complimentary_quick_sparkle(request.user, booking_data)
-                if not ok_c:
-                    return Response(
-                        {'error': 'Complimentary Quick Sparkle could not be applied for this booking.'},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-
-            resolved_source = None
-            if applied_free_wash and is_quick_sparkle_service_name(service_type.name):
-                if complimentary_source_booking in ('loyalty', 'subscription', 'partner'):
-                    resolved_source = complimentary_source_booking
-                elif consumed_tag in ('loyalty', 'subscription', 'partner'):
-                    resolved_source = consumed_tag
-            
-            # Create the booking in the database without detailer
-            try:
-                logger.info("Creating BookedAppointment...")
-                
-                # Extract VAT breakdown from booking data
-                subtotal_amount = booking_data.get('subtotal_amount')
-                vat_amount = booking_data.get('vat_amount')
-                vat_rate = booking_data.get('vat_rate', 23.00)  # Default to 23% if not provided
-                total_amount = booking_data.get('total_amount')
-                
-                # If breakdown not provided, calculate from total_amount (backward compatibility)
-                if subtotal_amount is None or vat_amount is None:
-                    if total_amount:
-                        # Calculate VAT breakdown if not provided
-                        # total = subtotal + vat, where vat = subtotal * 0.23
-                        # So: total = subtotal + subtotal * 0.23 = subtotal * 1.23
-                        # Therefore: subtotal = total / 1.23
-                        vat_rate_decimal = vat_rate / 100 if vat_rate else 0.23
-                        subtotal_amount = total_amount / (1 + vat_rate_decimal)
-                        vat_amount = total_amount - subtotal_amount
-                    else:
-                        subtotal_amount = 0
-                        vat_amount = 0
-                
-                # Get is_express_service from booking data
-                is_express_service = booking_data.get('is_express_service', False)
-                if isinstance(is_express_service, str):
-                    is_express_service = is_express_service.lower() == 'true'
-                
-                appointment = BookedAppointment.objects.create(
-                    user = request.user,
-                    appointment_date = appointment_date,
-                    vehicle = vehicle,
-                    valet_type = valet_type,
-                    service_type = service_type,
-                    detailer = None,
-                    address = address,
-                    status = booking_data.get('status'),
-                    total_amount = total_amount,
-                    subtotal_amount = subtotal_amount,
-                    vat_amount = vat_amount,
-                    vat_rate = vat_rate,
-                    start_time = start_time,
-                    duration = booking_data.get('duration'),
-                    special_instructions = booking_data.get('special_instructions'),
-                    booking_reference = booking_data.get('booking_reference'),
-                    is_express_service = is_express_service,
-                    applied_free_quick_sparkle=applied_free_wash,
-                    complimentary_quick_sparkle_source=resolved_source,
-                )
-                logger.info(f"BookedAppointment created successfully: {appointment.id}")
-                logger.info(f"Booking reference: {appointment.booking_reference}")
-            except Exception as e:
-                logger.error(f"Error creating BookedAppointment: {str(e)}")
-                raise e
-            
-            # Add add-ons if any (with error handling)
-            try:
-                logger.info("Processing add-ons...")
-                addons_data = booking_data.get('addons', [])
-                logger.info(f"Add-ons data: {addons_data}")
-                if addons_data:
-                    addon_ids = [addon.get('id') for addon in addons_data]
-                    logger.info(f"Add-on IDs: {addon_ids}")
-                    addons = AddOns.objects.filter(id__in=addon_ids)
-                    logger.info(f"Found {addons.count()} add-ons")
-                    appointment.add_ons.set(addons)
-                    appointment.save()
-                    logger.info("Add-ons added successfully")
-                else:
-                    logger.info("No add-ons to process")
-            except Exception as e:
-                logger.error(f"Error adding add-ons: {str(e)}")
-                # Don't fail the entire booking for add-on errors
-
-            # Send booking confirmation notification (with error handling)
-            try:
-                logger.info("Sending push notification...")
-                send_push_notification.delay(
-                    request.user.id,
-                    "Booking Received!",
-                    f"Your booking for {appointment.appointment_date} at {appointment.start_time} has been received. Waiting for detailer confirmation!",
-                    "booking_pending"
-                )
-                logger.info("Push notification sent successfully")
-            except Exception as e:
-                logger.error(f"Error sending notification: {str(e)}")
-                # Don't fail the entire booking for notification errors
-
-            logger.info(f"Booking appointment creation completed successfully: {appointment.id}")
-            logger.info(f"Waiting for detailer app to confirm via Redis (job_acceptance channel)")
-            return Response({'appointment_id': str(appointment.id)}, status=status.HTTP_200_OK)
-            
-        except Exception as e:
-            logger.error(f"Error creating appointment: {str(e)}")
-            logger.error(f"Traceback: {traceback.format_exc()}")
-            return Response({'error': 'Internal server error'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
+        """Retired: old clients that POST book_appointment get a clear 410."""
+        return Response(
+            {
+                "error": "This booking endpoint is no longer available. Use the payment sheet flow.",
+                "code": "BOOK_APPOINTMENT_GONE",
+            },
+            status=status.HTTP_410_GONE,
+        )
 
     def get_add_ons(self, request):
         """Return all add-ons ordered by price. Each with id, name, price, description, extra_duration."""
@@ -1047,7 +829,12 @@ class EventsView(APIView):
         if not isinstance(addon_ids, (list, tuple)):
             return Response({'error': 'addon_ids must be an array'}, status=status.HTTP_400_BAD_REQUEST)
         addons = list(AddOns.objects.filter(id__in=list(addon_ids)))
-        is_suv = bool(body.get('is_suv'))
+        from main.utils.vehicle_category import resolve_is_suv_mpv
+
+        is_suv = resolve_is_suv_mpv(
+            is_suv=bool(body.get('is_suv')) if 'is_suv' in body else None,
+            body_style=body.get('body_style') or body.get('bodyStyle'),
+        )
         is_express = bool(body.get('is_express'))
         apply_partner_booking_discount = bool(body.get('apply_partner_booking_discount'))
 
@@ -1060,6 +847,181 @@ class EventsView(APIView):
             apply_partner_booking_discount=apply_partner_booking_discount,
         )
         return Response(payload, status=status.HTTP_200_OK)
+
+    def check_bulk_capacity(self, request):
+        """
+        Proxy crew bulk-capacity check so the browser never calls the detailer host.
+
+        GET/POST params match crew ``availability/check_bulk_capacity``: date, workload_minutes,
+        service_duration, country, city, optional latitude, longitude, now.
+        Fleet, branch admin, dealership, and partner accounts only.
+        """
+        user = request.user
+        if not (
+            user.is_fleet_owner
+            or user.is_branch_admin
+            or user.is_dealership
+            or bool(getattr(user, "partner_referral_code", None))
+            or Partner.objects.filter(user=user).exists()
+        ):
+            return Response({"error": "Access denied"}, status=status.HTTP_403_FORBIDDEN)
+
+        detailer_app_url = getattr(settings, "DETAILER_APP_URL", None) or getattr(
+            settings, "API_CONFIG", {}
+        ).get("detailerAppUrl")
+        if not detailer_app_url:
+            return Response(
+                {"error": "Detailer app not configured"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        src = request.query_params if request.method == "GET" else (request.data or {})
+        params = {}
+        for key in (
+            "date",
+            "workload_minutes",
+            "service_duration",
+            "country",
+            "city",
+            "latitude",
+            "longitude",
+            "now",
+        ):
+            value = src.get(key)
+            if value is not None and str(value).strip() != "":
+                params[key] = value
+
+        if not params.get("date") or not params.get("country") or not params.get("city"):
+            return Response(
+                {"error": "Missing required parameters: date, country, city"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            params["workload_minutes"] = int(params.get("workload_minutes") or 0)
+        except (TypeError, ValueError):
+            return Response(
+                {"error": "workload_minutes must be an integer"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            if "service_duration" in params:
+                params["service_duration"] = int(params["service_duration"])
+        except (TypeError, ValueError):
+            params["service_duration"] = 60
+
+        url = f"{str(detailer_app_url).rstrip('/')}/api/v1/availability/check_bulk_capacity/"
+        logger = logging.getLogger("main.views.booking")
+        try:
+            response = requests.get(url, params=params, headers=detailer_request_headers(), timeout=30)
+        except requests.RequestException as exc:
+            logger.error("check_bulk_capacity proxy failed: %s", exc)
+            return Response(
+                {"error": "Unable to check capacity. Please try again.", "available": False, "options": []},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        try:
+            body = response.json() if response.content else {}
+        except ValueError:
+            body = {"error": response.text or f"HTTP {response.status_code}"}
+
+        if response.status_code in (200, 201):
+            return Response(body, status=status.HTTP_200_OK)
+        if response.status_code == 400:
+            return Response(body if isinstance(body, dict) else {"error": str(body)}, status=status.HTTP_400_BAD_REQUEST)
+        logger.error(
+            "check_bulk_capacity crew returned %s: %s",
+            response.status_code,
+            body,
+        )
+        return Response(
+            {
+                "error": body.get("error") if isinstance(body, dict) else "Unable to check capacity. Please try again.",
+                "available": False,
+                "options": [],
+            },
+            status=status.HTTP_502_BAD_GATEWAY,
+        )
+
+    def get_timeslots(self, request):
+        """
+        Proxy crew ``availability/get_timeslots`` so the browser never calls the detailer host.
+
+        GET params match the native app: date, service_duration, country, city,
+        optional latitude, longitude, is_express_service.
+        """
+        detailer_app_url = getattr(settings, "DETAILER_APP_URL", None) or getattr(
+            settings, "API_CONFIG", {}
+        ).get("detailerAppUrl")
+        if not detailer_app_url:
+            return Response(
+                {"error": "Detailer app not configured"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        src = request.query_params
+        date_str = (src.get("date") or "").strip()
+        country = (src.get("country") or "").strip()
+        city = (src.get("city") or "").strip()
+        if not date_str or not country or not city:
+            return Response(
+                {"error": "Select an address and date to see available hours."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        params = {
+            "date": date_str,
+            "country": country,
+            "city": city,
+        }
+        try:
+            params["service_duration"] = int(src.get("service_duration") or 60)
+        except (TypeError, ValueError):
+            params["service_duration"] = 60
+
+        express = (src.get("is_express_service") or "").strip().lower()
+        if express in ("true", "1", "yes"):
+            params["is_express_service"] = "true"
+        else:
+            params["is_express_service"] = "false"
+
+        for key in ("latitude", "longitude"):
+            value = src.get(key)
+            if value is not None and str(value).strip() != "":
+                params[key] = value
+
+        url = f"{str(detailer_app_url).rstrip('/')}/api/v1/availability/get_timeslots/"
+        logger = logging.getLogger("main.views.booking")
+        try:
+            response = requests.get(url, params=params, headers=detailer_request_headers(), timeout=15)
+        except requests.RequestException as exc:
+            logger.error("get_timeslots proxy failed: %s", exc)
+            return Response(
+                {"error": "Unable to check available hours. Please try again.", "slots": []},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        try:
+            body = response.json() if response.content else {}
+        except ValueError:
+            body = {"error": response.text or f"HTTP {response.status_code}"}
+
+        if response.status_code in (200, 201):
+            return Response(body, status=status.HTTP_200_OK)
+        if response.status_code == 400:
+            return Response(
+                body if isinstance(body, dict) else {"error": str(body)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        logger.error("get_timeslots crew returned %s: %s", response.status_code, body)
+        return Response(
+            {
+                "error": body.get("error") if isinstance(body, dict) else "Unable to check available hours. Please try again.",
+                "slots": [],
+            },
+            status=status.HTTP_502_BAD_GATEWAY,
+        )
 
     def check_free_wash(self, request):
         """

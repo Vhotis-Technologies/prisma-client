@@ -142,6 +142,13 @@ class SubscriptionView(APIView):
                     'isEarlyAdopter': would_be_early_adopter,
                 }, status=status.HTTP_200_OK)
 
+            from main.utils.subscription_sync import (
+                latest_paid_billing_at,
+                sync_local_subscription_from_stripe,
+            )
+            stripe_snap = sync_local_subscription_from_stripe(subscription)
+            last_paid = latest_paid_billing_at(subscription)
+
             # Serialize the subscription
             serializer = FleetSubscriptionSerializer(subscription)
             subscription_data = serializer.data
@@ -159,7 +166,7 @@ class SubscriptionView(APIView):
             # Calculate trial days remaining
             trial_days_remaining = None
             trial_end_date = None
-            is_trialing = subscription.status == 'trialing'
+            is_trialing = bool(stripe_snap.get('is_trialing') or subscription.status == 'trialing')
             
             if subscription.trial_end_date:
                 trial_end_date = subscription.trial_end_date.isoformat()
@@ -190,6 +197,7 @@ class SubscriptionView(APIView):
                     'trialDaysRemaining': trial_days_remaining,
                     'trialEndDate': trial_end_date,
                     'isTrialing': is_trialing,
+                    'lastPaidOn': last_paid.isoformat() if last_paid else None,
                     'canStartTrial': not fleet.has_used_trial,
                     'isEarlyAdopter': getattr(subscription, 'is_early_adopter', False),
                     'paymentFailureStatus': payment_failure_status,

@@ -10,10 +10,10 @@ from rest_framework.response import Response
 from rest_framework import status
 from main.models import BookedAppointment, FleetVehicle, Branch, BulkOrder
 from django.conf import settings
-from main.util.media_helper import get_full_media_url
+from main.utils.media_helper import get_full_media_url
 from django.utils import timezone
-from main.tasks import publish_review_to_detailer
-from main.utils.booking_quote import (
+from main.tasks import publish_review_to_detailer, publish_booking_cancelled
+from main.services.booking_quote import (
     get_loyalty_progress_snapshot,
     get_subscription_quick_sparkle_snapshot,
 )
@@ -90,7 +90,7 @@ class DashboardView(APIView):
         (ignores branch-admin branch-wide view). Fleet owners use this for “my bookings” on the fleet home.
         Branch admins (default): appointments for all vehicles in their managed branch (excluding
         appointments that are part of a bulk order; the bulk order is returned as one item).
-        Regular users / fleet owners (default): their own appointments, confirmed and scheduled only,
+        Regular users / fleet owners (default): their own appointments, confirmed, scheduled, and in progress,
         excluding appointments that are part of a bulk order.
         Also appends upcoming bulk orders (same user or branch). Returns list of appointment dicts
         with detailer, vehicle, address, service_type, valet_type, add_ons, times, etc.
@@ -115,7 +115,7 @@ class DashboardView(APIView):
                     if vehicle_ids:
                         upcoming_appointments = BookedAppointment.objects.filter(
                             vehicle_id__in=vehicle_ids,
-                            status__in=["confirmed", "scheduled"],
+                            status__in=["confirmed", "scheduled", "in_progress"],
                             bulk_order__isnull=True,
                         ).select_related(
                             'detailer', 'vehicle', 'address', 'service_type', 'valet_type'
@@ -128,11 +128,11 @@ class DashboardView(APIView):
                     # No managed branch, return empty
                     upcoming_appointments = BookedAppointment.objects.none()
             else:
-                # Regular user / fleet owner: their own appointments (confirmed and scheduled only).
+                # Regular user / fleet owner: their own appointments (including in-progress).
                 # Exclude appointments that are part of a bulk order; the bulk order is returned as one item.
                 upcoming_appointments = BookedAppointment.objects.filter(
                     user=request.user,
-                    status__in=["confirmed", "scheduled"],
+                    status__in=["confirmed", "scheduled", "in_progress"],
                     bulk_order__isnull=True,
                 ).select_related(
                     'detailer', 'vehicle', 'address', 'service_type', 'valet_type'
@@ -396,6 +396,8 @@ class DashboardView(APIView):
             
             appointment.status = 'cancelled'
             appointment.save()
+            if appointment.booking_reference:
+                publish_booking_cancelled.delay(appointment.booking_reference)
             return Response({'message': 'Appointment cancelled successfully'}, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({'error': f'Failed to cancel appointment: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
