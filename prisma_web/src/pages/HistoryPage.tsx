@@ -75,7 +75,7 @@ export default function HistoryPage() {
 
       {error ? (
         <div className="banner banner-error" role="alert">
-          {error}
+          We couldn’t load your service history. Please try again.
         </div>
       ) : null}
 

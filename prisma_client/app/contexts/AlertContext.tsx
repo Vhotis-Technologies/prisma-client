@@ -18,6 +18,7 @@ interface AlertState {
   onConfirm?: () => void;
   onClose?: () => void;
   confirmLabel?: string;
+  cancelLabel?: string;
 }
 
 export type { AlertState };
@@ -63,6 +64,7 @@ export const AlertProvider = ({ children }: { children: React.ReactNode }) => {
         message={alertConfig?.message || ""}
         type={alertConfig?.type || "error"}
         confirmLabel={alertConfig?.confirmLabel}
+        cancelLabel={alertConfig?.cancelLabel}
         {...(alertConfig?.onClose && {
           onClose: () => alertConfig.onClose?.(),
         })}

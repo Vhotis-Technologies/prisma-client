@@ -58,6 +58,7 @@ from main.tasks.emails.subscription import (
 from main.tasks.emails.branch_admin import send_branch_admin_invite_email
 from main.tasks.emails.ticket import send_ticket_created_email, send_ticket_resolved_email
 from main.tasks.emails.bulk_invoice import send_bulk_invoice_payment_reminder_email
+from main.tasks.emails.user_data_export import send_user_data_export_email
 
 __all__ = [
     'send_push_notification',
@@ -95,4 +96,5 @@ __all__ = [
     'send_ticket_created_email',
     'send_ticket_resolved_email',
     'send_bulk_invoice_payment_reminder_email',
+    'send_user_data_export_email',
 ]

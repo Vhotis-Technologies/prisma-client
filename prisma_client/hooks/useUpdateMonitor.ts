@@ -11,12 +11,21 @@
  */
 import { useCallback, useEffect, useRef } from "react";
 import * as Updates from "expo-updates";
-import { Alert, AppState, type AppStateStatus } from "react-native";
+import { AppState, type AppStateStatus } from "react-native";
+import { useAlertContext, type AlertState } from "@/app/contexts/AlertContext";
 
 const MIN_CHECK_INTERVAL_MS = 5 * 60 * 1000;
 
+const hiddenAlert = (): AlertState => ({
+  isVisible: false,
+  title: "",
+  message: "",
+  type: "error",
+});
+
 /** Monitor, download, and prompt reload for Expo OTA updates. */
 export const useUpdateMonitor = () => {
+  const { setAlertConfig } = useAlertContext();
   const {
     currentlyRunning,
     availableUpdate,
@@ -74,33 +83,56 @@ export const useUpdateMonitor = () => {
     if (promptedForRef.current === id) return;
     promptedForRef.current = id;
 
-    Alert.alert(
-      "Update Ready",
-      "A new version of the app has been downloaded. Reload now to apply it?",
-      [
-        { text: "Later", style: "cancel" },
-        {
-          text: "Reload",
-          onPress: () => {
-            Updates.reloadAsync().catch((err: unknown) => {
-              Alert.alert(
-                "Reload Failed",
-                err instanceof Error
-                  ? err.message
-                  : "Please close and reopen the app to apply the update."
-              );
-            });
-          },
-        },
-      ]
-    );
-  }, [isUpdatePending, availableUpdate]);
+    setAlertConfig({
+      isVisible: true,
+      title: "Update Ready",
+      message:
+        "A new version of the app has been downloaded. Reload now to apply it?",
+      type: "success",
+      confirmLabel: "Reload",
+      cancelLabel: "Later",
+      onClose: () => setAlertConfig(hiddenAlert()),
+      onConfirm: () => {
+        Updates.reloadAsync().catch((err: unknown) => {
+          setAlertConfig({
+            isVisible: true,
+            title: "Reload Failed",
+            message:
+              err instanceof Error
+                ? err.message
+                : "Please close and reopen the app to apply the update.",
+            type: "error",
+            confirmLabel: "OK",
+            onConfirm: () => setAlertConfig(hiddenAlert()),
+          });
+        });
+      },
+    });
+  }, [isUpdatePending, availableUpdate, setAlertConfig]);
 
   useEffect(() => {
     if (!__DEV__) return;
-    if (checkError) Alert.alert("Update Check Failed", checkError.message);
-    if (downloadError) Alert.alert("Update Download Failed", downloadError.message);
-  }, [checkError, downloadError]);
+    if (checkError) {
+      setAlertConfig({
+        isVisible: true,
+        title: "Update Check Failed",
+        message: checkError.message,
+        type: "error",
+        confirmLabel: "OK",
+        onConfirm: () => setAlertConfig(hiddenAlert()),
+      });
+    }
+    if (downloadError) {
+      setAlertConfig({
+        isVisible: true,
+        title: "Update Download Failed",
+        message: downloadError.message,
+        type: "error",
+        confirmLabel: "OK",
+        onConfirm: () => setAlertConfig(hiddenAlert()),
+      });
+    }
+  }, [checkError, downloadError, setAlertConfig]);
 
   return {
     currentlyRunning,

@@ -70,7 +70,7 @@ export default function HistoryDetailPage() {
 
       {error ? (
         <div className="banner banner-error" role="alert">
-          {error}
+          We couldn’t load these photos. Please try again.
         </div>
       ) : null}
 

@@ -38,8 +38,6 @@ services:
       - CELERY_RESULT_BACKEND=redis://prisma_redis:6379/1
       - CELERY_WORKER_CONCURRENCY=3
     depends_on:
-      prisma_redis:
-        condition: service_started
       client_server:
         condition: service_started
     networks:
@@ -49,17 +47,6 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-
-  prisma_redis:
-    image: redis:7-alpine
-    env_file:
-      - .env
-    ports:
-      - "6380:6379"
-    volumes:
-      - ./redis/data:/data
-    networks:
-      - prisma_shared_net
 
   job_acceptance_subscriber:
     build:
@@ -75,14 +62,11 @@ services:
       - PRISMA_ENV=production
       - REDIS_HOST=prisma_redis
     depends_on:
-      - prisma_redis
+      - client_server
     restart: always
     networks:
       - prisma_shared_net
-
-volumes:
-  redis_data:
-
+  
 networks:
   prisma_shared_net:
     external: true

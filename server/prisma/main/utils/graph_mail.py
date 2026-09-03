@@ -4,6 +4,7 @@ Microsoft Graph API client for sending email (e.g. support@prismavalet.com).
 Uses MSAL client-credentials flow; ``get_access_token`` and ``send_mail`` call Graph.
 Requires ``GRAPH_CLIENT_ID``, ``GRAPH_CLIENT_SECRET``, ``GRAPH_TENANT_ID``, ``GRAPH_USER``.
 """
+import base64
 import os
 import requests
 import msal
@@ -63,15 +64,44 @@ def send_mail(subject, body_html, recipient):
     Raises:
         Exception: On non-202 Graph API responses (includes response body).
     """
+    return send_mail_with_attachments(subject, body_html, recipient)
+
+
+def send_mail_with_attachments(subject, body_html, recipient, attachments=None):
+    """
+    Send HTML email with optional file attachments via Microsoft Graph.
+
+    Args:
+        subject: Email subject line.
+        body_html: HTML body content.
+        recipient: To-address string.
+        attachments: Optional list of dicts with keys ``name``, ``content_type``,
+            ``content_bytes`` (raw bytes).
+
+    Returns:
+        bool: True when Graph returns HTTP 202 Accepted.
+
+    Raises:
+        Exception: On non-202 Graph API responses (includes response body).
+    """
     access_token = get_access_token()
     headers = {"Authorization": f"Bearer {access_token}"}
-    email_msg = {
-        "message": {
-            "subject": subject,
-            "body": {"contentType": "HTML", "content": body_html},
-            "toRecipients": [{"emailAddress": {"address": recipient}}],
-        }
+    message = {
+        "subject": subject,
+        "body": {"contentType": "HTML", "content": body_html},
+        "toRecipients": [{"emailAddress": {"address": recipient}}],
     }
+    if attachments:
+        message["attachments"] = [
+            {
+                "@odata.type": "#microsoft.graph.fileAttachment",
+                "name": item["name"],
+                "contentType": item.get("content_type", "application/octet-stream"),
+                "contentBytes": base64.b64encode(item["content_bytes"]).decode("ascii"),
+            }
+            for item in attachments
+        ]
+    email_msg = {"message": message}
 
     response = requests.post(
         f"{GRAPH_API_ENDPOINT}/users/{USER}/sendMail",

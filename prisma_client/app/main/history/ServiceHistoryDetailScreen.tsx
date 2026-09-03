@@ -16,7 +16,6 @@ import InspectionDataModal from "@/app/components/profile/InspectionDataModal";
 import { useAlertContext } from "@/app/contexts/AlertContext";
 import { useModalService } from "@/app/contexts/ModalServiceProvider";
 import StyledButton from "@/app/components/helpers/StyledButton";
-import { apiErrorMessage } from "@/app/utils/apiErrorMessage";
 
 type TabType = "before-interior" | "before-exterior" | "after-interior" | "after-exterior";
 
@@ -47,7 +46,6 @@ const ServiceHistoryDetailScreen = () => {
     data: imagesData,
     isLoading,
     isError,
-    error,
   } = useFetchBookingImagesQuery(
     { booking_id: bookingId },
     { skip: !bookingId }
@@ -162,10 +160,7 @@ const ServiceHistoryDetailScreen = () => {
             variant="bodyMedium"
             style={[styles.errorText, { color: textColor }]}
           >
-            {apiErrorMessage(
-              error,
-              "We couldn’t load these photos. Please try again."
-            )}
+            We couldn’t load these photos. Please try again.
           </StyledText>
         </View>
       </View>

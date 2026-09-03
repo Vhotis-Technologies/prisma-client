@@ -19,16 +19,18 @@ import { useGetServiceHistoryQuery } from "@/app/store/api/serviceHistoryApi";
  */
 const useServiceHistory = () => {
   const {
-    data: serviceHistory = [],
+    data,
     isLoading: isLoadingServiceHistory,
-    error: errorServiceHistory,
+    isError,
     refetch: refetchServiceHistory,
   } = useGetServiceHistoryQuery();
+
+  const serviceHistory = Array.isArray(data) ? data : [];
 
   return {
     serviceHistory,
     isLoadingServiceHistory,
-    errorServiceHistory,
+    errorServiceHistory: isError,
     refetchServiceHistory,
   };
 };

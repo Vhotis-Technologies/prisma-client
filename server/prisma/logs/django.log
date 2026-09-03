@@ -50731,3 +50731,303 @@ INFO 2026-09-01 23:22:01,109 runserver 146 123902518130368 HTTP GET /api/v1/supp
 INFO 2026-09-01 23:22:01,261 runserver 146 123902518130368 HTTP GET /api/v1/support/bookings/get_bookings_list/ 200 [0.25, 172.18.0.14:37838]
 INFO 2026-09-01 23:22:10,446 runserver 146 123902518130368 HTTP GET /api/v1/support/bookings/get_bookings_list/ 200 [0.09, 172.18.0.14:49476]
 INFO 2026-09-01 23:22:38,690 runserver 146 123902518130368 WebSocket DISCONNECT /ws/client/ [172.18.0.14:39304]
+INFO 2026-09-03 19:07:59,065 autoreload 7 134695739859776 Watching for file changes with StatReloader
+INFO 2026-09-03 19:08:02,337 server 7 134695613363904 HTTP/2 support not enabled (install the http2 and tls Twisted extras)
+INFO 2026-09-03 19:08:02,338 server 7 134695613363904 Configuring endpoint tcp:port=8000:interface=0.0.0.0
+INFO 2026-09-03 19:08:02,340 server 7 134695613363904 Listening on TCP address 0.0.0.0:8000
+INFO 2026-09-03 19:12:51,742 autoreload 7 124603568579392 Watching for file changes with StatReloader
+INFO 2026-09-03 19:12:55,291 server 7 124603441608384 HTTP/2 support not enabled (install the http2 and tls Twisted extras)
+INFO 2026-09-03 19:12:55,292 server 7 124603441608384 Configuring endpoint tcp:port=8000:interface=0.0.0.0
+INFO 2026-09-03 19:12:55,294 server 7 124603441608384 Listening on TCP address 0.0.0.0:8000
+WARNING 2026-09-03 19:13:23,069 log 7 124603032659648 Unauthorized: /api/v1/dashboard/get_perks_summary/
+WARNING 2026-09-03 19:13:23,069 log 7 124603041052352 Unauthorized: /api/v1/dashboard/get_upcoming_appointments/
+WARNING 2026-09-03 19:13:23,069 log 7 124603024266944 Unauthorized: /api/v1/dashboard/get_user_stats/
+WARNING 2026-09-03 19:13:23,071 log 7 124603015874240 Unauthorized: /api/v1/dashboard/get_recent_services/
+WARNING 2026-09-03 19:13:23,078 runserver 7 124603441608384 HTTP GET /api/v1/dashboard/get_perks_summary/ 401 [0.56, 172.18.0.8:44018]
+WARNING 2026-09-03 19:13:23,085 runserver 7 124603441608384 HTTP GET /api/v1/dashboard/get_upcoming_appointments/?scope=my_bookings 401 [0.76, 172.18.0.8:44006]
+WARNING 2026-09-03 19:13:23,105 runserver 7 124603441608384 HTTP GET /api/v1/dashboard/get_user_stats/ 401 [0.60, 172.18.0.8:44010]
+WARNING 2026-09-03 19:13:23,113 runserver 7 124603441608384 HTTP GET /api/v1/dashboard/get_recent_services/ 401 [0.79, 172.18.0.8:43996]
+INFO 2026-09-03 19:13:23,935 runserver 7 124603441608384 HTTP POST /api/v1/authentication/refresh/ 200 [1.74, 172.18.0.8:43990]
+INFO 2026-09-03 19:13:24,164 runserver 7 124603441608384 WebSocket HANDSHAKING /ws/client/ [172.18.0.8:44056]
+INFO 2026-09-03 19:13:24,540 runserver 7 124603441608384 WebSocket CONNECT /ws/client/ [172.18.0.8:44056]
+INFO 2026-09-03 19:13:24,546 runserver 7 124603441608384 HTTP GET /api/v1/dashboard/get_user_stats/ 200 [0.50, 172.18.0.8:44032]
+INFO 2026-09-03 19:13:24,597 runserver 7 124603441608384 HTTP GET /api/v1/dashboard/get_perks_summary/ 200 [0.54, 172.18.0.8:44034]
+INFO 2026-09-03 19:13:24,681 runserver 7 124603441608384 HTTP GET /api/v1/dashboard/get_recent_services/ 200 [0.53, 172.18.0.8:44050]
+INFO 2026-09-03 19:13:24,706 runserver 7 124603441608384 HTTP GET /api/v1/dashboard/get_upcoming_appointments/?scope=my_bookings 200 [0.53, 172.18.0.8:44068]
+INFO 2026-09-03 19:14:26,944 support_dashboard 7 124602999088832 Support dashboard: computing metrics timeframe=daily window_days=1
+INFO 2026-09-03 19:14:27,158 runserver 7 124603441608384 HTTP GET /api/v1/support/tickets/list_tickets/ 200 [0.34, 172.18.0.8:53570]
+INFO 2026-09-03 19:14:27,274 runserver 7 124603441608384 HTTP GET /api/v1/support/dashboard/get_dashboard_data/?timeframe=daily 200 [0.46, 172.18.0.8:53558]
+INFO 2026-09-03 19:14:27,280 runserver 7 124603441608384 HTTP GET /api/v1/support/bookings/get_bookings_list/ 200 [0.46, 172.18.0.8:53560]
+INFO 2026-09-03 19:14:45,471 runserver 7 124603441608384 HTTP GET /api/v1/support/customers/get_customers_list/?segment=b2c 200 [0.17, 172.18.0.8:49364]
+INFO 2026-09-03 19:15:12,482 _util 7 124603388106432 message='Request to Stripe api' method=get url=https://api.stripe.com/v1/subscriptions/sub_1U6bv9FVJJgf9kPb4jdjCAJ5
+INFO 2026-09-03 19:15:12,989 _util 7 124603388106432 message='Stripe API response' path=https://api.stripe.com/v1/subscriptions/sub_1U6bv9FVJJgf9kPb4jdjCAJ5 response_code=200
+INFO 2026-09-03 19:15:13,053 runserver 7 124603441608384 HTTP GET /api/v1/support/customers/get_b2c_detail/?customer_id=69cb0889-6cc3-4274-adf6-fa04e5716c7a 200 [7.92, 172.18.0.8:39624]
+ERROR 2026-09-03 19:15:13,766 log 7 124603024266944 Internal Server Error: /api/v1/support/customers/get_customer_data_export/
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 577, in thread_handler
+    raise exc_info[1]
+  File "/usr/local/lib/python3.11/site-packages/django/core/handlers/exception.py", line 42, in inner
+    response = await get_response(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 577, in thread_handler
+    raise exc_info[1]
+  File "/usr/local/lib/python3.11/site-packages/django/core/handlers/base.py", line 253, in _get_response_async
+    response = await wrapped_callback(
+               ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 526, in __call__
+    ret = await asyncio.shield(exec_coro)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/current_thread_executor.py", line 35, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 581, in thread_handler
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 508, in func
+    return context.run(run_child)
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 506, in run_child
+    return child()
+           ^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/views/decorators/csrf.py", line 65, in _view_wrapper
+    return view_func(request, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/views/generic/base.py", line 105, in view
+    return self.dispatch(request, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 526, in dispatch
+    response = self.handle_exception(exc)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 474, in handle_exception
+    self.raise_uncaught_exception(exc)
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 485, in raise_uncaught_exception
+    raise exc
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 523, in dispatch
+    response = handler(request, *args, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/main/views/support/support_customers.py", line 925, in get
+    return handler(request, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/main/views/support/support_customers.py", line 1398, in _get_customer_data_export
+    export_data = serialize_export_for_api(collect_entity_data_export(etype, entity))
+                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/main/services/user_data_export.py", line 599, in collect_entity_data_export
+    return collect_b2c_data_export(entity)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/main/services/user_data_export.py", line 346, in collect_b2c_data_export
+    "addresses": _addresses_for(user),
+                 ^^^^^^^^^^^^^^^^^^^^
+  File "/app/main/services/user_data_export.py", line 160, in _addresses_for
+    for a in Address.objects.filter(user=user).order_by("-created_at")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/query.py", line 1727, in order_by
+    obj.query.add_ordering(*field_names)
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/sql/query.py", line 2312, in add_ordering
+    self.names_to_path(item.split(LOOKUP_SEP), self.model._meta)
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/sql/query.py", line 1813, in names_to_path
+    raise FieldError(
+django.core.exceptions.FieldError: Cannot resolve keyword 'created_at' into field. Choices are: address, bookedappointment, bulkorder, city, country, id, latitude, longitude, post_code, user, user_id
+ERROR 2026-09-03 19:15:14,023 runserver 7 124603441608384 HTTP GET /api/v1/support/customers/get_customer_data_export/?entity_type=b2c&entity_id=69cb0889-6cc3-4274-adf6-fa04e5716c7a 500 [0.57, 172.18.0.8:59902]
+ERROR 2026-09-03 19:15:39,885 log 7 124603015874240 Internal Server Error: /api/v1/support/customers/get_customer_data_export/
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 577, in thread_handler
+    raise exc_info[1]
+  File "/usr/local/lib/python3.11/site-packages/django/core/handlers/exception.py", line 42, in inner
+    response = await get_response(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 577, in thread_handler
+    raise exc_info[1]
+  File "/usr/local/lib/python3.11/site-packages/django/core/handlers/base.py", line 253, in _get_response_async
+    response = await wrapped_callback(
+               ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 526, in __call__
+    ret = await asyncio.shield(exec_coro)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/current_thread_executor.py", line 35, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 581, in thread_handler
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 508, in func
+    return context.run(run_child)
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 506, in run_child
+    return child()
+           ^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/views/decorators/csrf.py", line 65, in _view_wrapper
+    return view_func(request, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/views/generic/base.py", line 105, in view
+    return self.dispatch(request, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 526, in dispatch
+    response = self.handle_exception(exc)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 474, in handle_exception
+    self.raise_uncaught_exception(exc)
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 485, in raise_uncaught_exception
+    raise exc
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 523, in dispatch
+    response = handler(request, *args, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/main/views/support/support_customers.py", line 925, in get
+    return handler(request, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/main/views/support/support_customers.py", line 1398, in _get_customer_data_export
+    export_data = serialize_export_for_api(collect_entity_data_export(etype, entity))
+                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/main/services/user_data_export.py", line 599, in collect_entity_data_export
+    return collect_b2c_data_export(entity)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/main/services/user_data_export.py", line 346, in collect_b2c_data_export
+    "addresses": _addresses_for(user),
+                 ^^^^^^^^^^^^^^^^^^^^
+  File "/app/main/services/user_data_export.py", line 160, in _addresses_for
+    for a in Address.objects.filter(user=user).order_by("-created_at")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/query.py", line 1727, in order_by
+    obj.query.add_ordering(*field_names)
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/sql/query.py", line 2312, in add_ordering
+    self.names_to_path(item.split(LOOKUP_SEP), self.model._meta)
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/sql/query.py", line 1813, in names_to_path
+    raise FieldError(
+django.core.exceptions.FieldError: Cannot resolve keyword 'created_at' into field. Choices are: address, bookedappointment, bulkorder, city, country, id, latitude, longitude, post_code, user, user_id
+ERROR 2026-09-03 19:15:39,909 runserver 7 124603441608384 HTTP GET /api/v1/support/customers/get_customer_data_export/?entity_type=b2c&entity_id=69cb0889-6cc3-4274-adf6-fa04e5716c7a 500 [0.13, 172.18.0.8:56450]
+ERROR 2026-09-03 19:17:16,938 log 7 124603024266944 Internal Server Error: /api/v1/support/customers/get_customer_data_export/
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 577, in thread_handler
+    raise exc_info[1]
+  File "/usr/local/lib/python3.11/site-packages/django/core/handlers/exception.py", line 42, in inner
+    response = await get_response(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 577, in thread_handler
+    raise exc_info[1]
+  File "/usr/local/lib/python3.11/site-packages/django/core/handlers/base.py", line 253, in _get_response_async
+    response = await wrapped_callback(
+               ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 526, in __call__
+    ret = await asyncio.shield(exec_coro)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/current_thread_executor.py", line 35, in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 581, in thread_handler
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 508, in func
+    return context.run(run_child)
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/asgiref/sync.py", line 506, in run_child
+    return child()
+           ^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/views/decorators/csrf.py", line 65, in _view_wrapper
+    return view_func(request, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/views/generic/base.py", line 105, in view
+    return self.dispatch(request, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 526, in dispatch
+    response = self.handle_exception(exc)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 474, in handle_exception
+    self.raise_uncaught_exception(exc)
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 485, in raise_uncaught_exception
+    raise exc
+  File "/usr/local/lib/python3.11/site-packages/rest_framework/views.py", line 523, in dispatch
+    response = handler(request, *args, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/main/views/support/support_customers.py", line 925, in get
+    return handler(request, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/main/views/support/support_customers.py", line 1398, in _get_customer_data_export
+    export_data = serialize_export_for_api(collect_entity_data_export(etype, entity))
+                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/main/services/user_data_export.py", line 599, in collect_entity_data_export
+    return collect_b2c_data_export(entity)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/main/services/user_data_export.py", line 346, in collect_b2c_data_export
+    "addresses": _addresses_for(user),
+                 ^^^^^^^^^^^^^^^^^^^^
+  File "/app/main/services/user_data_export.py", line 160, in _addresses_for
+    for a in Address.objects.filter(user=user).order_by("-created_at")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/query.py", line 1727, in order_by
+    obj.query.add_ordering(*field_names)
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/sql/query.py", line 2312, in add_ordering
+    self.names_to_path(item.split(LOOKUP_SEP), self.model._meta)
+  File "/usr/local/lib/python3.11/site-packages/django/db/models/sql/query.py", line 1813, in names_to_path
+    raise FieldError(
+django.core.exceptions.FieldError: Cannot resolve keyword 'created_at' into field. Choices are: address, bookedappointment, bulkorder, city, country, id, latitude, longitude, post_code, user, user_id
+ERROR 2026-09-03 19:17:16,988 runserver 7 124603441608384 HTTP GET /api/v1/support/customers/get_customer_data_export/?entity_type=b2c&entity_id=69cb0889-6cc3-4274-adf6-fa04e5716c7a 500 [0.58, 172.18.0.8:45682]
+INFO 2026-09-03 19:18:23,360 autoreload 7 124603568579392 /app/main/services/user_data_export.py changed, reloading.
+INFO 2026-09-03 19:18:39,148 autoreload 120 124742382568256 Watching for file changes with StatReloader
+INFO 2026-09-03 19:18:43,353 server 120 124742256293568 HTTP/2 support not enabled (install the http2 and tls Twisted extras)
+INFO 2026-09-03 19:18:43,354 server 120 124742256293568 Configuring endpoint tcp:port=8000:interface=0.0.0.0
+INFO 2026-09-03 19:18:43,356 server 120 124742256293568 Listening on TCP address 0.0.0.0:8000
+INFO 2026-09-03 19:18:44,222 runserver 120 124742256293568 HTTP POST /api/v1/authentication/refresh/ 200 [0.58, 172.18.0.8:59064]
+INFO 2026-09-03 19:18:44,679 runserver 120 124742256293568 WebSocket HANDSHAKING /ws/client/ [172.18.0.8:59072]
+INFO 2026-09-03 19:18:44,742 runserver 120 124742256293568 WebSocket CONNECT /ws/client/ [172.18.0.8:59072]
+INFO 2026-09-03 19:18:48,325 runserver 120 124742256293568 HTTP GET /api/v1/support/customers/get_customer_data_export/?entity_type=b2c&entity_id=69cb0889-6cc3-4274-adf6-fa04e5716c7a 200 [0.19, 172.18.0.8:57802]
+INFO 2026-09-03 19:19:10,067 runserver 120 124742256293568 HTTP GET /api/v1/support/customers/get_vehicle_detail/?vehicle_id=b7db826d-0524-4bda-8e40-3a41cb8a56b4 200 [0.56, 172.18.0.8:35968]
+INFO 2026-09-03 19:19:24,526 _util 120 124742149334720 message='Request to Stripe api' method=get url=https://api.stripe.com/v1/subscriptions/sub_1U6bv9FVJJgf9kPb4jdjCAJ5
+INFO 2026-09-03 19:19:24,945 _util 120 124742149334720 message='Stripe API response' path=https://api.stripe.com/v1/subscriptions/sub_1U6bv9FVJJgf9kPb4jdjCAJ5 response_code=200
+INFO 2026-09-03 19:19:25,013 runserver 120 124742256293568 HTTP GET /api/v1/support/customers/get_b2c_detail/?customer_id=69cb0889-6cc3-4274-adf6-fa04e5716c7a 200 [0.65, 172.18.0.8:53322]
+INFO 2026-09-03 19:19:25,771 runserver 120 124742256293568 HTTP GET /api/v1/support/customers/get_customer_data_export/?entity_type=b2c&entity_id=69cb0889-6cc3-4274-adf6-fa04e5716c7a 200 [0.10, 172.18.0.8:53324]
+INFO 2026-09-03 19:20:09,664 support_customers 120 124742149334720 Support queued data export email entity_type=b2c entity_id=69cb0889-6cc3-4274-adf6-fa04e5716c7a to=giftezraifeanyi@gmail.com by=giftezraifeanyi@gmail.com
+INFO 2026-09-03 19:20:09,672 runserver 120 124742256293568 HTTP POST /api/v1/support/customers/email_user_data_pdf/ 200 [0.27, 172.18.0.8:51338]
+INFO 2026-09-03 19:20:53,783 support_customers 120 124742140942016 Support downloaded data export entity_type=b2c entity_id=69cb0889-6cc3-4274-adf6-fa04e5716c7a by=giftezraifeanyi@gmail.com
+INFO 2026-09-03 19:20:53,790 runserver 120 124742256293568 HTTP POST /api/v1/support/customers/export_user_data_pdf/ 200 [0.14, 172.18.0.8:58492]
+INFO 2026-09-03 19:22:09,590 support_activities 120 124742149334720 Support activity feed: limit=50 window_start=2026-08-04T18:22:09.221912+00:00 merged=22 returned=22
+INFO 2026-09-03 19:22:09,607 runserver 120 124742256293568 HTTP GET /api/v1/support/activities/get_activity_feed/ 200 [0.45, 172.18.0.8:48680]
+INFO 2026-09-03 19:27:51,532 runserver 120 124742256293568 WebSocket DISCONNECT /ws/client/ [172.18.0.8:59072]
+WARNING 2026-09-03 19:28:08,502 server 120 124742256293568 Application instance <Task pending name='Task-6' coro=<ProtocolTypeRouter.__call__() running at /usr/local/lib/python3.11/site-packages/channels/routing.py:48> wait_for=<Future pending cb=[shield.<locals>._outer_done_callback() at /usr/local/lib/python3.11/asyncio/tasks.py:908, Task.task_wakeup()]>> for connection <WebSocketProtocol client=['172.18.0.8', 59072] path=b'/ws/client/'> took too long to shut down and was killed.
+WARNING 2026-09-03 19:28:20,418 server 120 124742256293568 Application instance <Task cancelling name='Task-6' coro=<ProtocolTypeRouter.__call__() running at /usr/local/lib/python3.11/site-packages/channels/routing.py:48> wait_for=<Task cancelling name='Task-15' coro=<_async_proxy() running at /usr/local/lib/python3.11/site-packages/channels_redis/pubsub.py:24> wait_for=<Future pending cb=[Task.task_wakeup()]> cb=[Task.task_wakeup()]>> for connection <WebSocketProtocol client=['172.18.0.8', 59072] path=b'/ws/client/'> took too long to shut down and was killed.
+INFO 2026-09-03 19:29:32,657 support_activities 120 124742149334720 Support activity feed: limit=50 window_start=2026-08-04T18:29:32.356117+00:00 merged=22 returned=22
+INFO 2026-09-03 19:29:32,676 runserver 120 124742256293568 HTTP GET /api/v1/support/activities/get_activity_feed/ 200 [0.42, 172.18.0.8:44528]
+INFO 2026-09-03 19:29:33,209 support_activities 120 124742149334720 Support activity feed: limit=50 window_start=2026-08-04T18:29:33.024326+00:00 merged=22 returned=22
+INFO 2026-09-03 19:29:33,218 runserver 120 124742256293568 HTTP GET /api/v1/support/activities/get_activity_feed/ 200 [0.21, 172.18.0.8:44542]
+INFO 2026-09-03 19:29:33,800 runserver 120 124742256293568 HTTP GET /api/v1/support/tickets/list_tickets/ 200 [0.07, 172.18.0.8:44550]
+INFO 2026-09-03 19:29:36,928 support_dashboard 120 124742149334720 Support dashboard: computing metrics timeframe=daily window_days=1
+INFO 2026-09-03 19:29:36,987 runserver 120 124742256293568 HTTP GET /api/v1/support/tickets/list_tickets/ 200 [0.10, 172.18.0.8:45948]
+INFO 2026-09-03 19:29:37,098 runserver 120 124742256293568 HTTP GET /api/v1/support/dashboard/get_dashboard_data/?timeframe=daily 200 [0.21, 172.18.0.8:45958]
+INFO 2026-09-03 19:29:37,258 runserver 120 124742256293568 HTTP GET /api/v1/support/bookings/get_bookings_list/ 200 [0.35, 172.18.0.8:45968]
+INFO 2026-09-03 19:29:45,885 support_dashboard 120 124742117447360 Support dashboard: computing metrics timeframe=30days window_days=30
+INFO 2026-09-03 19:29:45,948 runserver 120 124742256293568 HTTP GET /api/v1/support/dashboard/get_dashboard_data/?timeframe=30days 200 [0.07, 172.18.0.8:56852]
+INFO 2026-09-03 19:29:57,609 runserver 120 124742256293568 HTTP GET /api/v1/support/customers/get_customers_list/?segment=b2c 200 [0.36, 172.18.0.8:55162]
+INFO 2026-09-03 19:29:59,498 runserver 120 124742256293568 HTTP GET /api/v1/support/customers/get_customers_list/?segment=guests 200 [0.04, 172.18.0.8:55170]
+INFO 2026-09-03 19:30:02,678 runserver 120 124742256293568 HTTP GET /api/v1/support/customers/get_customers_list/?segment=fleets 200 [0.27, 172.18.0.8:55178]
+INFO 2026-09-03 19:30:04,298 runserver 120 124742256293568 HTTP GET /api/v1/support/customers/get_customers_list/?segment=partners 200 [0.08, 172.18.0.8:55182]
+INFO 2026-09-03 19:30:05,861 runserver 120 124742256293568 HTTP GET /api/v1/support/customers/get_customers_list/?segment=fleets 200 [0.08, 172.18.0.8:59152]
+INFO 2026-09-03 19:30:07,289 runserver 120 124742256293568 HTTP GET /api/v1/support/customers/get_customers_list/?segment=partners 200 [0.06, 172.18.0.8:59164]
+INFO 2026-09-03 19:30:09,186 runserver 120 124742256293568 HTTP GET /api/v1/support/customers/get_customers_list/?segment=fleets 200 [0.08, 172.18.0.8:59176]
+INFO 2026-09-03 19:30:12,413 _util 120 124742117447360 message='Request to Stripe api' method=get url=https://api.stripe.com/v1/subscriptions/sub_1U6eKSFVJJgf9kPb2Uy61BOC
+INFO 2026-09-03 19:30:13,406 _util 120 124742117447360 message='Stripe API response' path=https://api.stripe.com/v1/subscriptions/sub_1U6eKSFVJJgf9kPb2Uy61BOC response_code=200
+INFO 2026-09-03 19:30:13,629 runserver 120 124742256293568 HTTP GET /api/v1/support/customers/get_fleet_detail/?customer_id=81786e0d-12c9-4de2-97ab-750d2fc8743c 200 [1.39, 172.18.0.8:59180]
+INFO 2026-09-03 19:30:14,376 runserver 120 124742256293568 HTTP GET /api/v1/support/customers/get_customer_data_export/?entity_type=fleet&entity_id=81786e0d-12c9-4de2-97ab-750d2fc8743c 200 [0.41, 172.18.0.8:59192]
+WARNING 2026-09-03 19:30:19,138 log 120 124742237411008 Bad Request: /api/v1/support/customers/terminate_fleet_subscription/
+WARNING 2026-09-03 19:30:19,146 runserver 120 124742256293568 HTTP PATCH /api/v1/support/customers/terminate_fleet_subscription/ 400 [0.06, 172.18.0.8:47598]
+WARNING 2026-09-03 19:30:26,577 log 120 124742237411008 Bad Request: /api/v1/support/customers/terminate_fleet_subscription/
+WARNING 2026-09-03 19:30:26,579 runserver 120 124742256293568 HTTP PATCH /api/v1/support/customers/terminate_fleet_subscription/ 400 [0.05, 172.18.0.8:34852]
+INFO 2026-09-03 19:30:31,403 _util 120 124742117447360 message='Request to Stripe api' method=get url=https://api.stripe.com/v1/subscriptions/sub_1U6eKSFVJJgf9kPb2Uy61BOC
+INFO 2026-09-03 19:30:31,623 _util 120 124742117447360 message='Stripe API response' path=https://api.stripe.com/v1/subscriptions/sub_1U6eKSFVJJgf9kPb2Uy61BOC response_code=200
+INFO 2026-09-03 19:30:31,641 runserver 120 124742256293568 HTTP PATCH /api/v1/support/customers/renew_fleet_subscription/ 200 [0.38, 172.18.0.8:34868]
+INFO 2026-09-03 19:30:32,045 _util 120 124742125840064 message='Request to Stripe api' method=get url=https://api.stripe.com/v1/subscriptions/sub_1U6eKSFVJJgf9kPb2Uy61BOC
+INFO 2026-09-03 19:30:32,203 _util 120 124742125840064 message='Stripe API response' path=https://api.stripe.com/v1/subscriptions/sub_1U6eKSFVJJgf9kPb2Uy61BOC response_code=200
+INFO 2026-09-03 19:30:32,215 runserver 120 124742256293568 HTTP GET /api/v1/support/customers/get_fleet_detail/?customer_id=81786e0d-12c9-4de2-97ab-750d2fc8743c 200 [0.29, 172.18.0.8:34876]
+INFO 2026-09-03 19:30:36,042 _util 120 124742117447360 message='Request to Stripe api' method=get url=https://api.stripe.com/v1/subscriptions/sub_1U6eKSFVJJgf9kPb2Uy61BOC
+INFO 2026-09-03 19:30:36,476 _util 120 124742117447360 message='Stripe API response' path=https://api.stripe.com/v1/subscriptions/sub_1U6eKSFVJJgf9kPb2Uy61BOC response_code=200
+INFO 2026-09-03 19:30:36,493 runserver 120 124742256293568 HTTP GET /api/v1/support/customers/get_fleet_detail/?customer_id=81786e0d-12c9-4de2-97ab-750d2fc8743c 200 [0.56, 172.18.0.8:36588]
+INFO 2026-09-03 19:30:37,011 runserver 120 124742256293568 HTTP GET /api/v1/support/customers/get_customer_data_export/?entity_type=fleet&entity_id=81786e0d-12c9-4de2-97ab-750d2fc8743c 200 [0.14, 172.18.0.8:36604]
+WARNING 2026-09-03 19:30:47,492 log 120 124742237411008 Bad Request: /api/v1/support/customers/terminate_fleet_subscription/
+WARNING 2026-09-03 19:30:47,497 runserver 120 124742256293568 HTTP PATCH /api/v1/support/customers/terminate_fleet_subscription/ 400 [0.07, 172.18.0.8:45048]
+INFO 2026-09-03 19:30:54,367 runserver 120 124742256293568 HTTP GET /api/v1/support/customers/get_fleet_branch_detail/?fleet_id=81786e0d-12c9-4de2-97ab-750d2fc8743c&branch_id=28c8ea4a-cb96-4c00-98e4-cd686e621711 200 [0.14, 172.18.0.8:45062]
+INFO 2026-09-03 19:31:02,938 _util 120 124742117447360 message='Request to Stripe api' method=get url=https://api.stripe.com/v1/subscriptions/sub_1U6eKSFVJJgf9kPb2Uy61BOC
+INFO 2026-09-03 19:31:03,150 _util 120 124742117447360 message='Stripe API response' path=https://api.stripe.com/v1/subscriptions/sub_1U6eKSFVJJgf9kPb2Uy61BOC response_code=200
+INFO 2026-09-03 19:31:03,161 runserver 120 124742256293568 HTTP GET /api/v1/support/customers/get_fleet_detail/?customer_id=81786e0d-12c9-4de2-97ab-750d2fc8743c 200 [0.35, 172.18.0.8:44720]
+INFO 2026-09-03 19:31:03,705 runserver 120 124742256293568 HTTP GET /api/v1/support/customers/get_customer_data_export/?entity_type=fleet&entity_id=81786e0d-12c9-4de2-97ab-750d2fc8743c 200 [0.14, 172.18.0.8:44728]
+INFO 2026-09-03 20:02:27,078 _util 120 124742117447360 message='Request to Stripe api' method=get url=https://api.stripe.com/v1/subscriptions/sub_1U6eKSFVJJgf9kPb2Uy61BOC
+INFO 2026-09-03 20:02:27,554 _util 120 124742117447360 message='Stripe API response' path=https://api.stripe.com/v1/subscriptions/sub_1U6eKSFVJJgf9kPb2Uy61BOC response_code=200
+INFO 2026-09-03 20:02:27,610 runserver 120 124742256293568 HTTP GET /api/v1/support/customers/get_fleet_detail/?customer_id=81786e0d-12c9-4de2-97ab-750d2fc8743c 200 [4.16, 172.18.0.8:57040]
+INFO 2026-09-03 20:02:28,560 runserver 120 124742256293568 HTTP GET /api/v1/support/customers/get_customer_data_export/?entity_type=fleet&entity_id=81786e0d-12c9-4de2-97ab-750d2fc8743c 200 [0.46, 172.18.0.8:57048]
+INFO 2026-09-03 20:02:43,902 runserver 120 124742256293568 HTTP GET /api/v1/support/customers/get_customers_list/?segment=b2c 200 [0.16, 172.18.0.8:52002]

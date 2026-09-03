@@ -1,0 +1,33 @@
+{% extends "base_email.html" %}
+{% block title %}Your personal data export – Prisma Car Care{% endblock %}
+{% block content %}
+<div class="greeting">Hello {{ user_name }},</div>
+
+<div class="intro-text">
+  As requested, we have attached a PDF containing the personal data we hold about your Prisma Car Care account.
+</div>
+
+<div class="reminders-box">
+  <div class="contact-title">What's included</div>
+  <div class="contact-text">
+    Your export includes account details, saved addresses, vehicles, bookings, payments, refunds,
+    loyalty and subscription information where applicable. Some financial records may be retained
+    separately for legal and tax purposes even after account closure.
+  </div>
+</div>
+
+<div class="contact-box">
+  <div class="contact-title">Questions?</div>
+  <div class="contact-text">
+    If anything looks incorrect or you need further assistance, contact us at
+    <a href="mailto:support@prismavalet.com" class="contact-link">support@prismavalet.com</a>.
+  </div>
+</div>
+
+<div class="closing">
+  <div class="signature">
+    Best regards,<br />
+    <span class="signature-name">The Prisma Car Care Team</span>
+  </div>
+</div>
+{% endblock %}

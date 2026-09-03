@@ -21,9 +21,21 @@ const serviceHistoryApi = createApi({
         method: "GET",
       }),
       providesTags: ["ServiceHistory"],
-      transformResponse: (response: {
-        service_history: MyServiceHistoryProps[];
-      }) => response.service_history,
+      transformResponse: (response: unknown): MyServiceHistoryProps[] => {
+        if (
+          response &&
+          typeof response === "object" &&
+          Array.isArray((response as { service_history?: unknown }).service_history)
+        ) {
+          return (response as { service_history: MyServiceHistoryProps[] })
+            .service_history;
+        }
+        throw new Error("Invalid service history response");
+      },
+      transformErrorResponse: () => ({
+        status: 500,
+        data: { error: "Could not load service history." },
+      }),
     }),
 
     /**

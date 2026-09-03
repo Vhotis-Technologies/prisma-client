@@ -1,6 +1,6 @@
 # Client — standalone staging. docker compose -f docker-compose-staging.yml up -d --build
 # Requires: docker network create prisma_shared_net
-# client_staging_redis is the single shared Redis for all staging apps (detailer/support use other DB indexes).
+# Shared staging Redis lives in the parent docker-compose.yml (client_staging_redis / alias prisma_redis_staging).
 # Ngrok: point the tunnel at this stack’s nginx — e.g. `ngrok http 80`.
 # HTTP: client_staging_nginx — /client/ → API, /app/ → prisma_web SPA.
 # Direct SPA: host :8182 (Vite base /app/, so prefer /app/ or the nginx path).
@@ -28,22 +28,6 @@ services:
       timeout: 5s
       retries: 10
 
-  client_staging_redis:
-    image: redis:7-alpine
-    container_name: client_staging_redis
-    restart: unless-stopped
-    env_file:
-      - .env.staging
-    command: ["redis-server", "--appendonly", "yes"]
-    volumes:
-      - client_staging_redis_data:/data
-    networks:
-      prisma_shared_net:
-        aliases:
-          - prisma_redis_staging
-    ports:
-      - "6480:6379"
-
   client_staging_server:
     container_name: client_staging_server
     build:
@@ -63,8 +47,6 @@ services:
     depends_on:
       client_postgres:
         condition: service_healthy
-      client_staging_redis:
-        condition: service_started
     networks:
       - prisma_shared_net
     healthcheck:
@@ -92,8 +74,6 @@ services:
       - CELERY_RESULT_BACKEND=redis://client_staging_redis:6379/1
       - CELERY_WORKER_CONCURRENCY=3
     depends_on:
-      client_staging_redis:
-        condition: service_started
       client_staging_server:
         condition: service_started
       client_postgres:
@@ -101,23 +81,23 @@ services:
     networks:
       - prisma_shared_net
 
-  client_staging_nginx:
-    image: nginx:alpine
-    container_name: client_staging_nginx
-    restart: unless-stopped
-    env_file:
-      - .env.staging
-    ports:
-      - "80:80"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/conf.d:/etc/nginx/conf.d:ro
-      - ./nginx/html/static:/usr/share/nginx/html/static:ro
-    depends_on:
-      - client_staging_server
-      - client_staging_web
-    networks:
-      - prisma_shared_net
+  # client_staging_nginx:
+  #   image: nginx:alpine
+  #   container_name: client_staging_nginx
+  #   restart: unless-stopped
+  #   env_file:
+  #     - .env.staging
+  #   ports:
+  #     - "80:80"
+  #   volumes:
+  #     - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+  #     - ./nginx/conf.d:/etc/nginx/conf.d:ro
+  #     - ./nginx/html/static:/usr/share/nginx/html/static:ro
+  #   depends_on:
+  #     - client_staging_server
+  #     - client_staging_web
+  #   networks:
+  #     - prisma_shared_net
 
   # SPA at host :8182 and, via client_staging_nginx, https://<ngrok>/app/
   client_staging_web:
@@ -150,8 +130,6 @@ services:
       - PRISMA_ENV=staging
       - REDIS_HOST=client_staging_redis
     depends_on:
-      client_staging_redis:
-        condition: service_started
       client_postgres:
         condition: service_healthy
     restart: unless-stopped
@@ -160,7 +138,6 @@ services:
 
 volumes:
   client_staging_pgdata:
-  client_staging_redis_data:
 
 networks:
   prisma_shared_net:

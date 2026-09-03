@@ -22,8 +22,10 @@ from decimal import Decimal
 import stripe
 from django.conf import settings
 from django.db.models import Count, Q, Sum
+from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework import status
+from rest_framework.renderers import JSONRenderer
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -57,6 +59,16 @@ from main.services.booking_quote import (
     get_loyalty_progress_snapshot,
     get_subscription_quick_sparkle_snapshot,
 )
+from main.services.user_data_export import (
+    build_export_pdf,
+    collect_entity_data_export,
+    export_pdf_filename,
+    export_recipient_email,
+    is_mailable_email,
+    resolve_export_entity,
+    serialize_export_for_api,
+)
+from main.tasks import send_user_data_export_email
 from main.utils.support_audit import get_support_actor_email
 from main.views.support.support_permission_access import SupportPermissionAccess
 
@@ -881,6 +893,7 @@ class SupportCustomersView(APIView):
         "get_fleet_branch_detail": "_get_fleet_branch_detail",
         "get_partner_referred_users": "_get_partner_referred_users",
         "get_vehicle_detail": "_get_vehicle_detail",
+        "get_customer_data_export": "_get_customer_data_export",
     }
     patch_action_handler = {
         "terminate_fleet_subscription": "_patch_terminate_fleet_subscription",
@@ -893,7 +906,15 @@ class SupportCustomersView(APIView):
     }
     post_action_handler = {
         "delete_user_account": "_post_delete_user_account",
+        "email_user_data_pdf": "_post_email_user_data_pdf",
+        "export_user_data_pdf": "_post_export_user_data_pdf",
     }
+
+    def perform_content_negotiation(self, request, force=False):
+        """PDF export returns Django HttpResponse; DRF rejects raw PDF Accept otherwise."""
+        if self.kwargs.get("action") == "export_user_data_pdf":
+            return JSONRenderer(), JSONRenderer.media_type
+        return super().perform_content_negotiation(request, force)
 
     def get(self, request, *args, **kwargs):
         """Dispatch GET by URL action name to the matching _get_* handler."""
@@ -1340,6 +1361,106 @@ class SupportCustomersView(APIView):
                     "message": "Account deactivated",
                     "user_id": str(user.id),
                     "deleted_by": actor,
+                }
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    def _parse_export_entity_args(self, request) -> tuple[str, str]:
+        """Read entity_type/entity_id from body or query; map legacy user_id to b2c."""
+        data = request.data if hasattr(request.data, "get") else {}
+        entity_type = (
+            data.get("entity_type")
+            or request.query_params.get("entity_type")
+            or ""
+        ).strip().lower()
+        entity_id = (
+            data.get("entity_id")
+            or request.query_params.get("entity_id")
+            or data.get("user_id")
+            or request.query_params.get("user_id")
+            or ""
+        ).strip()
+        if not entity_type and entity_id:
+            entity_type = "b2c"
+        return entity_type, entity_id
+
+    def _get_customer_data_export(self, request, **kwargs):
+        """JSON preview of the GDPR export package for support UI."""
+        entity_type, entity_id = self._parse_export_entity_args(request)
+        try:
+            etype, entity, _recipient = resolve_export_entity(entity_type, entity_id)
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except LookupError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_404_NOT_FOUND)
+
+        export_data = serialize_export_for_api(collect_entity_data_export(etype, entity))
+        return Response({"data": {"export": export_data}}, status=status.HTTP_200_OK)
+
+    def _post_export_user_data_pdf(self, request, **kwargs):
+        """Download GDPR export PDF (no password)."""
+        entity_type, entity_id = self._parse_export_entity_args(request)
+        try:
+            etype, entity, _recipient = resolve_export_entity(entity_type, entity_id)
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except LookupError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_404_NOT_FOUND)
+
+        export_data = collect_entity_data_export(etype, entity)
+        pdf_bytes = build_export_pdf(export_data)
+        filename = export_pdf_filename(etype, entity_id)
+        actor = get_support_actor_email(request) or "support"
+        logger.info(
+            "Support downloaded data export entity_type=%s entity_id=%s by=%s",
+            etype,
+            entity_id,
+            actor,
+        )
+        response = HttpResponse(pdf_bytes, content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
+
+    def _post_email_user_data_pdf(self, request, **kwargs):
+        """Queue email of a GDPR subject-access PDF to the customer."""
+        entity_type, entity_id = self._parse_export_entity_args(request)
+        recipient_email = (request.data.get("recipient_email") or "").strip() or None
+        try:
+            etype, entity, recipient_user = resolve_export_entity(entity_type, entity_id)
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except LookupError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            to_address = export_recipient_email(recipient_user, recipient_email)
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not is_mailable_email(to_address):
+            return Response(
+                {"error": "recipient_email must be a valid email address"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        actor = get_support_actor_email(request) or "support"
+        send_user_data_export_email.delay(etype, entity_id, recipient_email)
+        logger.info(
+            "Support queued data export email entity_type=%s entity_id=%s to=%s by=%s",
+            etype,
+            entity_id,
+            to_address,
+            actor,
+        )
+        return Response(
+            {
+                "data": {
+                    "message": f"Personal data export queued for {to_address}",
+                    "entity_type": etype,
+                    "entity_id": entity_id,
+                    "recipient_email": to_address,
+                    "queued_by": actor,
                 }
             },
             status=status.HTTP_200_OK,

@@ -136,6 +136,22 @@ export function useAuth(): AuthContextValue {
   return ctx;
 }
 
+function looksLikeHtml(value: string): boolean {
+  const trimmed = value.trim();
+  return (
+    trimmed.startsWith("<") ||
+    /<!doctype html/i.test(trimmed) ||
+    /<\/?[a-z][\s\S]*>/i.test(trimmed)
+  );
+}
+
+function safeMessage(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed || looksLikeHtml(trimmed) || trimmed.length > 280) return null;
+  return trimmed;
+}
+
 export function authErrorMessage(err: unknown, fallback: string): string {
   if (axios.isAxiosError(err)) {
     const status = err.response?.status;
@@ -144,22 +160,34 @@ export function authErrorMessage(err: unknown, fallback: string): string {
     }
     if (status === 429) {
       const limited = err.response?.data as { detail?: string; error?: string } | undefined;
-      if (limited?.error) return String(limited.error);
-      if (limited?.detail) return String(limited.detail);
-      return "Too many attempts. Wait a minute and try again.";
+      return (
+        safeMessage(limited?.error) ??
+        safeMessage(limited?.detail) ??
+        "Too many attempts. Wait a minute and try again."
+      );
     }
     const body = err.response?.data as {
       detail?: string;
       error?: string;
       non_field_errors?: string[];
     } | undefined;
-    if (body?.error) return String(body.error);
-    if (body?.detail) return String(body.detail);
-    if (Array.isArray(body?.non_field_errors) && body.non_field_errors[0]) {
-      return String(body.non_field_errors[0]);
+    const fromBody =
+      safeMessage(body?.error) ??
+      safeMessage(body?.detail) ??
+      (Array.isArray(body?.non_field_errors)
+        ? safeMessage(body.non_field_errors[0])
+        : null);
+    if (fromBody) return fromBody;
+    if (status === 403) return "You don’t have access to this information.";
+    if (status === 404) return "That information could not be found.";
+    if (status && status >= 500) {
+      return "The server had a problem. Please try again in a moment.";
+    }
+    if (!err.response) {
+      return "Couldn’t reach the server. Check your connection and try again.";
     }
   }
-  return err instanceof Error ? err.message : fallback;
+  return safeMessage(err instanceof Error ? err.message : err) ?? fallback;
 }
 
 export function loginErrorMessage(err: unknown): string {

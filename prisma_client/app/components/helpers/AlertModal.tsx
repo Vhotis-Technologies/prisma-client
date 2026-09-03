@@ -22,6 +22,7 @@ const AlertModal = ({
   message,
   type = "error",
   confirmLabel,
+  cancelLabel,
 }: {
   isVisible: boolean;
   onClose?: () => void;
@@ -30,6 +31,7 @@ const AlertModal = ({
   message: string;
   type?: "success" | "error" | "warning";
   confirmLabel?: string;
+  cancelLabel?: string;
 }) => {
   const textColor = useThemeColor({}, "text");
   const cardColor = useThemeColor({}, "cards");
@@ -92,7 +94,7 @@ const AlertModal = ({
                 activeOpacity={0.7}
               >
                 <StyledText
-                  children="Cancel"
+                  children={cancelLabel ?? "Cancel"}
                   variant="labelMedium"
                   style={[styles.cancelButtonText, { color: textColor }]}
                 />

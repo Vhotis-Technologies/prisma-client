@@ -13,13 +13,18 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import NotificationInitializer from "./components/notification/NotificationInitializer";
 import { StatusBar } from "react-native";
 import { useUpdateMonitor } from "@/hooks/useUpdateMonitor";
+import { useFirebasePerformance } from "@/hooks/useFirebasePerformance";
 import ModalServiceProvider from "./contexts/ModalServiceProvider";
+
+/** Runs inside AlertProvider so OTA prompts can use the in-app alert modal. */
+function AppEffects() {
+  useUpdateMonitor();
+  useFirebasePerformance();
+  return null;
+}
 
 export default function RootLayout() {
   const { currentTheme } = useThemeContext();
-
-  // Initialize update monitoring
-  useUpdateMonitor();
 
   // Set status bar style based on theme
   // Light theme -> dark content, Dark theme -> light content
@@ -31,6 +36,7 @@ export default function RootLayout() {
       <Provider store={store}>
         <ThemeProvider>
           <AlertProvider>
+            <AppEffects />
             <SnackbarProvider>
               <ModalServiceProvider>
                 <AuthContextProvider>
