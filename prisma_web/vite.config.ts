@@ -1,7 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-/** Staging nginx serves the SPA at /app/. Local dev stays at /. */
+/** SPA public path. Override with VITE_BASE (default `/`). */
 const base = process.env.VITE_BASE || "/";
 
 export default defineConfig({

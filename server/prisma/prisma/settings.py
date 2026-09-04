@@ -28,7 +28,7 @@ GUEST_ACCESS_TOKEN_EXPIRY_DAYS = int(os.getenv('GUEST_ACCESS_TOKEN_EXPIRY_DAYS',
 
 # Public origins: BASE_URL = Django API, CLIENT_WEB_BASE_URL = Prisma Web SPA.
 _DEFAULT_API = (
-    'https://bat-useful-penguin.ngrok-free.app/client' 
+    'https://staging.client.prismavalet.com'
     if IS_STAGING
     else 'https://client.prismavalet.com'
 )
@@ -36,7 +36,9 @@ BASE_URL = (
     os.getenv('BASE_URL') or os.getenv('CLIENT_ORIGIN') or _DEFAULT_API
 ).strip().rstrip('/')
 
-_DEFAULT_WEB = 'http://localhost:5173' if IS_STAGING else 'https://app.prismavalet.com'
+_DEFAULT_WEB = (
+    'https://staging.app.prismavalet.com' if IS_STAGING else 'https://app.prismavalet.com'
+)
 # Vite dev origins — used to ignore localhost CLIENT_WEB_BASE_URL when BASE_URL is a public tunnel.
 _LOCAL_WEB_DEV_ORIGINS = frozenset({
     'http://localhost:5173',
@@ -295,10 +297,10 @@ DATABASES = {
 
 # Staging: local media. Production: Google Cloud Storage (django-storages reads GS_* from settings).
 if IS_STAGING:
-    GS_CREDENTIALS_PATH_STAGING = os.path.join(BASE_DIR, 'prisma-6fc48-642e49c334e8.json')
+    GS_CREDENTIALS_PATH_STAGING = os.getenv('GS_CREDENTIALS_PATH_STAGING')
     GS_BUCKET_NAME_STAGING = os.getenv('GS_BUCKET_NAME_STAGING', 'prisma_staging_bucket')
     GS_LOCATION_STAGING = os.getenv('GS_LOCATION_STAGING', 'main-app')
-    GS_CREDENTIALS_STAGING = service_account.Credentials.from_service_account_file(
+    GS_CREDENTIALS_STAGING = service_account.Credentials.from_service_account_info(
         GS_CREDENTIALS_PATH_STAGING,
         scopes=['https://www.googleapis.com/auth/cloud-platform'],
     )
@@ -319,8 +321,8 @@ if IS_STAGING:
 else:
     GS_BUCKET_NAME = os.getenv('GS_BUCKET_NAME', 'prisma-valet-bucket')
     GS_LOCATION = os.getenv('GS_LOCATION', 'main-app')
-    GS_CREDENTIALS_PATH = os.path.join(BASE_DIR, 'prisma-6fc48-642e49c334e8.json')
-    GS_CREDENTIALS = service_account.Credentials.from_service_account_file(
+    GS_CREDENTIALS_PATH = os.getenv('GS_CREDENTIALS_PATH')
+    GS_CREDENTIALS = service_account.Credentials.from_service_account_info(
         GS_CREDENTIALS_PATH,
         scopes=['https://www.googleapis.com/auth/cloud-platform'],
     )
@@ -526,7 +528,7 @@ GOOGLE_PLACES_API_KEY = os.getenv('GOOGLE_PLACES_API_KEY', '')
 RESCHEDULE_FEE_CENTS = int(os.getenv('RESCHEDULE_FEE_CENTS', '1000'))
 
 # Detailer app URL for server-to-server calls (create booking, timeslot proxy).
-# Use the public project URL (ngrok /detailer or https://crew…), not Docker DNS.
+# Use the public project URL (https://staging.crew… or https://crew…), not Docker DNS.
 # Auth is X-Client-Internal-Key (DETAILER_API_SECRET == detailer CLIENT_SERVER_SECRET).
 def _public_project_url(env_value, path_segment):
     """Prefer an explicit public URL; ignore Docker hostnames and fall back to BASE_URL."""

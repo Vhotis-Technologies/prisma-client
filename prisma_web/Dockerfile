@@ -6,8 +6,8 @@ COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
 
-# Baked at build time. Staging nginx serves the app at /app/ against API /client.
-ARG VITE_API_URL=http://localhost/client
+# Baked at build time. Staging/prod use absolute API URL; VITE_BASE is usually /.
+ARG VITE_API_URL=https://staging.client.prismavalet.com
 ARG VITE_BASE=/
 ARG VITE_STRIPE_PUBLISHABLE_KEY=pk_test_51S0pDCFVJJgf9kPbBk7noZevUQSzkRN7CyYGi7QeKzKGToFekvr6jPVQQS1lsQoZyvd1J3EiQTfZJJHMxwIpX4mL005xBo7ME9
 ENV VITE_API_URL=$VITE_API_URL

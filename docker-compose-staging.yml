@@ -1,11 +1,9 @@
 # Client — standalone staging. docker compose -f docker-compose-staging.yml up -d --build
 # Requires: docker network create prisma_shared_net
 # Shared staging Redis lives in the parent docker-compose.yml (client_staging_redis / alias prisma_redis_staging).
-# Ngrok: point the tunnel at this stack’s nginx — e.g. `ngrok http 80`.
-# HTTP: client_staging_nginx — /client/ → API, /app/ → prisma_web SPA.
-# Direct SPA: host :8182 (Vite base /app/, so prefer /app/ or the nginx path).
+# Public URLs: API https://staging.client.prismavalet.com — SPA https://staging.app.prismavalet.com
+# Point NPM (or nginx) at client_staging_server:8100 and client_staging_web:8182.
 # Stripe publishable + Places bake into the SPA at image build (from .env.staging / Dockerfile defaults).
-# If ngrok shows ERR_NGROK_8012 with undefined://undefined, the agent has no forward URL/host set in CLI or dashboard.
 
 name: prisma_client_staging
 
@@ -99,14 +97,14 @@ services:
   #   networks:
   #     - prisma_shared_net
 
-  # SPA at host :8182 and, via client_staging_nginx, https://<ngrok>/app/
+  # SPA at host :8182 — public origin https://staging.app.prismavalet.com
   client_staging_web:
     build:
       context: ./prisma_web
       dockerfile: Dockerfile
       args:
-        VITE_API_URL: /client
-        VITE_BASE: /app/
+        VITE_API_URL: https://staging.client.prismavalet.com
+        VITE_BASE: /
         VITE_STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-pk_test_51S0pDCFVJJgf9kPbBk7noZevUQSzkRN7CyYGi7QeKzKGToFekvr6jPVQQS1lsQoZyvd1J3EiQTfZJJHMxwIpX4mL005xBo7ME9}
     container_name: client_staging_web
     ports:
