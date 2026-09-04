@@ -297,7 +297,7 @@ DATABASES = {
 
 # Staging: local media. Production: Google Cloud Storage (django-storages reads GS_* from settings).
 if IS_STAGING:
-    credential_staging = json.loads(os.getenv('GS_CREDENTIALS_PATH_STAGING'))
+    credential_staging = json.loads(os.getenv('GS_CREDENTIALS_STAGING_JSON'))
     GS_BUCKET_NAME_STAGING = os.getenv('GS_BUCKET_NAME_STAGING', 'prisma_staging_bucket')
     GS_LOCATION_STAGING = os.getenv('GS_LOCATION_STAGING', 'main-app')
     GS_CREDENTIALS_STAGING = service_account.Credentials.from_service_account_info(
