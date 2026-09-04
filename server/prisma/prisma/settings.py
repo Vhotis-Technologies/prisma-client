@@ -7,7 +7,7 @@ import dj_database_url
 from celery.schedules import crontab
 from corsheaders.defaults import default_headers
 from google.oauth2 import service_account
-
+import json
 # Env names
 CAR_REG_USERNAME = os.getenv("CAR_REG_USERNAME", "vhotis").strip() or None
 
@@ -297,11 +297,11 @@ DATABASES = {
 
 # Staging: local media. Production: Google Cloud Storage (django-storages reads GS_* from settings).
 if IS_STAGING:
-    GS_CREDENTIALS_PATH_STAGING = os.getenv('GS_CREDENTIALS_PATH_STAGING')
+    credential_staging = json.loads(os.getenv('GS_CREDENTIALS_PATH_STAGING'))
     GS_BUCKET_NAME_STAGING = os.getenv('GS_BUCKET_NAME_STAGING', 'prisma_staging_bucket')
     GS_LOCATION_STAGING = os.getenv('GS_LOCATION_STAGING', 'main-app')
     GS_CREDENTIALS_STAGING = service_account.Credentials.from_service_account_info(
-        GS_CREDENTIALS_PATH_STAGING,
+        credential_staging,
         scopes=['https://www.googleapis.com/auth/cloud-platform'],
     )
     STORAGES = {
@@ -319,11 +319,12 @@ if IS_STAGING:
         },
     }
 else:
+    credentials = json.loads(os.getenv('GS_CREDENTIALS_PATH'))
     GS_BUCKET_NAME = os.getenv('GS_BUCKET_NAME', 'prisma-valet-bucket')
     GS_LOCATION = os.getenv('GS_LOCATION', 'main-app')
     GS_CREDENTIALS_PATH = os.getenv('GS_CREDENTIALS_PATH')
     GS_CREDENTIALS = service_account.Credentials.from_service_account_info(
-        GS_CREDENTIALS_PATH,
+        credentials,
         scopes=['https://www.googleapis.com/auth/cloud-platform'],
     )
     STORAGES = {
