@@ -997,7 +997,7 @@ def expected_breakdown_from_booking_data(user, booking_data: dict) -> AmountBrea
             if qs.get(key):
                 exclude = True
 
-    # Extract lat/lng from address in booking_data
+    # Extract lat/lng from address in booking_data (payload or saved Address row)
     latitude = None
     longitude = None
     address_data = booking_data.get("address")
@@ -1010,6 +1010,26 @@ def expected_breakdown_from_booking_data(user, booking_data: dict) -> AmountBrea
                 longitude = float(lng_val)
             except (TypeError, ValueError):
                 pass
+        # Fallback: load coordinates from the saved Address when the client omitted them
+        if (latitude is None or longitude is None) and address_data.get("id"):
+            try:
+                from main.models import Address
+
+                addr = Address.objects.filter(id=address_data["id"]).only("latitude", "longitude").first()
+                if addr is not None and addr.latitude is not None and addr.longitude is not None:
+                    latitude = float(addr.latitude)
+                    longitude = float(addr.longitude)
+            except (TypeError, ValueError):
+                pass
+    if latitude is None or longitude is None:
+        try:
+            lat_val = booking_data.get("latitude")
+            lng_val = booking_data.get("longitude")
+            if lat_val is not None and lng_val is not None:
+                latitude = float(lat_val)
+                longitude = float(lng_val)
+        except (TypeError, ValueError):
+            pass
 
     sub_ex, vat_amt, total_inc = compute_price_breakdown(
         user,

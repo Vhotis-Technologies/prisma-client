@@ -47,6 +47,7 @@ export function quoteBooking(body: {
   is_suv: boolean;
   is_express: boolean;
   apply_partner_booking_discount: boolean;
+  body_style?: string | null;
   latitude?: number | null;
   longitude?: number | null;
 }) {

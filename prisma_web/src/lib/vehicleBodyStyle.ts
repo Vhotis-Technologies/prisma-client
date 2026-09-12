@@ -8,6 +8,8 @@ const SUV_MPV_NEEDLES = [
   "four wheel",
   "4 wheel",
   "crossover",
+  "van",
+  "minivan",
 ];
 
 export function vehicleBodyStyleRequiresSuvMpvSurcharge(

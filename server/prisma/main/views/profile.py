@@ -369,8 +369,8 @@ class ProfileView(APIView):
                         'post_code': address.post_code,
                         'city': address.city,
                         'country': address.country,
-                        'latitude': float(address.latitude) if address.latitude else None,
-                        'longitude': float(address.longitude) if address.longitude else None
+                        'latitude': float(address.latitude) if address.latitude is not None else None,
+                        'longitude': float(address.longitude) if address.longitude is not None else None
                     })
             
             return Response({'addresses': addresses_list}, status=status.HTTP_200_OK)

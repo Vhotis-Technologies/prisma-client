@@ -846,7 +846,15 @@ export default function GuestBookPage() {
                 <dl className="price-list">
                   <div>
                     <dt>Subtotal</dt>
-                    <dd>{formatMoney(breakdown.stickerSubtotalIncVat, country)}</dd>
+                    <dd>
+                      {formatMoney(
+                        Math.max(
+                          0,
+                          breakdown.stickerSubtotalIncVat - (payable?.travel_surcharge ?? 0),
+                        ),
+                        country,
+                      )}
+                    </dd>
                   </div>
                   {isSuv ? (
                     <div>

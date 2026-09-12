@@ -323,6 +323,7 @@ export default function BookPage() {
           is_suv: isSuv,
           is_express: isExpress,
           apply_partner_booking_discount: applyPartnerDiscount,
+          body_style: vehicle?.body_style ?? null,
           latitude: address?.latitude ?? null,
           longitude: address?.longitude ?? null,
         });
@@ -347,7 +348,7 @@ export default function BookPage() {
     return () => {
       cancelled = true;
     };
-  }, [step, service, selectedAddons, isSuv, isExpress, applyPartnerDiscount, clientSecret, address?.latitude, address?.longitude]);
+  }, [step, service, selectedAddons, isSuv, isExpress, applyPartnerDiscount, clientSecret, address?.latitude, address?.longitude, vehicle?.body_style]);
 
   function selectVehicle(next: GarageVehicle) {
     setVehicle(next);
@@ -969,7 +970,15 @@ export default function BookPage() {
                 <dl className="price-list">
                   <div>
                     <dt>Subtotal</dt>
-                    <dd>{formatMoney(breakdown.stickerSubtotalIncVat, country)}</dd>
+                    <dd>
+                      {formatMoney(
+                        Math.max(
+                          0,
+                          breakdown.stickerSubtotalIncVat - (payable?.travel_surcharge ?? 0),
+                        ),
+                        country,
+                      )}
+                    </dd>
                   </div>
                   {breakdown.subscriptionDiscountIncVat > 0 ? (
                     <div className="price-save">
