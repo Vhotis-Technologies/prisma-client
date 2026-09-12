@@ -822,13 +822,8 @@ def quote_booking_for_user(
     is_suv: bool,
     is_express: bool,
     apply_partner_booking_discount: bool = False,
-<<<<<<< HEAD
     latitude: Optional[float] = None,
     longitude: Optional[float] = None,
-=======
-    latitude: float = None,
-    longitude: float = None,
->>>>>>> master
 ) -> Dict[str, Any]:
     """Full quote payload for POST quote_booking.
     
