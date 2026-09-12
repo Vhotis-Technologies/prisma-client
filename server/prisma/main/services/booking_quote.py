@@ -826,8 +826,6 @@ def quote_booking_for_user(
         latitude: Client location latitude (for travel surcharge).
         longitude: Client location longitude (for travel surcharge).
     """
-    from main.utils.geo_utils import travel_surcharge_for_location
-
     service_name = service.name if service else None
     qs = build_quick_sparkle_entitlements(user, service_name, is_suv=is_suv)
     partner_offer = get_partner_referral_booking_offer(user)
@@ -836,10 +834,9 @@ def quote_booking_for_user(
         if apply_partner_booking_discount and partner_offer
         else Decimal("0")
     )
-    
-    # Calculate travel surcharge for B2C users in 25-35km zone
-    travel_surcharge = travel_surcharge_for_location(user, latitude, longitude)
 
+    # Travel surcharge is applied once inside compute_price_breakdown_parts.
+    # Do not add it again to payable totals (that caused quote vs payment mismatches).
     parts_full = compute_price_breakdown_parts(
         user,
         service,
@@ -854,6 +851,10 @@ def quote_booking_for_user(
     payable_full = breakdown_to_response(
         parts_full["sub_ex"], parts_full["vat_amt"], parts_full["total_inc_vat"]
     )
+    travel_surcharge = parts_full.get("travel_surcharge_inc_vat", Decimal("0"))
+    travel_surcharge_float = float_money(travel_surcharge)
+    if travel_surcharge > 0:
+        payable_full["travel_surcharge"] = travel_surcharge_float
     pricing_lines_full = pricing_lines_meta(parts_full)
 
     complimentary_breakdowns: Dict[str, Optional[AmountBreakdown]] = {
@@ -889,6 +890,9 @@ def quote_booking_for_user(
             complimentary_breakdowns[key] = breakdown_to_response(
                 pc["sub_ex"], pc["vat_amt"], pc["total_inc_vat"]
             )
+            pc_travel = pc.get("travel_surcharge_inc_vat", Decimal("0"))
+            if pc_travel > 0:
+                complimentary_breakdowns[key]["travel_surcharge"] = float_money(pc_travel)
             complimentary_lines[key] = pricing_lines_meta(pc)
 
     issued_at = timezone.now().isoformat()
@@ -901,22 +905,7 @@ def quote_booking_for_user(
             "Cancel your current plan in Settings → Subscription, then subscribe to SUV/MPV "
             "to get subscriber discounts and complimentary washes on this vehicle."
         )
-    
-    # Add travel surcharge to totals for B2C users in 25-35km zone
-    travel_surcharge_float = float_money(travel_surcharge)
-    if travel_surcharge > 0:
-        payable_full["travel_surcharge"] = travel_surcharge_float
-        payable_full["total"] = float_money(
-            money(Decimal(str(payable_full["total"]))) + travel_surcharge
-        )
-        # Add to complimentary breakdowns too
-        for key in ("loyalty", "partner", "subscription"):
-            if complimentary_breakdowns[key] is not None:
-                complimentary_breakdowns[key]["travel_surcharge"] = travel_surcharge_float
-                complimentary_breakdowns[key]["total"] = float_money(
-                    money(Decimal(str(complimentary_breakdowns[key]["total"]))) + travel_surcharge
-                )
-    
+
     return {
         "issued_at": issued_at,
         "quick_sparkle": qs,
