@@ -3,8 +3,8 @@ Service history API: list completed/cancelled bookings and booking images.
 
 Actions: get_service_history (user/branch/fleet scoped), get_booking_images.
 
-Images are served through an authenticated proxy endpoint that applies
-watermarks for non-subscribed users.
+Images are served through an authenticated proxy endpoint that verifies
+booking access before streaming the stored photo.
 """
 import logging
 
@@ -15,7 +15,6 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from main.models import BookedAppointment, BookedAppointmentImage, Fleet, FleetVehicle
-from main.utils.subscription_entitlement import should_watermark_images
 
 
 def _get_image_proxy_url(image_id: str) -> str:
@@ -290,11 +289,7 @@ class ServiceHistoryView(APIView):
                 segment='exterior'
             ).order_by('created_at')
             
-            # Determine if images will be watermarked for this user
-            is_watermarked = should_watermark_images(request.user)
-
             # Format response with images using proxy URLs
-            # Proxy endpoint handles watermarking based on subscription status
             before_images_interior_data = [
                 {
                     'id': str(img.id),
@@ -343,7 +338,6 @@ class ServiceHistoryView(APIView):
                 'access_denied': False,
                 'download_allowed': can_download,
                 'view_only': not can_download,
-                'is_watermarked': is_watermarked,
             }, status=status.HTTP_200_OK)
             
         except Exception as e:

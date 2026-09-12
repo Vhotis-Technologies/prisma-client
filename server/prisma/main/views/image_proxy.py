@@ -1,9 +1,9 @@
 """
 Image proxy for booking photos.
 
-Authenticated ``BookingImageProxyView`` watermarks images for non-subscribers.
-Public ``GuestBookingImageProxyView`` serves clean bytes when a guest results
-token matches the booking.
+Authenticated ``BookingImageProxyView`` streams the stored photo to users who
+own (or manage) the booking. Public ``GuestBookingImageProxyView`` serves the
+same bytes when a guest results token matches the booking.
 """
 from __future__ import annotations
 
@@ -19,13 +19,7 @@ from rest_framework.views import APIView
 
 from main.models import BookedAppointment, BookedAppointmentImage, Fleet, FleetVehicle
 from main.services.guest import get_valid_guest_access_token
-from main.services.image_watermark import (
-    apply_watermark,
-    cache_watermarked_image,
-    get_cached_watermark,
-)
 from main.utils.ratelimit_helpers import rate_limit_json_response
-from main.utils.subscription_entitlement import should_watermark_images
 
 logger = logging.getLogger(__name__)
 
@@ -34,11 +28,10 @@ IMAGE_FETCH_TIMEOUT = 10  # seconds
 
 class BookingImageProxyView(APIView):
     """
-    Proxy endpoint for serving booking images with subscription-based watermarking.
+    Proxy endpoint for serving booking images.
 
     GET /api/v1/images/<image_id>/
 
-    Returns the image directly (watermarked for non-subscribers, clean for subscribers).
     Requires authentication and booking access verification.
     """
 
@@ -46,7 +39,7 @@ class BookingImageProxyView(APIView):
 
     def get(self, request, image_id):
         """
-        Serve a booking image, applying watermark if user is not subscribed.
+        Serve a booking image to a user who can access its booking.
 
         Args:
             request: HTTP request with authenticated user.
@@ -78,13 +71,6 @@ class BookingImageProxyView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        needs_watermark = should_watermark_images(request.user)
-
-        if needs_watermark:
-            cached = get_cached_watermark(image_url)
-            if cached:
-                return self._image_response(cached, 'image/jpeg')
-
         try:
             image_data = self._fetch_image(image_url)
         except Exception as e:
@@ -93,15 +79,6 @@ class BookingImageProxyView(APIView):
                 {'error': 'Could not retrieve image'},
                 status=status.HTTP_502_BAD_GATEWAY
             )
-
-        if needs_watermark:
-            try:
-                watermarked = apply_watermark(image_data)
-                cache_watermarked_image(image_url, watermarked)
-                return self._image_response(watermarked, 'image/jpeg')
-            except Exception as e:
-                logger.error(f"Failed to watermark image {image_id}: {e}")
-                return self._image_response(image_data, self._detect_content_type(image_url))
 
         return self._image_response(image_data, self._detect_content_type(image_url))
 
@@ -209,11 +186,10 @@ class BookingImageProxyView(APIView):
 
 class GuestBookingImageProxyView(BookingImageProxyView):
     """
-    Public clean-image proxy for a valid guest results token.
+    Public image proxy for a valid guest results token.
 
     GET /api/v1/guest/images/<image_id>/?token=...
     Optional ``download=1`` sets Content-Disposition: attachment.
-    Guests always receive unwatermarked bytes (no subscription check).
     """
 
     authentication_classes = []

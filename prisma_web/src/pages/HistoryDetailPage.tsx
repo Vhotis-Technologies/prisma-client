@@ -91,12 +91,6 @@ export default function HistoryDetailPage() {
         </div>
       ) : null}
 
-      {images?.is_watermarked && !images.access_denied ? (
-        <div className="banner banner-info" role="status">
-          These photos are watermarked. <Link to="/settings/subscriptions">Subscribe</Link> to view and download clean, unwatermarked images.
-        </div>
-      ) : null}
-
       {!loading && images && !images.access_denied ? (
         <>
           <div className="photo-tabs" role="tablist" aria-label="Photo sets">

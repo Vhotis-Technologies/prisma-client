@@ -46,7 +46,6 @@ export type BookingImages = {
   download_allowed?: boolean;
   view_only?: boolean;
   message?: string;
-  is_watermarked?: boolean;
 };
 
 export type ImageTab = "before-interior" | "after-interior" | "before-exterior" | "after-exterior";

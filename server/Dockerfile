@@ -7,10 +7,9 @@ ENV PYTHONHASHSEED=random
 
 WORKDIR /app
 
-# Install dependencies (gcc for Python packages, fonts for image watermarking)
+# Install dependencies (gcc for Python packages)
 RUN apt-get update && apt-get install -y \
     gcc \
-    fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy the requirements file into the container

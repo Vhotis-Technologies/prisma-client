@@ -101,7 +101,7 @@ urlpatterns = [
     # --- Service history & booking images ---
     path('service-history/<action>/', ServiceHistoryView.as_view(), name='service_history'),
 
-    # --- Image proxy (watermarked for non-subscribers) ---
+    # --- Image proxy (authenticated booking photos) ---
     path('images/<uuid:image_id>/', BookingImageProxyView.as_view(), name='booking_image_proxy'),
 
     # --- Dealership partner portal ---

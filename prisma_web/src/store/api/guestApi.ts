@@ -164,7 +164,7 @@ export function fetchGuestResults(token: string) {
 }
 
 /**
- * Authenticated-by-token image URL (clean, no watermark).
+ * Authenticated-by-token image URL.
  * @param imageId - Booking image UUID.
  * @param token - Same raw token as the results page.
  * @param download - When true, the proxy sets Content-Disposition: attachment.
