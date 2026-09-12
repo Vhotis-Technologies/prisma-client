@@ -323,6 +323,8 @@ export default function BookPage() {
           is_suv: isSuv,
           is_express: isExpress,
           apply_partner_booking_discount: applyPartnerDiscount,
+          latitude: address?.latitude ?? null,
+          longitude: address?.longitude ?? null,
         });
         if (cancelled) return;
         setQuote(data);
@@ -345,7 +347,7 @@ export default function BookPage() {
     return () => {
       cancelled = true;
     };
-  }, [step, service, selectedAddons, isSuv, isExpress, applyPartnerDiscount, clientSecret]);
+  }, [step, service, selectedAddons, isSuv, isExpress, applyPartnerDiscount, clientSecret, address?.latitude, address?.longitude]);
 
   function selectVehicle(next: GarageVehicle) {
     setVehicle(next);
@@ -1010,6 +1012,12 @@ export default function BookPage() {
                           : ""}
                       </dt>
                       <dd>−{formatMoney(breakdown.partnerReferralDiscountIncVat, country)}</dd>
+                    </div>
+                  ) : null}
+                  {payable?.travel_surcharge && payable.travel_surcharge > 0 ? (
+                    <div>
+                      <dt>Travel surcharge</dt>
+                      <dd>{formatMoney(payable.travel_surcharge, country)}</dd>
                     </div>
                   ) : null}
                   {voucher ? (

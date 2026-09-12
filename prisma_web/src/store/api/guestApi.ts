@@ -63,6 +63,8 @@ export function quoteGuestBooking(body: {
   is_suv: boolean;
   is_express: boolean;
   body_style?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
 }) {
   return postData<BookingQuote>("/api/v1/guest/quote_booking/", body);
 }

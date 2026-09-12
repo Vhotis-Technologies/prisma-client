@@ -50,6 +50,7 @@ export type BookingQuoteAmounts = {
   subtotal: number;
   vat: number;
   total: number;
+  travel_surcharge?: number;
 };
 
 export type BookingQuotePricingLines = {
@@ -100,6 +101,7 @@ export type BookingQuote = {
     expires_at: string | null;
   } | null;
   vat_rate_percent: number;
+  travel_surcharge?: number;
 };
 
 export type PriceSummaryBreakdown = {

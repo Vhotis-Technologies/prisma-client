@@ -287,6 +287,8 @@ export default function GuestBookPage() {
         is_suv: isSuv,
         is_express: isExpress,
         body_style: vehicle?.body_style,
+        latitude: address?.latitude ?? null,
+        longitude: address?.longitude ?? null,
       });
       setQuote(next);
     } catch (err) {
@@ -295,7 +297,7 @@ export default function GuestBookPage() {
     } finally {
       setQuoteLoading(false);
     }
-  }, [service, selectedAddons, isSuv, isExpress, vehicle?.body_style]);
+  }, [service, selectedAddons, isSuv, isExpress, vehicle?.body_style, address?.latitude, address?.longitude]);
 
   useEffect(() => {
     if (step !== 5) return;
@@ -850,6 +852,12 @@ export default function GuestBookPage() {
                     <div>
                       <dt>SUV / MPV</dt>
                       <dd>Included</dd>
+                    </div>
+                  ) : null}
+                  {payable?.travel_surcharge && payable.travel_surcharge > 0 ? (
+                    <div>
+                      <dt>Travel surcharge</dt>
+                      <dd>{formatMoney(payable.travel_surcharge, country)}</dd>
                     </div>
                   ) : null}
                   {voucher ? (

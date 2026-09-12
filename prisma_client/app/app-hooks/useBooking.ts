@@ -1946,6 +1946,8 @@ const useBooking = () => {
           is_express: isExpressService,
           body_style: selectedVehicle?.body_style ?? null,
           apply_partner_booking_discount: applyPartnerBookingDiscount,
+          latitude: selectedAddress?.latitude ?? null,
+          longitude: selectedAddress?.longitude ?? null,
         }).unwrap();
         if (cancelled) return;
         setServerQuote(res);
@@ -1976,6 +1978,8 @@ const useBooking = () => {
     selectedVehicle?.body_style,
     quoteBookingMut,
     applyPartnerBookingDiscount,
+    selectedAddress?.latitude,
+    selectedAddress?.longitude,
   ]);
 
   /** Clear applied winner voucher and reset the code input. */
@@ -2050,6 +2054,8 @@ const useBooking = () => {
             is_express: isExpressService,
             body_style: selectedVehicle?.body_style ?? null,
             apply_partner_booking_discount: applyPartnerBookingDiscount,
+            latitude: selectedAddress?.latitude ?? null,
+            longitude: selectedAddress?.longitude ?? null,
           }).unwrap();
           setServerQuote(freshQuote);
         } catch {

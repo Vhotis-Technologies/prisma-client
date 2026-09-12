@@ -25,6 +25,7 @@ export type BookingQuoteAmounts = {
   subtotal: number;
   vat: number;
   total: number;
+  travel_surcharge?: number;
 };
 
 /** Pre–VAT-split sticker and discount amounts (all VAT-inclusive €), matching server quote_booking. */
@@ -85,6 +86,7 @@ export type BookingQuoteResponse = {
   partner_booking_offer: PartnerBookingOfferPayload | null;
   vat_rate_percent: number;
   subscription_coverage?: BookingSubscriptionCoverage | null;
+  travel_surcharge?: number;
 };
 
 export type ComplimentarySparkleSource = "loyalty" | "subscription" | "partner";
@@ -500,6 +502,8 @@ const createBookingApi = createApi({
         is_express: boolean;
         body_style?: string | null;
         apply_partner_booking_discount?: boolean;
+        latitude?: number | null;
+        longitude?: number | null;
       }
     >({
       query: (body) => ({

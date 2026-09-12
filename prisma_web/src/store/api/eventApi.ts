@@ -47,6 +47,8 @@ export function quoteBooking(body: {
   is_suv: boolean;
   is_express: boolean;
   apply_partner_booking_discount: boolean;
+  latitude?: number | null;
+  longitude?: number | null;
 }) {
   return postData<BookingQuote>("/api/v1/events/quote_booking/", body);
 }
