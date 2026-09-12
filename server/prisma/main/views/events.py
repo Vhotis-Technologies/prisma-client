@@ -838,6 +838,18 @@ class EventsView(APIView):
         is_express = bool(body.get('is_express'))
         apply_partner_booking_discount = bool(body.get('apply_partner_booking_discount'))
 
+        # Extract optional lat/lng for travel surcharge calculation
+        latitude = None
+        longitude = None
+        lat_val = body.get("latitude")
+        lng_val = body.get("longitude")
+        if lat_val is not None and lng_val is not None:
+            try:
+                latitude = float(lat_val)
+                longitude = float(lng_val)
+            except (TypeError, ValueError):
+                pass
+
         payload = quote_booking_for_user(
             request.user,
             service=service,
@@ -845,6 +857,8 @@ class EventsView(APIView):
             is_suv=is_suv,
             is_express=is_express,
             apply_partner_booking_discount=apply_partner_booking_discount,
+            latitude=latitude,
+            longitude=longitude,
         )
         return Response(payload, status=status.HTTP_200_OK)
 

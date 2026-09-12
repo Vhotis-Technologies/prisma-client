@@ -7,8 +7,8 @@ on:
 env:
   EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
   EAS_PROJECT_ID: ${{ secrets.EAS_PROJECT_ID }}
-  DO_PROD_PATH: /${{ secrets.DO_USERNAME }}/prisma-prod/prisma-client
-  DO_STAGING_PATH: /${{ secrets.DO_USERNAME }}/prisma-staging/prisma-client
+  DO_PROD_PATH: /${{ secrets.DO_USERNAME }}/production/prisma-client
+  DO_STAGING_PATH: /${{ secrets.DO_USERNAME }}/staging/prisma-client
 
 jobs:
   # Job 1: Deploy Client Mobile App (OTA Updates)

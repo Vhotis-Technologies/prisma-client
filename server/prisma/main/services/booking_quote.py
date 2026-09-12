@@ -2,7 +2,8 @@
 Server-side booking price quote and complimentary Quick Sparkle validation.
 
 Mirrors client useBooking.calculateFinalPrice (VAT-inclusive line items, 23% VAT split,
-4+ addons discount, SUV 20%, express €30, loyalty/promotion % on pre-VAT-inclusive subtotal).
+4+ addons discount, SUV 20%, express €30, travel surcharge €10 for B2C 25-35km from Spire,
+loyalty/promotion % on pre-VAT-inclusive subtotal).
 """
 from __future__ import annotations
 
@@ -119,6 +120,32 @@ def _user_excluded_from_promotions(user) -> bool:
     return False
 
 
+def _is_b2c_user(user) -> bool:
+    """
+    True when user is B2C (not fleet/partner/B2B).
+    
+    B2C users are subject to travel surcharge when booking 25-35km from Spire.
+    Fleet and partner users are excluded from travel surcharge.
+    
+    Args:
+        user: Authenticated ``User``, guest ``User``, or ``None``.
+    
+    Returns:
+        bool: Whether user is B2C (eligible for travel surcharge).
+    """
+    if not user or not user.is_authenticated:
+        return True  # Guest checkout is treated as B2C
+    from main.models import Partner
+
+    if getattr(user, "is_fleet_owner", False) or getattr(user, "is_branch_admin", False):
+        return False
+    if user.is_fleet_admin_or_manager():
+        return False
+    if Partner.objects.filter(user=user).exists():
+        return False
+    return True
+
+
 def _active_promotion_discount_pct(user) -> Decimal:
     """
     Percentage off from the user's newest active ``Promotions`` row, if any.
@@ -202,6 +229,53 @@ def _addon_total_with_four_plus_rule(addons: Sequence) -> Decimal:
     return money(sum(prices))
 
 
+def _travel_surcharge_for_location(
+    user,
+    latitude: Optional[float] = None,
+    longitude: Optional[float] = None,
+) -> Decimal:
+    """
+    Compute travel surcharge for B2C bookings 25-35km from Spire of Dublin.
+    
+    Rules:
+    - B2C users: €10 surcharge when 25-35km from Spire
+    - Fleet/Partner users: no surcharge (bulk orders cover travel cost)
+    - < 25km or > 35km: no surcharge
+    
+    Args:
+        user: Booking user
+        latitude: Booking address latitude
+        longitude: Booking address longitude
+        
+    Returns:
+        Decimal: Travel surcharge amount (0 or 10)
+    """
+    if not _is_b2c_user(user):
+        return Decimal("0")
+    
+    if latitude is None or longitude is None:
+        return Decimal("0")
+    
+    try:
+        # Import here to avoid circular import
+        import sys
+        import os
+        # Add detailer server path to allow importing its utils
+        detailer_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', '..', 'detailer', 'server', 'prisma')
+        if detailer_path not in sys.path:
+            sys.path.insert(0, detailer_path)
+        
+        from main.utils.geo_utils import classify_service_area
+        zone, _, surcharge_eur = classify_service_area(float(latitude), float(longitude))
+        
+        if zone == "surcharge":
+            return Decimal(str(surcharge_eur))
+        return Decimal("0")
+    except Exception:
+        # If geo check fails, don't add surcharge
+        return Decimal("0")
+
+
 def _partner_booking_discount_pct_setting() -> Decimal:
     """
     Read partner referred-booking discount percent from Django settings.
@@ -261,6 +335,8 @@ def compute_price_breakdown_parts(
     is_express: bool,
     exclude_service_price: bool,
     partner_booking_discount_pct: Decimal = Decimal("0"),
+    latitude: Optional[float] = None,
+    longitude: Optional[float] = None,
 ) -> Dict[str, Decimal]:
     """
     Internal full price stack: sticker (VAT-inc), discounts, then ex-VAT breakdown.
@@ -270,6 +346,7 @@ def compute_price_breakdown_parts(
         is_suv, is_express: Surcharge flags.
         exclude_service_price: True for complimentary Quick Sparkle (addons only).
         partner_booking_discount_pct: Extra % when user opts into partner offer.
+        latitude, longitude: Booking location for travel surcharge calculation.
 
     Returns:
         dict: sub_ex, vat_amt, total_inc_vat, sticker and per-discount inc-VAT amounts.
@@ -282,7 +359,8 @@ def compute_price_breakdown_parts(
     else:
         suv = money(sub * Decimal("0.20")) if is_suv else Decimal("0")
     express_fee = Decimal("30") if is_express else Decimal("0")
-    total_before_discount = money(sub + suv + express_fee)
+    travel_surcharge = _travel_surcharge_for_location(user, latitude, longitude)
+    total_before_discount = money(sub + suv + express_fee + travel_surcharge)
     loyalty_pct = _loyalty_discount_pct(user)
     promo_pct = _active_promotion_discount_pct(user)
     subscription_pct = _subscription_booking_discount_pct(user, is_suv=is_suv)
@@ -306,6 +384,7 @@ def compute_price_breakdown_parts(
         "partner_referral_discount_inc_vat": partner_amt,
         "subscription_discount_inc_vat": subscription_amt,
         "subscription_discount_pct": subscription_pct,
+        "travel_surcharge_inc_vat": travel_surcharge,
     }
 
 
@@ -327,6 +406,7 @@ def pricing_lines_meta(parts: Dict[str, Decimal]) -> Dict[str, float]:
         "partner_referral_discount_inc_vat": float_money(parts["partner_referral_discount_inc_vat"]),
         "subscription_discount_inc_vat": float_money(parts.get("subscription_discount_inc_vat", Decimal("0"))),
         "subscription_discount_percent": float(sub_pct),
+        "travel_surcharge_inc_vat": float_money(parts.get("travel_surcharge_inc_vat", Decimal("0"))),
     }
 
 
@@ -339,6 +419,8 @@ def compute_price_breakdown(
     is_express: bool,
     exclude_service_price: bool,
     partner_booking_discount_pct: Decimal = Decimal("0"),
+    latitude: Optional[float] = None,
+    longitude: Optional[float] = None,
 ) -> Tuple[Decimal, Decimal, Decimal]:
     """
     Returns (subtotal_ex_vat, vat_amount, total_inc_vat) matching client logic.
@@ -351,6 +433,8 @@ def compute_price_breakdown(
         is_express=is_express,
         exclude_service_price=exclude_service_price,
         partner_booking_discount_pct=partner_booking_discount_pct,
+        latitude=latitude,
+        longitude=longitude,
     )
     return p["sub_ex"], p["vat_amt"], p["total_inc_vat"]
 
@@ -738,6 +822,8 @@ def quote_booking_for_user(
     is_suv: bool,
     is_express: bool,
     apply_partner_booking_discount: bool = False,
+    latitude: Optional[float] = None,
+    longitude: Optional[float] = None,
 ) -> Dict[str, Any]:
     """Full quote payload for POST quote_booking."""
     service_name = service.name if service else None
@@ -757,6 +843,8 @@ def quote_booking_for_user(
         is_express=is_express,
         exclude_service_price=False,
         partner_booking_discount_pct=partner_pct,
+        latitude=latitude,
+        longitude=longitude,
     )
     payable_full = breakdown_to_response(
         parts_full["sub_ex"], parts_full["vat_amt"], parts_full["total_inc_vat"]
@@ -790,6 +878,8 @@ def quote_booking_for_user(
                 is_express=is_express,
                 exclude_service_price=True,
                 partner_booking_discount_pct=partner_pct,
+                latitude=latitude,
+                longitude=longitude,
             )
             complimentary_breakdowns[key] = breakdown_to_response(
                 pc["sub_ex"], pc["vat_amt"], pc["total_inc_vat"]
@@ -895,6 +985,21 @@ def expected_breakdown_from_booking_data(user, booking_data: dict) -> AmountBrea
             key = "eligible_partner" if eff == "partner" else f"eligible_{eff}"
             if qs.get(key):
                 exclude = True
+
+    # Extract lat/lng from address in booking_data
+    latitude = None
+    longitude = None
+    address_data = booking_data.get("address")
+    if isinstance(address_data, dict):
+        lat_val = address_data.get("latitude")
+        lng_val = address_data.get("longitude")
+        if lat_val is not None and lng_val is not None:
+            try:
+                latitude = float(lat_val)
+                longitude = float(lng_val)
+            except (TypeError, ValueError):
+                pass
+
     sub_ex, vat_amt, total_inc = compute_price_breakdown(
         user,
         service,
@@ -905,6 +1010,8 @@ def expected_breakdown_from_booking_data(user, booking_data: dict) -> AmountBrea
         partner_booking_discount_pct=_partner_booking_discount_pct_for_booking_data(
             user, booking_data
         ),
+        latitude=latitude,
+        longitude=longitude,
     )
     return breakdown_to_response(sub_ex, vat_amt, total_inc)
 
