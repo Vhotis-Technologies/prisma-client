@@ -396,21 +396,6 @@ class GuestBookingView(APIView):
             is_suv=bool(body.get("is_suv")) if "is_suv" in body else None,
             body_style=body.get("body_style") or body.get("bodyStyle"),
         )
-<<<<<<< HEAD
-
-        # Extract optional lat/lng for travel surcharge calculation
-        latitude = None
-        longitude = None
-        lat_val = body.get("latitude")
-        lng_val = body.get("longitude")
-        if lat_val is not None and lng_val is not None:
-            try:
-                latitude = float(lat_val)
-                longitude = float(lng_val)
-            except (TypeError, ValueError):
-                pass
-
-=======
         
         # Extract lat/lng for travel surcharge calculation
         latitude = None
@@ -425,7 +410,6 @@ class GuestBookingView(APIView):
         except (TypeError, ValueError):
             pass
         
->>>>>>> master
         payload = quote_booking_for_user(
             None,
             service=service,
