@@ -277,7 +277,7 @@ class AuthenticationView(CreateAPIView):
                 pass
 
             return Response({
-                'message': 'Welcome to PRISMA VALLET. Your account has been created successfully.\n\nPlease check your email for further updates',
+                'message': 'Welcome to Prisma Car Care. Your account has been created successfully.\n\nPlease check your email for further updates',
                 'user': {
                     'name': user.name,
                     'email': user.email,

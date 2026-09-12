@@ -822,10 +822,28 @@ def quote_booking_for_user(
     is_suv: bool,
     is_express: bool,
     apply_partner_booking_discount: bool = False,
+<<<<<<< HEAD
     latitude: Optional[float] = None,
     longitude: Optional[float] = None,
+=======
+    latitude: float = None,
+    longitude: float = None,
+>>>>>>> master
 ) -> Dict[str, Any]:
-    """Full quote payload for POST quote_booking."""
+    """Full quote payload for POST quote_booking.
+    
+    Args:
+        user: User instance or None for guest.
+        service: ServiceType instance.
+        addons: Sequence of AddOns.
+        is_suv: Whether vehicle is SUV/MPV.
+        is_express: Whether express service requested.
+        apply_partner_booking_discount: Whether to apply partner discount.
+        latitude: Client location latitude (for travel surcharge).
+        longitude: Client location longitude (for travel surcharge).
+    """
+    from main.utils.geo_utils import travel_surcharge_for_location
+
     service_name = service.name if service else None
     qs = build_quick_sparkle_entitlements(user, service_name, is_suv=is_suv)
     partner_offer = get_partner_referral_booking_offer(user)
@@ -834,6 +852,9 @@ def quote_booking_for_user(
         if apply_partner_booking_discount and partner_offer
         else Decimal("0")
     )
+    
+    # Calculate travel surcharge for B2C users in 25-35km zone
+    travel_surcharge = travel_surcharge_for_location(user, latitude, longitude)
 
     parts_full = compute_price_breakdown_parts(
         user,
@@ -896,6 +917,22 @@ def quote_booking_for_user(
             "Cancel your current plan in Settings → Subscription, then subscribe to SUV/MPV "
             "to get subscriber discounts and complimentary washes on this vehicle."
         )
+    
+    # Add travel surcharge to totals for B2C users in 25-35km zone
+    travel_surcharge_float = float_money(travel_surcharge)
+    if travel_surcharge > 0:
+        payable_full["travel_surcharge"] = travel_surcharge_float
+        payable_full["total"] = float_money(
+            money(Decimal(str(payable_full["total"]))) + travel_surcharge
+        )
+        # Add to complimentary breakdowns too
+        for key in ("loyalty", "partner", "subscription"):
+            if complimentary_breakdowns[key] is not None:
+                complimentary_breakdowns[key]["travel_surcharge"] = travel_surcharge_float
+                complimentary_breakdowns[key]["total"] = float_money(
+                    money(Decimal(str(complimentary_breakdowns[key]["total"]))) + travel_surcharge
+                )
+    
     return {
         "issued_at": issued_at,
         "quick_sparkle": qs,
@@ -918,6 +955,7 @@ def quote_booking_for_user(
             "covers_vehicle": covers,
             "message": mismatch_message,
         },
+        "travel_surcharge": travel_surcharge_float,
     }
 
 

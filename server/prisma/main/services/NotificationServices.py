@@ -152,7 +152,7 @@ class NotificationService:
                 push_result = self._send_push_notification(
                     user=user,
                     title="Service Completed! ✨",
-                    body=f"Your valet service has been completed. Thank you for choosing PRISMA VALET!",
+                    body=f"Your valet service has been completed. Thank you for choosing Prisma Car Care!",
                     data={
                         "type": "service_completed",
                         "booking_id": str(booking.id),

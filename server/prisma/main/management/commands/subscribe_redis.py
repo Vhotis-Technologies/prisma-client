@@ -357,7 +357,7 @@ class Command(BaseCommand):
                     self.send_push_notification(
                         booking.user.id,
                         "Service Completed! ✨",
-                        f"Your valet service has been completed! Thank you for choosing PRISMA VALET.",
+                        f"Your valet service has been completed! Thank you for choosing Prisma Car Care.",
                         {"type": "cleaning_completed", "booking_reference": booking.booking_reference, "screen": "service_history"},
                     )
                     self.create_notification(
@@ -454,7 +454,7 @@ class Command(BaseCommand):
                                 self.send_push_notification(
                                     booking.user.id,
                                     "Service Completed! ✨",
-                                    f"Your valet service has been completed! Thank you for choosing PRISMA VALET.",
+                                    f"Your valet service has been completed! Thank you for choosing Prisma Car Care.",
                                     {"type": "cleaning_completed", "booking_reference": booking.booking_reference, "screen": "service_history"},
                                 )
                                 self.create_notification(
