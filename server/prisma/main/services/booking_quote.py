@@ -256,24 +256,13 @@ def _travel_surcharge_for_location(
     if latitude is None or longitude is None:
         return Decimal("0")
     
-    try:
-        # Import here to avoid circular import
-        import sys
-        import os
-        # Add detailer server path to allow importing its utils
-        detailer_path = os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', '..', 'detailer', 'server', 'prisma')
-        if detailer_path not in sys.path:
-            sys.path.insert(0, detailer_path)
-        
-        from main.utils.geo_utils import classify_service_area
-        zone, _, surcharge_eur = classify_service_area(float(latitude), float(longitude))
-        
-        if zone == "surcharge":
-            return Decimal(str(surcharge_eur))
-        return Decimal("0")
-    except Exception:
-        # If geo check fails, don't add surcharge
-        return Decimal("0")
+    from main.utils.geo_utils import classify_service_area
+    
+    zone, _, surcharge_eur = classify_service_area(float(latitude), float(longitude))
+    
+    if zone == "surcharge":
+        return Decimal(str(surcharge_eur))
+    return Decimal("0")
 
 
 def _partner_booking_discount_pct_setting() -> Decimal:
