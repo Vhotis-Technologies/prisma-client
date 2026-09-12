@@ -144,20 +144,29 @@ class User(AbstractUser):
         return True
     
     def can_download_vehicle_details(self, vehicle=None):
-        """Fleet users need an active subscription to download or share job photos."""
-        from main.models import Fleet, FleetMember
-        if not (self.is_fleet_owner or self.is_branch_admin):
-            return True
+        """Downloading or sharing job photos requires an active subscription.
+
+        Fleet owners and members ride on their fleet's subscription; everyone
+        else needs their own active B2C subscription. Guests never qualify here -
+        they reach their photos through a results-token link instead.
+        """
+        from django.utils import timezone
+        from main.models import B2CSubcription, Fleet, FleetMember
         fleet = None
         if self.is_fleet_owner:
             fleet = Fleet.objects.filter(owner=self).first()
-        else:
+        if fleet is None:
             membership = FleetMember.objects.filter(user=self).first()
             fleet = membership.fleet if membership else None
-        if not fleet:
+        if fleet is not None:
+            return fleet.get_active_subscription() is not None
+        if self.is_guest:
             return False
-        subscription = fleet.get_active_subscription()
-        return subscription is not None
+        return B2CSubcription.objects.filter(
+            user=self,
+            status='active',
+            end_date__gte=timezone.now(),
+        ).exists()
 
     def create_fleet(self, business_name=None, business_address=None):
         """Create or update the owner's fleet and optional head-office branch from signup data."""

@@ -15,11 +15,14 @@ import { useImageDownload } from "@/app/utils/imageDownload";
 interface ServiceImageGalleryTabProps {
   images: Array<{ id: number; image_url: string; created_at: string }>;
   bookingReference?: string;
+  /** Saving and sharing need an active subscription; viewing is always allowed. */
+  downloadAllowed?: boolean;
 }
 
 const ServiceImageGalleryTab = ({
   images,
   bookingReference,
+  downloadAllowed = false,
 }: ServiceImageGalleryTabProps) => {
   const { download, share } = useImageDownload();
   const [downloadingIds, setDownloadingIds] = useState<Set<number>>(new Set());
@@ -52,7 +55,7 @@ const ServiceImageGalleryTab = ({
   };
 
   /**
-   * Handle image download (available to all users)
+   * Handle image download
    */
   const handleDownload = async (imageUrl: string, imageId: number) => {
     setDownloadingIds((prev) => new Set(prev).add(imageId));
@@ -113,6 +116,14 @@ const ServiceImageGalleryTab = ({
       contentContainerStyle={styles.contentContainer}
       showsVerticalScrollIndicator={false}
     >
+      {!downloadAllowed ? (
+        <StyledText
+          variant="bodySmall"
+          style={[styles.restrictionText, { color: textColor }]}
+        >
+          View-only: downloading and sharing require an active subscription.
+        </StyledText>
+      ) : null}
       <View style={styles.grid}>
         {images.map((image) => {
           const isDownloading = downloadingIds.has(image.id);
@@ -132,42 +143,44 @@ const ServiceImageGalleryTab = ({
                   style={styles.image}
                   resizeMode="cover"
                 />
-                <View style={styles.overlay}>
-                  <View style={styles.buttonGroup}>
-                    <TouchableOpacity
-                      style={styles.actionButton}
-                      onPress={() => handleDownload(image.image_url, image.id)}
-                      disabled={isDownloading}
-                      activeOpacity={0.7}
-                    >
-                      {isDownloading ? (
-                        <ActivityIndicator size="small" color="#FFFFFF" />
-                      ) : (
-                        <MaterialIcons
-                          name="cloud-download"
-                          size={20}
-                          color="#FFFFFF"
-                        />
-                      )}
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.actionButton}
-                      onPress={() => handleShare(image.image_url, image.id)}
-                      disabled={isSharing}
-                      activeOpacity={0.7}
-                    >
-                      {isSharing ? (
-                        <ActivityIndicator size="small" color="#FFFFFF" />
-                      ) : (
-                        <Ionicons
-                          name="share-outline"
-                          size={20}
-                          color="#FFFFFF"
-                        />
-                      )}
-                    </TouchableOpacity>
+                {downloadAllowed ? (
+                  <View style={styles.overlay}>
+                    <View style={styles.buttonGroup}>
+                      <TouchableOpacity
+                        style={styles.actionButton}
+                        onPress={() => handleDownload(image.image_url, image.id)}
+                        disabled={isDownloading}
+                        activeOpacity={0.7}
+                      >
+                        {isDownloading ? (
+                          <ActivityIndicator size="small" color="#FFFFFF" />
+                        ) : (
+                          <MaterialIcons
+                            name="cloud-download"
+                            size={20}
+                            color="#FFFFFF"
+                          />
+                        )}
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.actionButton}
+                        onPress={() => handleShare(image.image_url, image.id)}
+                        disabled={isSharing}
+                        activeOpacity={0.7}
+                      >
+                        {isSharing ? (
+                          <ActivityIndicator size="small" color="#FFFFFF" />
+                        ) : (
+                          <Ionicons
+                            name="share-outline"
+                            size={20}
+                            color="#FFFFFF"
+                          />
+                        )}
+                      </TouchableOpacity>
+                    </View>
                   </View>
-                </View>
+                ) : null}
               </View>
               <View style={styles.timestampContainer}>
                 <Ionicons name="time-outline" size={12} color={iconColor} />

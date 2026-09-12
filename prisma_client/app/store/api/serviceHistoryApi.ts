@@ -49,6 +49,8 @@ const serviceHistoryApi = createApi({
      *   after_images_exterior: Array<{ id: number; image_url: string; created_at: string }>
      *   event_data_management: object | null
      *   access_denied?: boolean
+     *   download_allowed?: boolean
+     *   view_only?: boolean
      *   message?: string
      * }
      */
@@ -77,6 +79,8 @@ const serviceHistoryApi = createApi({
         }>;
         event_data_management?: any;
         access_denied?: boolean;
+        download_allowed?: boolean;
+        view_only?: boolean;
         message?: string;
       },
       { booking_id: string }

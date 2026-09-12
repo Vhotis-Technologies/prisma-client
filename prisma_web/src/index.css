@@ -1801,6 +1801,13 @@ select {
   min-width: 11rem;
 }
 
+.lightbox-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.65rem;
+}
+
 .lightbox-footer,
 .lightbox-actions .lightbox-footer {
   color: #f6f3ee;

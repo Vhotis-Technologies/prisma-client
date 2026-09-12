@@ -3,6 +3,12 @@ import { Link, useLocation, useParams } from "react-router-dom";
 import AppShell from "../components/AppShell";
 import AuthenticatedImage from "../components/AuthenticatedImage";
 import { useBookingImages } from "../app-hooks/useBookingImages";
+import {
+  bookingImageFilename,
+  canShareBookingImage,
+  downloadBookingImage,
+  shareBookingImage,
+} from "../lib/bookingImages";
 import { formatDate } from "../lib/format";
 import { dateKey } from "../lib/media";
 import type { BookingImages, HistoryImage, HistoryItem, ImageTab } from "../types/history";
@@ -28,6 +34,15 @@ function imagesFor(data: BookingImages | null, tab: ImageTab): HistoryImage[] {
   }
 }
 
+/** Message for a failed save or share, separating the entitlement case from real errors. */
+function actionErrorMessage(err: unknown): string {
+  const statusCode = (err as { response?: { status?: number } })?.response?.status;
+  if (statusCode === 403) {
+    return "An active subscription is required to download or share these photos.";
+  }
+  return "We couldn’t prepare that photo. Please try again.";
+}
+
 export default function HistoryDetailPage() {
   const { bookingId } = useParams();
   const location = useLocation();
@@ -35,8 +50,12 @@ export default function HistoryDetailPage() {
   const { images, loading, error } = useBookingImages(bookingId);
   const [tab, setTab] = useState<ImageTab>("before-interior");
   const [lightbox, setLightbox] = useState<HistoryImage | null>(null);
+  const [busy, setBusy] = useState<"download" | "share" | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const current = useMemo(() => imagesFor(images, tab), [images, tab]);
+  const canDownload = Boolean(images?.download_allowed);
+  const shareSupported = useMemo(() => canShareBookingImage(), []);
 
   useEffect(() => {
     if (!lightbox) return;
@@ -46,6 +65,50 @@ export default function HistoryDetailPage() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [lightbox]);
+
+  useEffect(() => {
+    setActionError(null);
+  }, [lightbox]);
+
+  async function handleDownload(photo: HistoryImage) {
+    setBusy("download");
+    setActionError(null);
+    try {
+      await downloadBookingImage(
+        photo.id,
+        photo.image_url,
+        bookingImageFilename(photo.id, images?.booking_reference),
+      );
+    } catch (err) {
+      setActionError(actionErrorMessage(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleShare(photo: HistoryImage) {
+    setBusy("share");
+    setActionError(null);
+    const filename = bookingImageFilename(photo.id, images?.booking_reference);
+    try {
+      const shared = await shareBookingImage(
+        photo.id,
+        photo.image_url,
+        filename,
+        fromList?.service_type || "Prisma Car Care photo",
+      );
+      if (!shared) {
+        await downloadBookingImage(photo.id, photo.image_url, filename);
+      }
+    } catch (err) {
+      // The share sheet throws AbortError when the visitor dismisses it.
+      if ((err as { name?: string })?.name !== "AbortError") {
+        setActionError(actionErrorMessage(err));
+      }
+    } finally {
+      setBusy(null);
+    }
+  }
 
   return (
     <AppShell>
@@ -80,14 +143,14 @@ export default function HistoryDetailPage() {
         <section className="card">
           <h2>Photos are locked</h2>
           <p className="muted">
-            {images.message || "Detailed vehicle photos are only available with an active fleet subscription."}
+            {images.message || "Detailed vehicle photos are only available with an active subscription."}
           </p>
         </section>
       ) : null}
       
       {!loading && images && images.view_only ? (
         <div className="banner banner-ok" style={{ marginBottom: '1.5rem' }}>
-          View-only mode: Downloading and sharing require an active fleet subscription. <Link to="/settings/subscriptions">Subscribe</Link>
+          View-only mode: downloading and sharing require an active subscription. <Link to="/settings/subscriptions">Subscribe</Link>
         </div>
       ) : null}
 
@@ -141,15 +204,48 @@ export default function HistoryDetailPage() {
 
       {lightbox ? (
         <div className="lightbox" role="dialog" aria-modal="true" onClick={() => setLightbox(null)}>
-          <div onClick={(event) => event.stopPropagation()}>
+          <div className="lightbox-content" onClick={(event) => event.stopPropagation()}>
             <AuthenticatedImage
               imageId={lightbox.id}
               imageUrl={lightbox.image_url}
               alt="Service photo"
               className="lightbox-image"
             />
+            <div className="lightbox-actions">
+              {canDownload ? (
+                <div className="lightbox-buttons">
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={busy !== null}
+                    onClick={() => void handleDownload(lightbox)}
+                  >
+                    {busy === "download" ? "Preparing…" : "Download"}
+                  </button>
+                  {shareSupported ? (
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      disabled={busy !== null}
+                      onClick={() => void handleShare(lightbox)}
+                    >
+                      {busy === "share" ? "Preparing…" : "Share"}
+                    </button>
+                  ) : null}
+                </div>
+              ) : (
+                <Link to="/settings/subscriptions" className="btn btn-primary">
+                  Subscribe to download
+                </Link>
+              )}
+              {actionError ? (
+                <p className="lightbox-footer" role="alert">
+                  {actionError}
+                </p>
+              ) : null}
+              <p className="lightbox-footer">Tap outside the photo to close</p>
+            </div>
           </div>
-          <p className="lightbox-footer">Tap outside the photo to close</p>
         </div>
       ) : null}
     </AppShell>

@@ -289,6 +289,7 @@ const ServiceHistoryDetailScreen = () => {
         <ServiceImageGalleryTab
           images={activeTabImages}
           bookingReference={bookingReference}
+          downloadAllowed={imagesData?.download_allowed ?? false}
         />
       </View>
     </View>

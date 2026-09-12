@@ -25,12 +25,21 @@ logger = logging.getLogger(__name__)
 
 IMAGE_FETCH_TIMEOUT = 10  # seconds
 
+TRUTHY_QUERY_VALUES = ('1', 'true', 'yes')
+
+
+def _wants_download(request) -> bool:
+    """True when the caller asked for the photo as a file attachment."""
+    return str(request.query_params.get('download') or '').strip().lower() in TRUTHY_QUERY_VALUES
+
 
 class BookingImageProxyView(APIView):
     """
     Proxy endpoint for serving booking images.
 
     GET /api/v1/images/<image_id>/
+    Optional ``download=1`` sets Content-Disposition: attachment, and requires
+    an active subscription - viewing stays open to anyone who owns the booking.
 
     Requires authentication and booking access verification.
     """
@@ -71,6 +80,16 @@ class BookingImageProxyView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
+        want_download = _wants_download(request)
+        if want_download and not request.user.can_download_vehicle_details(image.booking.vehicle):
+            return Response(
+                {
+                    'error': 'An active subscription is required to download or share photos.',
+                    'code': 'subscription_required',
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
         try:
             image_data = self._fetch_image(image_url)
         except Exception as e:
@@ -80,7 +99,9 @@ class BookingImageProxyView(APIView):
                 status=status.HTTP_502_BAD_GATEWAY
             )
 
-        return self._image_response(image_data, self._detect_content_type(image_url))
+        response = self._image_response(image_data, self._detect_content_type(image_url))
+        self._set_content_disposition(response, image, want_download)
+        return response
 
     def _user_can_access_image(self, user, image: BookedAppointmentImage) -> bool:
         """
@@ -163,6 +184,26 @@ class BookingImageProxyView(APIView):
         response = HttpResponse(data, content_type=content_type)
         response['Cache-Control'] = 'private, max-age=3600'
         return response
+
+    def _set_content_disposition(
+        self,
+        response: HttpResponse,
+        image: BookedAppointmentImage,
+        want_download: bool,
+    ) -> None:
+        """
+        Name the photo and mark it as an attachment when a download was asked for.
+
+        Args:
+            response: Image response to annotate.
+            image: The BookedAppointmentImage being served.
+            want_download: True to force a save-as instead of inline display.
+        """
+        kind = image.image_type or 'photo'
+        segment = image.segment or 'vehicle'
+        filename = f"prisma-{kind}-{segment}-{str(image.id)[:8]}.jpg"
+        disposition = 'attachment' if want_download else 'inline'
+        response['Content-Disposition'] = f'{disposition}; filename="{filename}"'
 
     def _detect_content_type(self, url: str) -> str:
         """
@@ -255,18 +296,6 @@ class GuestBookingImageProxyView(BookingImageProxyView):
                 status=status.HTTP_502_BAD_GATEWAY,
             )
 
-        content_type = self._detect_content_type(image_url)
-        response = self._image_response(image_data, content_type)
-        want_download = str(request.query_params.get("download") or "").strip() in (
-            "1",
-            "true",
-            "yes",
-        )
-        kind = image.image_type or "photo"
-        segment = image.segment or "vehicle"
-        filename = f"prisma-{kind}-{segment}-{str(image.id)[:8]}.jpg"
-        if want_download:
-            response["Content-Disposition"] = f'attachment; filename="{filename}"'
-        else:
-            response["Content-Disposition"] = f'inline; filename="{filename}"'
+        response = self._image_response(image_data, self._detect_content_type(image_url))
+        self._set_content_disposition(response, image, _wants_download(request))
         return response
