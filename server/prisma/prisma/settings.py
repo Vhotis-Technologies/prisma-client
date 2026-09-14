@@ -554,6 +554,8 @@ EMAIL_USE_TLS = True
 EMAIL_USE_SSL = False
 DEFAULT_FROM_EMAIL = os.getenv('EMAIL_HOST_USER')
 
+SUPPORT_INBOUND_EMAIL = os.getenv('SUPPORT_INBOUND_EMAIL', 'support@prismavalet.com')
+
 # Asgi Application
 ASGI_APPLICATION = 'prisma.asgi.application'
 

@@ -39,6 +39,7 @@ from main.views.support.support_vouchers import SupportVouchersView
 from main.views.support.support_gift_vouchers import SupportGiftVouchersView
 from main.views.support.support_accounting import SupportAccountingView
 from main.views.support.support_payouts import SupportPayoutsView
+from main.views.contact import ContactView
 
 
 app_name = 'main'
@@ -74,6 +75,9 @@ urlpatterns = [
 
     # --- Legal content (JSON/HTML for in-app WebView) ---
     path('terms/<action>/', TermsView.as_view(), name='terms'),
+
+    # --- Public marketing contact form (prismahome) ---
+    path('contact/<action>/', ContactView.as_view(), name='contact'),
 
     # --- Payment (Stripe webhook + action handlers; documented in payment.py) ---
     path('payment/stripe-webhook/', StripeWebhookView.as_view(), name='stripe_webhook'),
