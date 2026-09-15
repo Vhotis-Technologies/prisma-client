@@ -137,17 +137,23 @@ def _split_origins(raw: str | None, fallback: list[str]) -> list[str]:
     return out
 
 
+# Marketing site (prismahome) — always allowed even when env overrides omit them.
+_MARKETING_ORIGINS = [
+    'https://prismavalet.com',
+    'https://www.prismavalet.com',
+]
 _DEFAULT_CORS_ORIGINS = [
     BASE_URL,
     CLIENT_WEB_BASE_URL,
-    'https://prismavalet.com',
-    'https://www.prismavalet.com',
+    *_MARKETING_ORIGINS,
     *_WEB_DEV_ORIGINS,
 ]
 CORS_ALLOWED_ORIGINS = _split_origins(
     os.getenv('CORS_ALLOWED_ORIGINS') or os.getenv('ALLOWED_ORIGINS'),
     _DEFAULT_CORS_ORIGINS,
 )
+# Never drop marketing origins when CORS_ALLOWED_ORIGINS is set in env.
+_append_unique(CORS_ALLOWED_ORIGINS, _MARKETING_ORIGINS)
 # Staging: always allow local Vite (prisma_web) and CRA (prismahome) even if env omitted them.
 if IS_STAGING:
     _append_unique(CORS_ALLOWED_ORIGINS, _WEB_DEV_ORIGINS)
@@ -162,6 +168,7 @@ CSRF_TRUSTED_ORIGINS = _split_origins(
     CORS_ALLOWED_ORIGINS,
 )
 _append_unique(CSRF_TRUSTED_ORIGINS, [_origin_only(BASE_URL), _origin_only(CLIENT_WEB_BASE_URL)])
+_append_unique(CSRF_TRUSTED_ORIGINS, _MARKETING_ORIGINS)
 if IS_STAGING:
     _append_unique(CSRF_TRUSTED_ORIGINS, _WEB_DEV_ORIGINS)
     _append_unique(CSRF_TRUSTED_ORIGINS, _STAGING_NGROK_CSRF_ORIGINS)
@@ -553,8 +560,6 @@ EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
 EMAIL_USE_TLS = True
 EMAIL_USE_SSL = False
 DEFAULT_FROM_EMAIL = os.getenv('EMAIL_HOST_USER')
-
-SUPPORT_INBOUND_EMAIL = os.getenv('SUPPORT_INBOUND_EMAIL', 'support@prismavalet.com')
 
 # Asgi Application
 ASGI_APPLICATION = 'prisma.asgi.application'
