@@ -311,6 +311,28 @@ DATABASES = {
 _STATICFILES_STORAGE = {
     'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage',
 }
+_GCS_SCOPES = ['https://www.googleapis.com/auth/cloud-platform']
+
+
+def _gcs_credentials_from_env(*env_names):
+    """Load service-account creds from a JSON blob or a file path (same for staging and production)."""
+    raw = ''
+    for name in env_names:
+        raw = (os.getenv(name) or '').strip()
+        if raw:
+            break
+    if not raw:
+        names = ', '.join(env_names)
+        raise ImproperlyConfigured(
+            f'Set one of {names} to a service-account JSON blob or a credentials file path.'
+        )
+    if raw.startswith('{'):
+        return service_account.Credentials.from_service_account_info(
+            json.loads(raw),
+            scopes=_GCS_SCOPES,
+        )
+    return service_account.Credentials.from_service_account_file(raw, scopes=_GCS_SCOPES)
+
 
 if _IS_COLLECTSTATIC:
     STORAGES = {
@@ -320,26 +342,10 @@ if _IS_COLLECTSTATIC:
         'staticfiles': _STATICFILES_STORAGE,
     }
 elif IS_STAGING:
-    _raw_staging_creds = (
-        os.getenv('GS_CREDENTIALS_STAGING_JSON')
-        or os.getenv('GS_CREDENTIALS_PATH_STAGING')
-        or ''
-    ).strip()
-    if not _raw_staging_creds:
-        raise ImproperlyConfigured(
-            'Set GS_CREDENTIALS_STAGING_JSON (JSON blob) or GS_CREDENTIALS_PATH_STAGING (file path).'
-        )
-    if _raw_staging_creds.startswith('{'):
-        credential_staging = json.loads(_raw_staging_creds)
-        GS_CREDENTIALS_STAGING = service_account.Credentials.from_service_account_info(
-            credential_staging,
-            scopes=['https://www.googleapis.com/auth/cloud-platform'],
-        )
-    else:
-        GS_CREDENTIALS_STAGING = service_account.Credentials.from_service_account_file(
-            _raw_staging_creds,
-            scopes=['https://www.googleapis.com/auth/cloud-platform'],
-        )
+    GS_CREDENTIALS_STAGING = _gcs_credentials_from_env(
+        'GS_CREDENTIALS_STAGING_JSON',
+        'GS_CREDENTIALS_PATH_STAGING',
+    )
     GS_BUCKET_NAME_STAGING = os.getenv('GS_BUCKET_NAME_STAGING', 'prisma_staging_bucket')
     GS_LOCATION_STAGING = os.getenv('GS_LOCATION_STAGING', 'main-app')
     STORAGES = {
@@ -354,24 +360,18 @@ elif IS_STAGING:
         },
         'staticfiles': _STATICFILES_STORAGE,
     }
+    MEDIA_URL = (
+        f'https://storage.googleapis.com/{GS_BUCKET_NAME_STAGING}/{GS_LOCATION_STAGING}/'
+    )
 else:
-    _raw_prod_creds = (os.getenv('GS_CREDENTIALS_PATH') or '').strip()
-    if not _raw_prod_creds:
-        raise ImproperlyConfigured(
-            'Set GS_CREDENTIALS_PATH to a JSON blob or path to the service-account file.'
-        )
-    if _raw_prod_creds.startswith('{'):
-        credentials = json.loads(_raw_prod_creds)
-        GS_CREDENTIALS = service_account.Credentials.from_service_account_info(
-            credentials,
-            scopes=['https://www.googleapis.com/auth/cloud-platform'],
-        )
-    else:
-        GS_CREDENTIALS_PATH = _raw_prod_creds
-        GS_CREDENTIALS = service_account.Credentials.from_service_account_file(
-            GS_CREDENTIALS_PATH,
-            scopes=['https://www.googleapis.com/auth/cloud-platform'],
-        )
+    # Prefer GS_CREDENTIALS_JSON (inline blob, same as staging). Also accept
+    # GS_CREDENTIALS_STAGING_JSON so a production .env that reused the staging
+    # variable name still boots.
+    GS_CREDENTIALS = _gcs_credentials_from_env(
+        'GS_CREDENTIALS_JSON',
+        'GS_CREDENTIALS_STAGING_JSON',
+        'GS_CREDENTIALS_PATH',
+    )
     GS_BUCKET_NAME = os.getenv('GS_BUCKET_NAME', 'prisma-valet-bucket')
     GS_LOCATION = os.getenv('GS_LOCATION', 'main-app')
     STORAGES = {
