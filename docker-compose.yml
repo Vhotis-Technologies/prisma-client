@@ -21,6 +21,21 @@ services:
       timeout: 10s
       retries: 3
 
+  client_web:
+    build:
+      context: ./prisma_web
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: https://client.prismavalet.com
+        VITE_BASE: /
+        VITE_STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-k_live_51S0pCyFO4bA8gRHVDViJfhXL0rlnqrHEkzsyWUHUDFJ0HRH1u88ckGVpZY03SWhPYusaXoMw39qABEpSrOA7slLN00k4dJ6ujS}
+    container_name: client_web
+    ports:
+      - "8100:80"
+    networks:
+      - prisma_shared_net
+    restart: unless-stopped
+
   client_celery_worker:
     build:
       context: ./server
@@ -66,7 +81,7 @@ services:
     restart: always
     networks:
       - prisma_shared_net
-  
+
 networks:
   prisma_shared_net:
     external: true
