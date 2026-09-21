@@ -33,7 +33,7 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     ports:
-      - "8100:8000"
+      - "8800:8000"
     volumes:
       - ./server/prisma:/app
     env_file:
