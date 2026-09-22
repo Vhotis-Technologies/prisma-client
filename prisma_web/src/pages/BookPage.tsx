@@ -9,6 +9,7 @@ import { isBulkBookingEligible } from "../lib/account";
 import {
   buildCheckoutPayloads,
   newBookingReference,
+  quoteChargeLines,
   saveConfirmationSnapshot,
   waitForPaymentConfirmation,
 } from "../lib/bookingCheckout";
@@ -122,7 +123,9 @@ function resolvedLines(quote: BookingQuote | null, source: ComplimentarySparkleS
 function priceBreakdown(
   quote: BookingQuote | null,
   source: ComplimentarySparkleSource | null,
-  loyaltyPercent?: number,
+  loyaltyPercent: number | undefined,
+  isSuv: boolean,
+  isExpress: boolean,
 ): PriceSummaryBreakdown | null {
   const lines = resolvedLines(quote, source);
   const payable = resolvedPayable(quote, source);
@@ -131,8 +134,12 @@ function priceBreakdown(
   const resolvedSticker = lines.sticker_total_inc_vat;
   const compSave =
     fullSticker > resolvedSticker + 0.005 ? Number((fullSticker - resolvedSticker).toFixed(2)) : 0;
+  const charges = quoteChargeLines(lines, payable, isSuv, isExpress);
   return {
     stickerSubtotalIncVat: lines.sticker_total_inc_vat,
+    suvSurchargeIncVat: charges.suvSurchargeIncVat,
+    expressFeeIncVat: charges.expressFeeIncVat,
+    travelSurchargeIncVat: charges.travelSurchargeIncVat,
     loyaltyDiscountIncVat: lines.loyalty_discount_inc_vat,
     promotionDiscountIncVat: lines.promotion_discount_inc_vat,
     partnerReferralDiscountIncVat: lines.partner_referral_discount_inc_vat,
@@ -201,7 +208,13 @@ export default function BookPage() {
   const endClock =
     selectedSlot?.endTime || (timeSlot ? addMinutes(timeSlot, durationMinutes) : null);
   const elig = eligibleComplimentary(quote);
-  const breakdown = priceBreakdown(quote, complimentary, user?.loyalty_benefits?.discount);
+  const breakdown = priceBreakdown(
+    quote,
+    complimentary,
+    user?.loyalty_benefits?.discount,
+    isSuv,
+    isExpress,
+  );
   const payable = resolvedPayable(quote, complimentary);
   const amountDue = voucher ? voucher.amountDue : payable?.total ?? 0;
 
@@ -969,17 +982,32 @@ export default function BookPage() {
               {breakdown && payable ? (
                 <dl className="price-list">
                   <div>
-                    <dt>Subtotal</dt>
+                    <dt>{selectedAddons.length > 0 ? "Service & add-ons" : "Service"}</dt>
                     <dd>
                       {formatMoney(
                         Math.max(
                           0,
-                          breakdown.stickerSubtotalIncVat - (payable?.travel_surcharge ?? 0),
+                          breakdown.stickerSubtotalIncVat -
+                            breakdown.suvSurchargeIncVat -
+                            breakdown.expressFeeIncVat -
+                            breakdown.travelSurchargeIncVat,
                         ),
                         country,
                       )}
                     </dd>
                   </div>
+                  {breakdown.suvSurchargeIncVat > 0 ? (
+                    <div>
+                      <dt>SUV / MPV (20%)</dt>
+                      <dd>{formatMoney(breakdown.suvSurchargeIncVat, country)}</dd>
+                    </div>
+                  ) : null}
+                  {breakdown.expressFeeIncVat > 0 ? (
+                    <div>
+                      <dt>Express</dt>
+                      <dd>{formatMoney(breakdown.expressFeeIncVat, country)}</dd>
+                    </div>
+                  ) : null}
                   {breakdown.subscriptionDiscountIncVat > 0 ? (
                     <div className="price-save">
                       <dt>
@@ -1023,10 +1051,10 @@ export default function BookPage() {
                       <dd>−{formatMoney(breakdown.partnerReferralDiscountIncVat, country)}</dd>
                     </div>
                   ) : null}
-                  {payable?.travel_surcharge && payable.travel_surcharge > 0 ? (
+                  {breakdown.travelSurchargeIncVat > 0 ? (
                     <div>
                       <dt>Travel surcharge</dt>
-                      <dd>{formatMoney(payable.travel_surcharge, country)}</dd>
+                      <dd>{formatMoney(breakdown.travelSurchargeIncVat, country)}</dd>
                     </div>
                   ) : null}
                   {voucher ? (

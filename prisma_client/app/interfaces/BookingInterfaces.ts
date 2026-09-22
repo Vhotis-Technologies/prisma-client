@@ -42,6 +42,8 @@ export interface BookingPriceSummaryBreakdown {
   partnerReferralDiscountIncVat: number;
   subscriptionDiscountIncVat: number;
   complimentaryStickerSavingsIncVat: number;
+  suvSurchargeIncVat?: number;
+  expressFeeIncVat?: number;
   totalIncVat: number;
   loyaltyDiscountPercent?: number;
   partnerReferralDiscountPercent?: number;

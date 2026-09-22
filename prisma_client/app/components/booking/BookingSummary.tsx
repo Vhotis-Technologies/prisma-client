@@ -452,23 +452,24 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
                 {formatPrice(basePrice)}
               </StyledText>
             </View>
-            {isSUV && (
+            {(isSUV || (srv?.suvSurchargeIncVat ?? 0) > 0) && (
               <View style={styles.priceRow}>
                 <StyledText
                   variant="bodyMedium"
                   style={[styles.priceLabel, { color: textColor }]}
                 >
-                  SUV Surcharge (20%):
+                  SUV / MPV (20%):
                 </StyledText>
                 <StyledText
                   variant="bodyMedium"
                   style={[styles.priceValue, { color: textColor }]}
                 >
-                  {formatPrice(suvPrice)}
+                  {formatPrice(srv?.suvSurchargeIncVat ?? suvPrice)}
                 </StyledText>
               </View>
             )}
-            {isExpressService && expressServicePrice && expressServicePrice > 0 && (
+            {((isExpressService && (expressServicePrice ?? 0) > 0) ||
+              (srv?.expressFeeIncVat ?? 0) > 0) && (
               <View style={styles.priceRow}>
                 <StyledText
                   variant="bodyMedium"
@@ -480,7 +481,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
                   variant="bodyMedium"
                   style={[styles.priceValue, { color: textColor }]}
                 >
-                  {formatPrice(expressServicePrice)}
+                  {formatPrice(srv?.expressFeeIncVat ?? expressServicePrice ?? 0)}
                 </StyledText>
               </View>
             )}

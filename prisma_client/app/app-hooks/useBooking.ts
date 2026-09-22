@@ -1639,6 +1639,8 @@ const useBooking = () => {
 
     return {
       stickerSubtotalIncVat: lines.sticker_total_inc_vat,
+      suvSurchargeIncVat: lines.suv_surcharge_inc_vat,
+      expressFeeIncVat: lines.express_fee_inc_vat,
       loyaltyDiscountIncVat: lines.loyalty_discount_inc_vat,
       promotionDiscountIncVat: lines.promotion_discount_inc_vat,
       partnerReferralDiscountIncVat: lines.partner_referral_discount_inc_vat,

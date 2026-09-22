@@ -36,6 +36,9 @@ export type BookingQuotePricingLines = {
   partner_referral_discount_inc_vat: number;
   subscription_discount_inc_vat: number;
   subscription_discount_percent: number;
+  suv_surcharge_inc_vat?: number;
+  express_fee_inc_vat?: number;
+  travel_surcharge_inc_vat?: number;
 };
 
 export type PartnerBookingOfferPayload = {

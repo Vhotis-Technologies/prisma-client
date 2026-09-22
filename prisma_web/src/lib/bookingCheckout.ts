@@ -5,6 +5,8 @@ import type {
   AddOn,
   AppliedVoucher,
   BookingConfirmationSnapshot,
+  BookingQuoteAmounts,
+  BookingQuotePricingLines,
   ComplimentarySparkleSource,
   ServiceType,
   ValetType,
@@ -141,4 +143,31 @@ export function buildCheckoutPayloads(input: PayloadInput): {
   };
 
   return { bookingData, detailerData };
+}
+
+/** Split a server sticker into service, SUV 20%, express, and travel for the quote UI. */
+export function quoteChargeLines(
+  lines: BookingQuotePricingLines,
+  payable: BookingQuoteAmounts | null | undefined,
+  isSuv: boolean,
+  isExpress: boolean,
+) {
+  const travel = Number(payable?.travel_surcharge ?? lines.travel_surcharge_inc_vat ?? 0);
+  const express =
+    lines.express_fee_inc_vat != null ? Number(lines.express_fee_inc_vat) : isExpress ? 30 : 0;
+  let suv = lines.suv_surcharge_inc_vat;
+  if (suv == null) {
+    const remainder = Math.max(0, lines.sticker_total_inc_vat - travel - express);
+    suv = isSuv ? Number((remainder - remainder / 1.2).toFixed(2)) : 0;
+  }
+  const serviceIncVat = Math.max(
+    0,
+    Number((lines.sticker_total_inc_vat - travel - express - Number(suv)).toFixed(2)),
+  );
+  return {
+    serviceIncVat,
+    suvSurchargeIncVat: Number(suv),
+    expressFeeIncVat: express,
+    travelSurchargeIncVat: travel,
+  };
 }

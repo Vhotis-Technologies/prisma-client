@@ -374,6 +374,8 @@ def compute_price_breakdown_parts(
         "subscription_discount_inc_vat": subscription_amt,
         "subscription_discount_pct": subscription_pct,
         "travel_surcharge_inc_vat": travel_surcharge,
+        "suv_surcharge_inc_vat": suv,
+        "express_fee_inc_vat": express_fee,
     }
 
 
@@ -396,6 +398,8 @@ def pricing_lines_meta(parts: Dict[str, Decimal]) -> Dict[str, float]:
         "subscription_discount_inc_vat": float_money(parts.get("subscription_discount_inc_vat", Decimal("0"))),
         "subscription_discount_percent": float(sub_pct),
         "travel_surcharge_inc_vat": float_money(parts.get("travel_surcharge_inc_vat", Decimal("0"))),
+        "suv_surcharge_inc_vat": float_money(parts.get("suv_surcharge_inc_vat", Decimal("0"))),
+        "express_fee_inc_vat": float_money(parts.get("express_fee_inc_vat", Decimal("0"))),
     }
 
 

@@ -60,6 +60,11 @@ export type BookingQuotePricingLines = {
   partner_referral_discount_inc_vat: number;
   subscription_discount_inc_vat: number;
   subscription_discount_percent: number;
+  /** 20% of service + add-ons when the vehicle is SUV/MPV. VAT-inclusive. */
+  suv_surcharge_inc_vat?: number;
+  /** Flat express fee. VAT-inclusive. */
+  express_fee_inc_vat?: number;
+  travel_surcharge_inc_vat?: number;
 };
 
 export type ComplimentarySparkleSource = "loyalty" | "subscription" | "partner";
@@ -111,6 +116,9 @@ export type PriceSummaryBreakdown = {
   partnerReferralDiscountIncVat: number;
   subscriptionDiscountIncVat: number;
   complimentaryStickerSavingsIncVat: number;
+  suvSurchargeIncVat: number;
+  expressFeeIncVat: number;
+  travelSurchargeIncVat: number;
   totalIncVat: number;
   loyaltyDiscountPercent?: number;
   partnerReferralDiscountPercent?: number;

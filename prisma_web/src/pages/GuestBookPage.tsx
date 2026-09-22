@@ -9,6 +9,7 @@ import StripeCheckout from "../components/StripeCheckout";
 import {
   buildCheckoutPayloads,
   newBookingReference,
+  quoteChargeLines,
   saveConfirmationSnapshot,
 } from "../lib/bookingCheckout";
 import { formatClock, formatDate, formatDuration, formatMoney, vehicleLabel } from "../lib/format";
@@ -169,7 +170,10 @@ export default function GuestBookPage() {
   const endClock = selectedSlot?.endTime || (timeSlot ? addMinutes(timeSlot, durationMinutes) : null);
   const payable = quote?.payable_full ?? null;
   const amountDue = voucher ? voucher.amountDue : payable?.total ?? 0;
-  const breakdown: PriceSummaryBreakdown | null = quote?.pricing_lines_full
+  const guestCharges = quote?.pricing_lines_full
+    ? quoteChargeLines(quote.pricing_lines_full, payable, isSuv, isExpress)
+    : null;
+  const breakdown: PriceSummaryBreakdown | null = quote?.pricing_lines_full && guestCharges
     ? {
         stickerSubtotalIncVat: quote.pricing_lines_full.sticker_total_inc_vat,
         loyaltyDiscountIncVat: 0,
@@ -177,6 +181,9 @@ export default function GuestBookPage() {
         partnerReferralDiscountIncVat: 0,
         subscriptionDiscountIncVat: 0,
         complimentaryStickerSavingsIncVat: 0,
+        suvSurchargeIncVat: guestCharges.suvSurchargeIncVat,
+        expressFeeIncVat: guestCharges.expressFeeIncVat,
+        travelSurchargeIncVat: guestCharges.travelSurchargeIncVat,
         totalIncVat: amountDue,
       }
     : null;
@@ -845,27 +852,36 @@ export default function GuestBookPage() {
               {breakdown && payable ? (
                 <dl className="price-list">
                   <div>
-                    <dt>Subtotal</dt>
+                    <dt>{selectedAddons.length > 0 ? "Service & add-ons" : "Service"}</dt>
                     <dd>
                       {formatMoney(
                         Math.max(
                           0,
-                          breakdown.stickerSubtotalIncVat - (payable?.travel_surcharge ?? 0),
+                          breakdown.stickerSubtotalIncVat -
+                            breakdown.suvSurchargeIncVat -
+                            breakdown.expressFeeIncVat -
+                            breakdown.travelSurchargeIncVat,
                         ),
                         country,
                       )}
                     </dd>
                   </div>
-                  {isSuv ? (
+                  {breakdown.suvSurchargeIncVat > 0 ? (
                     <div>
-                      <dt>SUV / MPV</dt>
-                      <dd>Included</dd>
+                      <dt>SUV / MPV (20%)</dt>
+                      <dd>{formatMoney(breakdown.suvSurchargeIncVat, country)}</dd>
                     </div>
                   ) : null}
-                  {payable?.travel_surcharge && payable.travel_surcharge > 0 ? (
+                  {breakdown.expressFeeIncVat > 0 ? (
+                    <div>
+                      <dt>Express</dt>
+                      <dd>{formatMoney(breakdown.expressFeeIncVat, country)}</dd>
+                    </div>
+                  ) : null}
+                  {breakdown.travelSurchargeIncVat > 0 ? (
                     <div>
                       <dt>Travel surcharge</dt>
-                      <dd>{formatMoney(payable.travel_surcharge, country)}</dd>
+                      <dd>{formatMoney(breakdown.travelSurchargeIncVat, country)}</dd>
                     </div>
                   ) : null}
                   {voucher ? (
