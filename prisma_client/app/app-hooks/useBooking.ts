@@ -129,7 +129,7 @@ const formatLocalDate = (date: Date): string => {
   return `${y}-${m}-${d}`;
 };
 
-const VAT_RATE = 0.23; // 23% VAT rate
+const VAT_RATE = 0.135; // 13.5% VAT rate
 
 /**
  * Custom hook for managing the booking process state and logic.
@@ -2147,7 +2147,7 @@ const useBooking = () => {
         vat_amount: useWinnerVoucher
           ? preWinnerBreakdown.vat
           : priceBreakdown.vat,
-        vat_rate: VAT_RATE * 100, // Convert to percentage (23.00)
+        vat_rate: VAT_RATE * 100, // Convert to percentage (13.5)
         addons: selectedAddons,
         start_time: selectedDate ? formatLocalTime(selectedDate) : "",
         duration: getEstimatedDuration(),

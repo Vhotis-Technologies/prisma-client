@@ -685,7 +685,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
                   variant="titleMedium"
                   style={[styles.totalLabel, { color: textColor }]}
                 >
-                  Total Amount (VAT incl):
+                  Total:
                 </StyledText>
               </View>
               <StyledText

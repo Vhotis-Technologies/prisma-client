@@ -15,7 +15,7 @@ import type {
 export { waitForPaymentConfirmation } from "../store/api/paymentApi";
 
 export const CONFIRMATION_STORAGE_KEY = "prisma.bookingConfirmation";
-const VAT_RATE = 0.23;
+const VAT_RATE = 0.135;
 
 export function formatLocalTime(hhmm: string): string {
   return `${hhmm}:00.000`;
@@ -34,7 +34,9 @@ export function newBookingReference(): string {
   return `APT${Date.now()}`;
 }
 
-export function saveConfirmationSnapshot(snapshot: BookingConfirmationSnapshot): void {
+export function saveConfirmationSnapshot(
+  snapshot: BookingConfirmationSnapshot,
+): void {
   sessionStorage.setItem(CONFIRMATION_STORAGE_KEY, JSON.stringify(snapshot));
 }
 
@@ -77,7 +79,9 @@ export function buildCheckoutPayloads(input: PayloadInput): {
   detailerData: Record<string, unknown>;
 } {
   const startTime = formatLocalTime(input.timeSlot);
-  const endTime = formatLocalTime(addMinutesClock(input.timeSlot, input.durationMinutes));
+  const endTime = formatLocalTime(
+    addMinutesClock(input.timeSlot, input.durationMinutes),
+  );
   const plate = plateOf(input.vehicle);
   const useVoucher = Boolean(input.voucher) && !input.appliedFreeQuickSparkle;
 
@@ -89,7 +93,9 @@ export function buildCheckoutPayloads(input: PayloadInput): {
     address: input.address,
     status: "accepted",
     total_amount:
-      useVoucher && input.voucher?.kind === "gift" ? input.voucher.preTotal : input.amountDue,
+      useVoucher && input.voucher?.kind === "gift"
+        ? input.voucher.preTotal
+        : input.amountDue,
     subtotal_amount: input.subtotal,
     vat_amount: input.vat,
     vat_rate: VAT_RATE * 100,
@@ -109,8 +115,10 @@ export function buildCheckoutPayloads(input: PayloadInput): {
   }
   if (useVoucher && input.voucher) {
     bookingData.pre_voucher_total_amount = input.voucher.preTotal;
-    if (input.voucher.kind === "winner") bookingData.winner_voucher_id = input.voucher.voucherId;
-    if (input.voucher.kind === "gift") bookingData.gift_voucher_id = input.voucher.voucherId;
+    if (input.voucher.kind === "winner")
+      bookingData.winner_voucher_id = input.voucher.voucherId;
+    if (input.voucher.kind === "gift")
+      bookingData.gift_voucher_id = input.voucher.voucherId;
   }
 
   const detailerData: Record<string, unknown> = {
@@ -152,17 +160,28 @@ export function quoteChargeLines(
   isSuv: boolean,
   isExpress: boolean,
 ) {
-  const travel = Number(payable?.travel_surcharge ?? lines.travel_surcharge_inc_vat ?? 0);
+  const travel = Number(
+    payable?.travel_surcharge ?? lines.travel_surcharge_inc_vat ?? 0,
+  );
   const express =
-    lines.express_fee_inc_vat != null ? Number(lines.express_fee_inc_vat) : isExpress ? 30 : 0;
+    lines.express_fee_inc_vat != null
+      ? Number(lines.express_fee_inc_vat)
+      : isExpress
+        ? 30
+        : 0;
   let suv = lines.suv_surcharge_inc_vat;
   if (suv == null) {
-    const remainder = Math.max(0, lines.sticker_total_inc_vat - travel - express);
+    const remainder = Math.max(
+      0,
+      lines.sticker_total_inc_vat - travel - express,
+    );
     suv = isSuv ? Number((remainder - remainder / 1.2).toFixed(2)) : 0;
   }
   const serviceIncVat = Math.max(
     0,
-    Number((lines.sticker_total_inc_vat - travel - express - Number(suv)).toFixed(2)),
+    Number(
+      (lines.sticker_total_inc_vat - travel - express - Number(suv)).toFixed(2),
+    ),
   );
   return {
     serviceIncVat,

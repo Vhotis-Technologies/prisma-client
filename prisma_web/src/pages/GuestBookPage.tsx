@@ -894,12 +894,6 @@ export default function GuestBookPage() {
                     <dt>Total</dt>
                     <dd>{formatMoney(amountDue, country)}</dd>
                   </div>
-                  {!voucher && payable ? (
-                    <div>
-                      <dt>Of which VAT</dt>
-                      <dd>{formatMoney(payable.vat, country)}</dd>
-                    </div>
-                  ) : null}
                 </dl>
               ) : (
                 <p className="muted">Price will appear once the quote is ready.</p>

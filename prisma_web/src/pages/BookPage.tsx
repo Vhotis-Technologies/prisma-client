@@ -1064,15 +1064,9 @@ export default function BookPage() {
                     </div>
                   ) : null}
                   <div className="price-total">
-                    <dt>Total (VAT incl.)</dt>
+                    <dt>Total</dt>
                     <dd>{formatMoney(amountDue, country)}</dd>
                   </div>
-                  {!voucher ? (
-                    <div>
-                      <dt>Of which VAT</dt>
-                      <dd>{formatMoney(payable.vat, country)}</dd>
-                    </div>
-                  ) : null}
                 </dl>
               ) : (
                 <p className="muted">Quote will appear once the server responds.</p>

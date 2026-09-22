@@ -1,7 +1,7 @@
 """
 Server-side booking price quote and complimentary Quick Sparkle validation.
 
-Mirrors client useBooking.calculateFinalPrice (VAT-inclusive line items, 23% VAT split,
+Mirrors client useBooking.calculateFinalPrice (VAT-inclusive line items, 13.5% VAT split,
 4+ addons discount, SUV 20%, express €30, travel surcharge €10 for B2C 25-35km from Spire,
 loyalty/promotion % on pre-VAT-inclusive subtotal).
 """
@@ -15,7 +15,8 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
-VAT_RATE = Decimal("0.23")
+# All bookings (B2C, guest, fleet/B2B). Display is not VAT-registered yet.
+VAT_RATE = Decimal("0.135")
 # Canonical product name in admin/marketing; detection uses case-insensitive substring (see is_quick_sparkle_service_name).
 CANONICAL_QUICK_SPARKLE_LABEL = "Prisma Quick Sparkle"
 COMPLIMENTARY_SOURCES = frozenset({"loyalty", "subscription", "partner"})
@@ -80,7 +81,7 @@ def float_money(d: Decimal) -> float:
 
 def line_total_inc_vat_to_parts(total_inc_vat: Decimal) -> Tuple[Decimal, Decimal, Decimal]:
     """
-    Split a VAT-inclusive total into ex-VAT subtotal, VAT amount, and total (23% VAT).
+    Split a VAT-inclusive total into ex-VAT subtotal, VAT amount, and total (13.5% VAT).
 
     Args:
         total_inc_vat: VAT-inclusive line total.
