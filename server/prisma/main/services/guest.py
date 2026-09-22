@@ -942,23 +942,12 @@ def _attach_provider_image_from_lookup(vehicle: Vehicle, blob: dict) -> None:
     """
     if vehicle.image:
         return
-    provider_url = blob.get("provider_image_url")
-    if not provider_url:
-        return
-    from django.core.files.base import ContentFile
+    from main.services.regcheck_ireland import store_lookup_vehicle_image
 
-    from main.services.regcheck_ireland import RegcheckIrelandError, download_provider_image
-
-    reg = blob.get("registration_number") or vehicle.registration_number or "vehicle"
-    try:
-        raw, ctype = download_provider_image(provider_url)
-        ext = "jpg"
-        if "png" in (ctype or "").lower():
-            ext = "png"
-        fname = f"{str(reg).replace('/', '_')}.{ext}"
-        vehicle.image.save(fname, ContentFile(raw), save=True)
-    except RegcheckIrelandError:
-        pass
+    store_lookup_vehicle_image(
+        vehicle,
+        blob.get("provider_image_url"),
+    )
 
 
 def persist_guest_vehicle(user: User, lookup_token: str) -> Vehicle:

@@ -12,7 +12,6 @@ from datetime import datetime, timedelta
 
 from django.conf import settings as django_settings
 from django.core.cache import cache
-from django.core.files.base import ContentFile
 from django.db import transaction
 from django.utils import timezone
 from django_ratelimit.core import is_ratelimited
@@ -24,9 +23,9 @@ from rest_framework.views import APIView
 from main.models import Vehicle, VehicleOwnership, VehicleEvent, BookedAppointment, VehicleTransfer, Fleet, FleetVehicle, Branch
 from main.services.regcheck_ireland import (
     RegcheckIrelandError,
-    download_provider_image,
     ireland_payload_for_cache,
     lookup_ireland,
+    store_lookup_vehicle_image,
 )
 from main.utils.media_helper import get_full_media_url
 
@@ -474,6 +473,8 @@ class GarageView(APIView):
                 if uploaded_image:
                     vehicle.image = uploaded_image
                     vehicle.save(update_fields=['image', 'updated_at'])
+                elif lookup_token and not vehicle.image:
+                    store_lookup_vehicle_image(vehicle, blob.get('provider_image_url'))
             else:
                 if lookup_token:
                     vehicle = Vehicle(
@@ -491,16 +492,8 @@ class GarageView(APIView):
                     if uploaded_image:
                         vehicle.image = uploaded_image
                         vehicle.save(update_fields=['image', 'updated_at'])
-                    elif blob.get('provider_image_url'):
-                        try:
-                            raw, ctype = download_provider_image(blob['provider_image_url'])
-                            ext = 'jpg'
-                            if 'png' in (ctype or '').lower():
-                                ext = 'png'
-                            fname = f"{blob['registration_number'].replace('/', '_')}.{ext}"
-                            vehicle.image.save(fname, ContentFile(raw), save=True)
-                        except RegcheckIrelandError:
-                            pass
+                    else:
+                        store_lookup_vehicle_image(vehicle, blob.get('provider_image_url'))
                     created_standalone_vehicle = True
                 else:
                     vehicle = Vehicle.objects.create(

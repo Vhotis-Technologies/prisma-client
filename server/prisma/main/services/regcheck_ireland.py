@@ -17,8 +17,14 @@ from django.conf import settings
 logger = logging.getLogger(__name__)
 
 REGCHECK_IE_URL = "https://www.regcheck.org.uk/api/reg.asmx/CheckIreland"
+REGCHECK_IMAGE_ORIGIN = "https://www.regcheck.org.uk"
 DEFAULT_TIMEOUT = 25
 MAX_IMAGE_BYTES = 6 * 1024 * 1024
+_IMAGE_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (compatible; PrismaValet/1.0)",
+    "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+    "Referer": "https://www.regcheck.org.uk/",
+}
 
 
 class RegcheckIrelandError(Exception):
@@ -202,7 +208,9 @@ def lookup_ireland(registration_number: str, *, username: str | None = None) -> 
         "year": year,
         "color": (str(data.get("Colour") or data.get("Color") or "").strip()),
         "body_style": _ctv(data.get("BodyStyle")) or None,
-        "provider_image_url": (str(data.get("ImageUrl") or "").strip() or None),
+        "provider_image_url": normalize_provider_image_url(
+            data.get("ImageUrl") or data.get("VehicleImageUrl") or data.get("imageUrl")
+        ),
     }
 
     missing_core = []
@@ -222,32 +230,86 @@ def lookup_ireland(registration_number: str, *, username: str | None = None) -> 
     return normalized
 
 
+def normalize_provider_image_url(raw: Any) -> str | None:
+    """
+    Turn a RegCheck image field into an absolute http(s) URL.
+
+    ImageUrl is sometimes a plain string, sometimes a ``CurrentTextValue`` object,
+    and sometimes a path relative to regcheck.org.uk.
+    """
+    if isinstance(raw, dict):
+        text = _ctv(raw)
+    else:
+        text = str(raw or "").strip()
+    if not text or text.lower() in {"none", "null", "n/a"}:
+        return None
+    if text.startswith("//"):
+        return "https:" + text
+    if text.startswith("/"):
+        return REGCHECK_IMAGE_ORIGIN + text
+    if text.startswith(("http://", "https://")):
+        return text
+    return None
+
+
+def _image_extension(raw: bytes, content_type: str) -> str:
+    """Pick a file extension from magic bytes, then Content-Type."""
+    if raw.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "png"
+    if raw.startswith(b"\xff\xd8\xff"):
+        return "jpg"
+    if raw.startswith((b"GIF87a", b"GIF89a")):
+        return "gif"
+    if raw.startswith(b"RIFF") and raw[8:12] == b"WEBP":
+        return "webp"
+    head = raw[:256].lstrip().lower()
+    if head.startswith(b"<") or b"<html" in head or b"<!doctype" in head:
+        raise RegcheckIrelandError("Provider returned a page, not an image", "image_error")
+    ctype = (content_type or "").lower()
+    if "png" in ctype:
+        return "png"
+    if "webp" in ctype:
+        return "webp"
+    if "gif" in ctype:
+        return "gif"
+    return "jpg"
+
+
 def download_provider_image(image_url: str) -> tuple[bytes, str]:
     """
     Stream-download a vehicle image from RegCheck (size-capped).
 
     Args:
-        image_url: HTTP(S) URL from lookup payload.
+        image_url: HTTP(S) URL, protocol-relative URL, or site-relative path.
 
     Returns:
         tuple: ``(raw_bytes, content_type)`` without parameters suffix.
 
     Raises:
-        RegcheckIrelandError: On invalid URL, network failure, empty body, or oversize file.
+        RegcheckIrelandError: On invalid URL, network failure, empty body, HTML, or oversize file.
     """
-    if not image_url or not image_url.startswith(("http://", "https://")):
+    url = normalize_provider_image_url(image_url)
+    if not url:
         raise RegcheckIrelandError("Invalid image URL", "image_error")
 
     try:
-        r = requests.get(image_url, timeout=DEFAULT_TIMEOUT, stream=True)
-        r.raise_for_status()
+        response = requests.get(
+            url,
+            timeout=DEFAULT_TIMEOUT,
+            stream=True,
+            headers=_IMAGE_HEADERS,
+        )
+        response.raise_for_status()
     except requests.RequestException as e:
         raise RegcheckIrelandError(f"Image download failed: {e}", "image_error") from e
 
-    ctype = r.headers.get("Content-Type") or "image/jpeg"
+    ctype = (response.headers.get("Content-Type") or "image/jpeg").split(";")[0].strip()
+    if ctype.lower().startswith("text/"):
+        raise RegcheckIrelandError("Provider returned a page, not an image", "image_error")
+
     buf = io.BytesIO()
     total = 0
-    for chunk in r.iter_content(chunk_size=65536):
+    for chunk in response.iter_content(chunk_size=65536):
         if not chunk:
             continue
         total += len(chunk)
@@ -257,7 +319,42 @@ def download_provider_image(image_url: str) -> tuple[bytes, str]:
     raw = buf.getvalue()
     if not raw:
         raise RegcheckIrelandError("Empty image response", "image_error")
-    return raw, ctype.split(";")[0].strip()
+    _image_extension(raw, ctype)
+    return raw, ctype
+
+
+def store_lookup_vehicle_image(vehicle, image_url: str | None) -> bool:
+    """
+    Download a lookup photo and save it on ``vehicle.image`` (GCS in production).
+
+    Args:
+        vehicle: ``Vehicle`` whose image field is still empty.
+        image_url: Provider URL from the lookup cache.
+
+    Returns:
+        bool: True when a file was stored.
+
+    Raises:
+        Exception: Storage errors propagate so a broken bucket is not hidden.
+    """
+    from django.core.files.base import ContentFile
+
+    if getattr(vehicle, "image", None):
+        return False
+    reg = getattr(vehicle, "registration_number", None) or "vehicle"
+    url = normalize_provider_image_url(image_url)
+    if not url:
+        logger.info("Lookup for %s had no provider image URL", reg)
+        return False
+    try:
+        raw, ctype = download_provider_image(url)
+    except RegcheckIrelandError as exc:
+        logger.warning("Lookup image not stored for %s: %s", reg, exc)
+        return False
+    ext = _image_extension(raw, ctype)
+    safe = re.sub(r"[^A-Za-z0-9_-]+", "_", str(reg)).strip("_") or "vehicle"
+    vehicle.image.save(f"{safe}.{ext}", ContentFile(raw), save=True)
+    return True
 
 
 # Cached only long enough to confirm add-vehicle (LOOKUP_TTL_SECONDS). Image URL
