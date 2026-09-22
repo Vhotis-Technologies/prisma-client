@@ -303,7 +303,7 @@ if not _database_url:
 DATABASES = {
     'default': dj_database_url.config(
         default=_database_url,
-        conn_max_age=int(os.getenv('DATABASE_CONN_MAX_AGE', '600')),
+        conn_max_age=int(os.getenv('DATABASE_CONN_MAX_AGE', '0')),
     ),
 }
 
@@ -514,6 +514,8 @@ CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_DEFAULT_QUEUE = 'client_queue'
 CELERY_TASK_DEFAULT_QUEUE = 'client_queue'
+CELERY_WORKER_CONCURRENCY = os.getenv('CELERY_WORKER_CONCURRENCY', '1')
+
 
 # Celery Beat Configuration
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
