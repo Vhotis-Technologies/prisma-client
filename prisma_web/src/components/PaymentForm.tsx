@@ -118,7 +118,6 @@ export default function PaymentForm({
       <button type="submit" className="btn btn-primary btn-block" disabled={!canPay}>
         {busy ? "Processing…" : submitLabel}
       </button>
-      <p className="field-hint">Use Stripe test card 4242 4242 4242 4242, any future expiry, any CVC.</p>
     </form>
   );
 }
