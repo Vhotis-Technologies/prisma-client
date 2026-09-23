@@ -1,10 +1,12 @@
 """
-Django template tags for legal document URLs (privacy policy, terms of service).
+Django template tags for legal document URLs (privacy policy, terms of service)
+and the current calendar year used in email and page footers.
 
 Used in HTML email templates and server-rendered pages so links stay consistent with
 :mod:`main.utils.legal_urls` (environment-specific base URLs).
 """
 from django import template
+from django.utils import timezone
 
 from main.utils.legal_urls import privacy_policy_url, terms_of_service_url
 
@@ -21,3 +23,9 @@ def legal_privacy_url():
 def legal_terms_url():
     """Return the absolute URL for the current terms of service page."""
     return terms_of_service_url()
+
+
+@register.simple_tag
+def current_year():
+    """Return the current calendar year for copyright footers."""
+    return timezone.now().year

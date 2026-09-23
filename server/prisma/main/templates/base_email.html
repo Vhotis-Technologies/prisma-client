@@ -292,7 +292,7 @@
           <div class="footer-links">
             <a href="{% legal_privacy_url %}">Privacy Policy</a><span>|</span><a href="{% legal_terms_url %}">Terms of Service</a>
           </div>
-          <div class="footer-copy">&copy; {{ current_year|default:"202" }} Prisma Car Care. All rights reserved.</div>
+          <div class="footer-copy">&copy; {% current_year %} Prisma Car Care. All rights reserved.</div>
           {% endblock %}
         </div>
       </div>

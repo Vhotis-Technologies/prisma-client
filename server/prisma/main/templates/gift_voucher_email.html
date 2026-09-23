@@ -10,7 +10,7 @@
   {% else %}
     Someone gifted you credit for Prisma Car Care.
   {% endif %}
-  Use the code below in the Prisma Car Care app when you book. This credit applies to eligible services until the voucher is used or expires after <strong>{{ validity_days }} days</strong> from activation.
+  Use the code below in the Prisma Car Care app or on the web at <a href="https://prismavalet.com" class="contact-link">prismavalet.com</a> when you book. This credit applies to eligible services until the voucher is used or expires after <strong>{{ validity_days }} days</strong> from activation.
 </div>
 
 <div class="details-card">
@@ -49,15 +49,15 @@
 
 <div class="reminders-box">
   <div class="contact-title">Important rules</div>
-  <div class="contact-text" style="margin-bottom: 8px;">
-    • This voucher is <strong>not transferable</strong> and may only be used with the account registered to this email address.<br />
-    • You must <strong>download the Prisma Car Care app</strong> to use this voucher.<br />
-    • This voucher can only be used once irrespective of any balance on the account.<br />
-    • Other terms may apply at checkout; see our Terms <a href="{% legal_terms_url %}" target="_blank" rel="noopener noreferrer">of Service</a> for full details.
+  <div class="contact-text" style="margin-bottom: 8px; gap: 4px;">
+    <li>This voucher is <strong>not transferable</strong> and may only be used with the account registered to this email address.</li>
+    <li>You can use this voucher in the <strong>Prisma Car Care app</strong> or on the web at <a href="https://prismavalet.com" class="contact-link">prismavalet.com</a>.</li>
+    <li>This voucher can only be used once irrespective of any balance on the account.</li>
+    <li>Other terms may apply at checkout; see our Terms <a href="{% legal_terms_url %}" target="_blank" rel="noopener noreferrer">of Service</a> for full details.</li>
   </div>
 </div>
 
-<div class="intro-text" style="margin-bottom: 12px;">Get the app</div>
+<div class="intro-text" style="margin-bottom: 12px;">Book in the app or on the web at <a href="https://prismavalet.com" class="contact-link">prismavalet.com</a></div>
 <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-bottom: 20px;">
   <tr>
     <td style="padding-right: 12px; vertical-align: middle;">
@@ -93,16 +93,10 @@
 </div>
 
 <div class="closing">
-  <div class="closing-text">We look forward to seeing you in the app.</div>
+  <div class="closing-text">We look forward to seeing you.</div>
   <div class="signature">
     Best regards,<br />
     <span class="signature-name">The Prisma Car Care Team</span>
   </div>
 </div>
-{% endblock %}
-{% block footer %}
-<div class="footer-links">
-  <a href="{% legal_privacy_url %}">Privacy Policy</a><span>|</span><a href="{% legal_terms_url %}">Terms of Service</a>
-</div>
-<div class="footer-copy">&copy; {{ current_year }} Prisma Car Care. All rights reserved.</div>
 {% endblock %}
