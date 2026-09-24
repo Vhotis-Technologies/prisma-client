@@ -1,9 +1,11 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 import AppShell from "../components/AppShell";
 import BranchAdminDashboard from "../components/BranchAdminDashboard";
 import FleetDashboard from "../components/FleetDashboard";
 import PartnerDashboard from "../components/PartnerDashboard";
+import ReviewDialog, { type ReviewDialogTarget } from "../components/ReviewDialog";
 import { useConsumerDashboard } from "../app-hooks/useDashboard";
 import {
   firstName,
@@ -47,6 +49,7 @@ export default function DashboardPage() {
   const { stats, upcoming, recent, perks, load } = useConsumerDashboard(
     !fleetOwner && !branchAdmin && !partner && !otherBusiness,
   );
+  const [reviewTarget, setReviewTarget] = useState<ReviewDialogTarget | null>(null);
 
   const greeting = firstName(user);
   const loyalty: LoyaltyProgress | undefined =
@@ -182,6 +185,33 @@ export default function DashboardPage() {
                   {recent.data.detailer?.name ? ` · ${recent.data.detailer.name}` : ""}
                   {!recent.data.is_reviewed ? " · Not rated" : recent.data.rating ? ` · ${recent.data.rating}/5` : ""}
                 </p>
+                {!recent.data.is_reviewed && recent.data.booking_reference ? (
+                  <div className="card-actions" style={{ marginTop: "0.75rem" }}>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={() =>
+                        setReviewTarget({
+                          booking_reference: recent.data!.booking_reference,
+                          service_type: recent.data!.service_type,
+                          vehicle_label: recent.data!.vehicle_name,
+                          detailer_name: recent.data!.detailer?.name || null,
+                        })
+                      }
+                    >
+                      Rate service
+                    </button>
+                    <Link to="/history" className="btn btn-secondary">
+                      View history
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="card-actions" style={{ marginTop: "0.75rem" }}>
+                    <Link to="/history" className="btn btn-secondary">
+                      View history
+                    </Link>
+                  </div>
+                )}
               </div>
             ) : null}
           </section>
@@ -204,6 +234,15 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
+
+      <ReviewDialog
+        open={Boolean(reviewTarget)}
+        target={reviewTarget}
+        onClose={() => setReviewTarget(null)}
+        onSubmitted={() => {
+          void load();
+        }}
+      />
     </AppShell>
   );
 }

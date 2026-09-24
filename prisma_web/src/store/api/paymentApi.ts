@@ -5,7 +5,7 @@ import type {
   InvoiceLaterEligibility,
   InvoiceListResponse,
 } from "../../types/invoice";
-import type { GiftVoucherSheetResponse } from "../../types/payment";
+import type { GiftVoucherSheetResponse, TipSheetResponse } from "../../types/payment";
 import type { PaymentConfirmResponse, PaymentSheetResponse } from "../../types/booking";
 import type { UserProfile } from "../../types/user";
 import { getData, postData } from "./client";
@@ -104,6 +104,14 @@ export function createGiftVoucherPaymentSheet(body: {
   validity_days: number;
 }) {
   return postData<GiftVoucherSheetResponse>("/api/v1/payment/create_gift_voucher_payment_sheet/", body);
+}
+
+/** Create a Stripe PaymentIntent to tip a detailer on a completed booking. */
+export function createTipPaymentSheet(body: {
+  booking_reference: string;
+  amount: number;
+}) {
+  return postData<TipSheetResponse>("/api/v1/payment/create_tip_payment_sheet/", body);
 }
 
 export function getBulkInvoiceCheckout(invoiceId: string) {

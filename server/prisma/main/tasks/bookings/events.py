@@ -1,7 +1,8 @@
 """
 Celery tasks to publish booking events to Redis streams for the detailer app.
 
-publish_booking_cancelled, publish_booking_rescheduled, publish_review_to_detailer use STREAM_JOB_EVENTS.
+publish_booking_cancelled, publish_booking_rescheduled, publish_review_to_detailer,
+publish_tip_to_detailer use STREAM_JOB_EVENTS.
 """
 import json
 from decimal import Decimal
@@ -379,3 +380,28 @@ def publish_review_to_detailer(booking_reference, rating, comment=None):
         return f"Review published to detailer: {msg_id}"
     except Exception as e:
         return f"Failed to publish review to detailer: {e}"
+
+
+@shared_task
+def publish_tip_to_detailer(booking_reference, amount, currency='eur'):
+    """
+    Publish ``tip_received`` to the detailer Redis stream after Stripe confirms the tip.
+
+    Args:
+        booking_reference: Completed booking reference.
+        amount: Tip amount in major currency units (e.g. 5.00).
+        currency: ISO currency code (eur/gbp).
+
+    Returns:
+        str: Success message with stream message id, or error text.
+    """
+    try:
+        body = {
+            'booking_reference': booking_reference,
+            'amount': float(amount),
+            'currency': (currency or 'eur').lower(),
+        }
+        msg_id = _stream_job_event("tip_received", body)
+        return f"Tip published to detailer: {msg_id}"
+    except Exception as e:
+        return f"Failed to publish tip to detailer: {e}"

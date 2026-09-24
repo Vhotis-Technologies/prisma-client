@@ -16,6 +16,19 @@ export type GiftVoucherSheetResponse = {
   currency?: string;
 };
 
+export type TipSheetResponse = {
+  paymentIntent: string;
+  paymentIntentId: string;
+  booking_reference: string;
+  tip_amount_cents: number;
+  tip_amount: number;
+  currency?: string;
+  publishableKey?: string;
+  merchantCountryCode?: string;
+  ephemeralKey?: string;
+  customer?: string;
+};
+
 export type GiftVoucherPending = {
   recipientEmail: string;
   amount: number;

@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 import AppShell from "../components/AppShell";
+import ReviewDialog, { type ReviewDialogTarget } from "../components/ReviewDialog";
 import { useServiceHistory } from "../app-hooks/useServiceHistory";
 import { formatDate, formatMoney, formatStatus } from "../lib/format";
 import { dateKey } from "../lib/media";
@@ -21,11 +22,22 @@ function headingFor(isoDay: string): string {
   return formatDate(isoDay);
 }
 
+function toReviewTarget(item: HistoryItem): ReviewDialogTarget {
+  return {
+    booking_reference: item.booking_reference,
+    service_type: item.service_type,
+    vehicle_label: item.vehicle_reg,
+    detailer_name: item.detailer?.name || null,
+  };
+}
+
 export default function HistoryPage() {
   const { user } = useAuth();
   const country = user?.address?.country;
   const { items, loading, error, load } = useServiceHistory();
   const [query, setQuery] = useState("");
+  const [reviewTarget, setReviewTarget] = useState<ReviewDialogTarget | null>(null);
+  const [localRatings, setLocalRatings] = useState<Record<string, number>>({});
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -48,6 +60,15 @@ export default function HistoryPage() {
     }
     return [...map.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1));
   }, [filtered]);
+
+  function isReviewed(item: HistoryItem): boolean {
+    if (localRatings[item.booking_reference]) return true;
+    return Boolean(item.is_reviewed);
+  }
+
+  function displayRating(item: HistoryItem): number {
+    return localRatings[item.booking_reference] || item.rating || 0;
+  }
 
   return (
     <AppShell>
@@ -104,38 +125,64 @@ export default function HistoryPage() {
         <section key={day} className="history-group">
           <h2 className="section-title">{headingFor(day)}</h2>
           <ul className="booking-list">
-            {dayItems.map((item) => (
-              <li key={item.id}>
-                <Link
-                  className="booking-item history-link"
-                  to={`/history/${item.id}`}
-                  state={item}
-                >
-                  <div className="booking-item-top">
-                    <strong>
-                      {item.service_type}
-                      {item.valet_type ? ` · ${item.valet_type}` : ""}
-                    </strong>
-                    <span className={`pill ${item.status === "completed" ? "pill-ok" : "pill-pending"}`}>
-                      {formatStatus(item.status)}
-                    </span>
-                  </div>
-                  <p>{formatDate(dateKey(item.appointment_date))}</p>
-                  <p className="muted">{item.vehicle_reg || "Vehicle"}</p>
-                  <p className="muted">
-                    {[item.address?.address, item.address?.city].filter(Boolean).join(", ") || "Address on file"}
-                  </p>
-                  <p className="booking-meta">
-                    {formatMoney(item.total_amount || 0, country)}
-                    {item.detailer?.name ? ` · ${item.detailer.name}` : ""}
-                    {item.booking_reference ? ` · ${item.booking_reference}` : ""}
-                  </p>
-                </Link>
-              </li>
-            ))}
+            {dayItems.map((item) => {
+              const reviewed = isReviewed(item);
+              const rating = displayRating(item);
+              return (
+                <li key={item.id} className="history-card">
+                  <Link
+                    className="booking-item history-link"
+                    to={`/history/${item.id}`}
+                    state={item}
+                  >
+                    <div className="booking-item-top">
+                      <strong>
+                        {item.service_type}
+                        {item.valet_type ? ` · ${item.valet_type}` : ""}
+                      </strong>
+                      <span className={`pill ${item.status === "completed" ? "pill-ok" : "pill-pending"}`}>
+                        {formatStatus(item.status)}
+                      </span>
+                    </div>
+                    <p>{formatDate(dateKey(item.appointment_date))}</p>
+                    <p className="muted">{item.vehicle_reg || "Vehicle"}</p>
+                    <p className="muted">
+                      {[item.address?.address, item.address?.city].filter(Boolean).join(", ") || "Address on file"}
+                    </p>
+                    <p className="booking-meta">
+                      {formatMoney(item.total_amount || 0, country)}
+                      {item.detailer?.name ? ` · ${item.detailer.name}` : ""}
+                      {item.booking_reference ? ` · ${item.booking_reference}` : ""}
+                      {reviewed && rating > 0 ? ` · ${rating}/5` : " · Not rated"}
+                    </p>
+                  </Link>
+                  {!reviewed && item.booking_reference ? (
+                    <div className="history-card-actions">
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        onClick={() => setReviewTarget(toReviewTarget(item))}
+                      >
+                        Rate service
+                      </button>
+                    </div>
+                  ) : null}
+                </li>
+              );
+            })}
           </ul>
         </section>
       ))}
+
+      <ReviewDialog
+        open={Boolean(reviewTarget)}
+        target={reviewTarget}
+        onClose={() => setReviewTarget(null)}
+        onSubmitted={(bookingReference, rating) => {
+          setLocalRatings((prev) => ({ ...prev, [bookingReference]: rating }));
+          void load();
+        }}
+      />
     </AppShell>
   );
 }

@@ -29,6 +29,7 @@ from main.tasks.bookings.events import (
     publish_booking_reassigned,
     publish_booking_rescheduled,
     publish_review_to_detailer,
+    publish_tip_to_detailer,
 )
 
 # Emails
@@ -74,6 +75,7 @@ __all__ = [
     'publish_booking_reassigned',
     'publish_booking_rescheduled',
     'publish_review_to_detailer',
+    'publish_tip_to_detailer',
     'send_welcome_email',
     'send_booking_confirmation_email',
     'send_bulk_booking_confirmation_email',

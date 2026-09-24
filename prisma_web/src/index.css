@@ -519,6 +519,13 @@ select {
   gap: 1rem;
 }
 
+.welcome-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: center;
+}
+
 #profile,
 #preferences,
 #notifications,
@@ -1629,6 +1636,106 @@ select {
 .history-link:hover {
   border-color: var(--primary);
   box-shadow: 0 0 0 3px var(--primary-soft);
+}
+
+.history-card {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.history-card .history-link {
+  margin: 0;
+}
+
+.history-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  padding: 0 0.15rem;
+}
+
+.review-summary {
+  margin-bottom: 0.35rem;
+}
+
+.review-summary strong {
+  display: block;
+  font-size: 1.05rem;
+}
+
+.review-stars-field {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.review-stars-field legend {
+  margin-bottom: 0.55rem;
+  font-weight: 600;
+}
+
+.review-stars {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.review-star {
+  width: 2.75rem;
+  height: 2.75rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 1.45rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.review-star:hover,
+.review-star.is-selected {
+  border-color: var(--primary);
+  color: #c9a227;
+  background: var(--primary-soft);
+}
+
+.review-star-label {
+  margin: 0.45rem 0 0;
+  font-weight: 600;
+}
+
+.review-tip-field {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.review-tip-field legend {
+  margin-bottom: 0.55rem;
+  font-weight: 600;
+}
+
+.tip-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.tip-preset {
+  min-width: 4.5rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--ink);
+  font-weight: 560;
+  cursor: pointer;
+}
+
+.tip-preset:hover,
+.tip-preset.is-selected {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary);
 }
 
 .kicker a {

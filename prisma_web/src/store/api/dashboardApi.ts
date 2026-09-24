@@ -1,5 +1,5 @@
 import type { PerksSummary, RecentService, UpcomingAppointment, UserStats } from "../../types/dashboard";
-import { getData } from "./client";
+import { getData, patchData } from "./client";
 
 export function fetchUserStats() {
   return getData<UserStats>("/api/v1/dashboard/get_user_stats/");
@@ -17,4 +17,18 @@ export function fetchRecentServices() {
 
 export function fetchPerksSummary() {
   return getData<PerksSummary>("/api/v1/dashboard/get_perks_summary/");
+}
+
+export type SubmitReviewResponse = {
+  message?: string;
+  booking_reference?: string;
+};
+
+/** Submit star rating and optional comment for a completed booking. */
+export function submitReview(body: {
+  booking_reference: string;
+  rating: number;
+  comment?: string;
+}) {
+  return patchData<SubmitReviewResponse>("/api/v1/dashboard/submit_review/", body);
 }

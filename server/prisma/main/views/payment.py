@@ -6,6 +6,7 @@ Payment and Stripe webhook views for Prisma Car Care.
   complimentary Quick Sparkle) that book immediately without Stripe.
 - ``create_reschedule_fee_payment_sheet`` — late reschedule fee PaymentIntent.
 - ``create_gift_voucher_payment_sheet`` — purchase a gift voucher for a recipient email.
+- ``create_tip_payment_sheet`` — tip PaymentIntent for a completed booking.
 - ``create_bulk_order_invoice_later`` — BulkOrder with Stripe Invoice (pay later) + detailer bulk job.
 - ``apply_winner_voucher`` / ``apply_gift_voucher`` — validate codes and return checkout amounts.
 - ``get_bulk_invoice_checkout`` / ``get_my_bulk_invoices`` — fleet/partner bulk invoice pay & list.
@@ -13,7 +14,7 @@ Payment and Stripe webhook views for Prisma Car Care.
 - ``confirm_payment_intent`` / ``check_payment_status`` / ``get_refund_status`` — polling and support.
 
 **StripeWebhookView** (unsigned POST, signature-verified):
-- ``payment_intent.succeeded`` — booking/bulk fulfillment, subscriptions, gift voucher, reschedule fee.
+- ``payment_intent.succeeded`` — booking/bulk fulfillment, subscriptions, gift voucher, tip, reschedule fee.
 - ``payment_intent.payment_failed`` — mark PendingBooking failed.
 - ``invoice.*`` — subscription renewals, bulk invoice paid, reminders (upcoming / will_be_due / overdue).
 - ``customer.subscription.*`` — trial end, plan/status updates, cancellation.
@@ -29,7 +30,7 @@ See docs/BOOKING_FLOW.md for the full booking flow.
 """
 from rest_framework.response import Response
 from rest_framework import status
-from main.tasks import send_push_notification, publish_booking_cancelled, publish_booking_rescheduled
+from main.tasks import send_push_notification, publish_booking_cancelled, publish_booking_rescheduled, publish_tip_to_detailer
 from main.services.NotificationServices import NotificationService
 import stripe
 from django.conf import settings
@@ -1119,6 +1120,7 @@ class PaymentView(APIView):
             zero-amount winner/gift/Quick Sparkle paths skip Stripe and book immediately.
         create_reschedule_fee_payment_sheet (POST) — PaymentIntent for late reschedule fee.
         create_gift_voucher_payment_sheet (POST) — PaymentIntent to purchase a gift voucher.
+        create_tip_payment_sheet (POST) — PaymentIntent to tip a detailer on a completed booking.
         create_bulk_order_invoice_later (POST) — BulkOrder + Stripe Invoice (email pay later).
         apply_winner_voucher (POST) — Validate winner code; return discount and amount due.
         apply_gift_voucher (POST) — Validate gift voucher code; return discount and amount due.
@@ -1141,6 +1143,7 @@ class PaymentView(APIView):
         'apply_winner_voucher': 'apply_winner_voucher',
         'apply_gift_voucher': 'apply_gift_voucher',
         'create_gift_voucher_payment_sheet': 'create_gift_voucher_payment_sheet',
+        'create_tip_payment_sheet': 'create_tip_payment_sheet',
         'get_bulk_invoice_checkout': 'get_bulk_invoice_checkout',
         'get_my_bulk_invoices': 'get_my_bulk_invoices',
         'get_invoice_later_eligibility': 'get_invoice_later_eligibility',
@@ -2022,6 +2025,135 @@ class PaymentView(APIView):
             logger.exception('create_reschedule_fee_payment_sheet failed')
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+    def create_tip_payment_sheet(self, request):
+        """
+        Payment sheet to tip a detailer on a completed booking.
+
+        Creates a PaymentIntent with metadata.type=tip. Webhook records
+        PaymentTransaction(transaction_type=tip) and publishes tip_received to detailer.
+
+        Args:
+            request.data: booking_reference, amount (major units, e.g. 5.00).
+
+        Returns:
+            Response: paymentIntent client secret, tip_amount_cents, currency;
+                400 on invalid amount / booking; 404 if booking not found.
+        """
+        TIP_MIN = Decimal('1.00')
+        TIP_MAX = Decimal('200.00')
+
+        try:
+            booking_reference = (request.data.get('booking_reference') or '').strip()
+            amount_raw = request.data.get('amount')
+            if not booking_reference or amount_raw is None:
+                return Response(
+                    {'error': 'booking_reference and amount are required'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            try:
+                tip_amount = Decimal(str(amount_raw)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            except (InvalidOperation, TypeError, ValueError):
+                return Response(
+                    {'error': 'amount must be a positive decimal'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if tip_amount < TIP_MIN or tip_amount > TIP_MAX:
+                return Response(
+                    {
+                        'error': f'Tip amount must be between {TIP_MIN} and {TIP_MAX}',
+                        'code': 'TIP_AMOUNT_OUT_OF_RANGE',
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            try:
+                booking = BookedAppointment.objects.select_related('address', 'user').get(
+                    booking_reference=booking_reference,
+                    user=request.user,
+                )
+            except BookedAppointment.DoesNotExist:
+                return Response({'error': 'Booking not found'}, status=status.HTTP_404_NOT_FOUND)
+
+            if booking.status != 'completed':
+                return Response(
+                    {'error': 'Tips can only be added for completed services'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            amount_cents = int(
+                (tip_amount * Decimal('100')).quantize(Decimal('1'), rounding=ROUND_HALF_UP)
+            )
+            if amount_cents < 100:
+                return Response(
+                    {'error': 'Tip amount is too small'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            try:
+                address = booking.address
+                if address and (address.country or '').strip() == 'United Kingdom':
+                    currency = 'gbp'
+                    merchant_country_code = 'GB'
+                else:
+                    currency = 'eur'
+                    merchant_country_code = 'IE'
+            except Exception:
+                currency = 'eur'
+                merchant_country_code = 'IE'
+
+            user = User.objects.get(id=request.user.id)
+            if hasattr(user, 'stripe_customer_id') and user.stripe_customer_id:
+                customer = stripe.Customer.retrieve(user.stripe_customer_id)
+            else:
+                customer = stripe.Customer.create(
+                    email=user.email,
+                    name=user.name,
+                    metadata={'user_id': str(user.id)},
+                )
+                if hasattr(user, 'stripe_customer_id'):
+                    user.stripe_customer_id = customer.id
+                    user.save()
+
+            payment_intent = stripe.PaymentIntent.create(
+                amount=amount_cents,
+                currency=currency,
+                customer=customer.id,
+                receipt_email=user.email,
+                automatic_payment_methods={'enabled': True},
+                metadata={
+                    'type': 'tip',
+                    'user_id': str(user.id),
+                    'booking_reference': booking_reference,
+                    'tip_amount_cents': str(amount_cents),
+                },
+                description=f'Tip for booking {booking_reference}',
+            )
+
+            ephemeral_key = stripe.EphemeralKey.create(
+                customer=customer.id,
+                stripe_version='2022-11-15',
+            )
+
+            return Response({
+                'paymentIntent': payment_intent.client_secret,
+                'paymentIntentId': payment_intent.id,
+                'ephemeralKey': ephemeral_key.secret,
+                'customer': customer.id,
+                'booking_reference': booking_reference,
+                'tip_amount_cents': amount_cents,
+                'tip_amount': float(tip_amount),
+                'currency': currency,
+                'publishableKey': getattr(settings, 'STRIPE_PUBLISHABLE_KEY', '') or '',
+                'merchantCountryCode': merchant_country_code,
+            }, status=status.HTTP_200_OK)
+        except stripe.error.StripeError as e:
+            return Response({'error': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
+        except Exception as e:
+            logger.exception('create_tip_payment_sheet failed')
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
     def create_bulk_order_invoice_later(self, request):
         """
         Create a bulk order billed via Stripe Invoice (pay later) and notify the detailer app.
@@ -2290,8 +2422,8 @@ class PaymentView(APIView):
         """
         Poll whether a PaymentIntent was fulfilled by the Stripe webhook.
 
-        Works for bookings, bulk orders, fleet/B2C subscriptions, gift vouchers, and
-        reschedule_fee transactions (any succeeded PaymentTransaction with this intent id).
+        Works for bookings, bulk orders, fleet/B2C subscriptions, gift vouchers,
+        tips, and reschedule_fee transactions (any succeeded PaymentTransaction with this intent id).
         Also reports refunded_slot_unavailable when detailer rejected the slot after charge.
 
         Args:
@@ -2558,6 +2690,10 @@ class StripeWebhookView(APIView):
                     # Gift voucher purchase — issue code and email recipient.
                     if metadata.get('type') == 'gift_voucher':
                         return self._handle_gift_voucher_payment_intent(payment_intent, metadata)
+
+                    # Client tip for a completed booking.
+                    if metadata.get('type') == 'tip':
+                        return self._handle_tip_payment_intent(payment_intent, metadata)
 
                     # Late reschedule fee — apply new slot and record transaction.
                     if metadata.get('type') == 'reschedule_fee':
@@ -3730,7 +3866,96 @@ class StripeWebhookView(APIView):
             logger.exception("reschedule_fee webhook error")
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+    def _handle_tip_payment_intent(self, payment_intent, metadata):
+        """
+        Record a succeeded tip PaymentTransaction and notify the detailer (idempotent by PI id).
 
+        Args:
+            payment_intent: Stripe PaymentIntent dict from the webhook.
+            metadata: Intent metadata (type=tip, booking_reference, user_id, tip_amount_cents).
+
+        Returns:
+            Response: 200 when recorded or already processed; 400/404 on invalid metadata/booking.
+        """
+        try:
+            payment_intent_id = payment_intent.get('id')
+            if not payment_intent_id:
+                return Response({'error': 'Missing payment intent id'}, status=status.HTTP_400_BAD_REQUEST)
+
+            if PaymentTransaction.objects.filter(stripe_payment_intent_id=payment_intent_id).exists():
+                return Response({'status': 'tip already processed'}, status=status.HTTP_200_OK)
+
+            booking_reference = (metadata.get('booking_reference') or '').strip()
+            user_id = metadata.get('user_id')
+            expected_cents_raw = metadata.get('tip_amount_cents')
+            if not booking_reference or not user_id or expected_cents_raw is None:
+                return Response({'error': 'Missing tip metadata'}, status=status.HTTP_400_BAD_REQUEST)
+
+            try:
+                expected_cents = int(expected_cents_raw)
+            except (TypeError, ValueError):
+                return Response({'error': 'Invalid tip_amount_cents'}, status=status.HTTP_400_BAD_REQUEST)
+
+            pi_amount = int(payment_intent.get('amount') or 0)
+            if pi_amount != expected_cents or pi_amount < 100:
+                logger.warning(
+                    "tip PI amount mismatch: got %s expected %s",
+                    pi_amount,
+                    expected_cents,
+                )
+                return Response({'error': 'Invalid payment amount'}, status=status.HTTP_400_BAD_REQUEST)
+
+            try:
+                booking = BookedAppointment.objects.select_related('user').get(
+                    booking_reference=booking_reference,
+                )
+            except BookedAppointment.DoesNotExist:
+                return Response({'error': 'Booking not found'}, status=status.HTTP_404_NOT_FOUND)
+
+            if str(booking.user_id) != str(user_id):
+                return Response({'error': 'Booking user mismatch'}, status=status.HTTP_400_BAD_REQUEST)
+
+            if booking.status != 'completed':
+                if not try_refund_payment_intent(
+                    payment_intent_id, booking_reference, 'tip_booking_not_completed',
+                ):
+                    return Response(
+                        {'error': 'Booking is not completed and tip refund could not be completed'},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    )
+                return Response({'status': 'refunded_booking_not_tippable'}, status=status.HTTP_200_OK)
+
+            payment_method_details = payment_intent.get('payment_method_details', {}) or {}
+            card_details = payment_method_details.get('card', {}) or {}
+            tip_amount = Decimal(pi_amount) / 100
+            currency = (payment_intent.get('currency') or 'eur').lower()
+
+            with transaction.atomic():
+                PaymentTransaction.objects.create(
+                    booking=booking,
+                    user=booking.user,
+                    booking_reference=booking.booking_reference,
+                    stripe_payment_intent_id=payment_intent_id,
+                    transaction_type='tip',
+                    amount=tip_amount,
+                    currency=currency,
+                    last_4_digits=card_details.get('last4'),
+                    card_brand=card_details.get('brand'),
+                    status='succeeded',
+                )
+
+            def _after_commit():
+                publish_tip_to_detailer.delay(
+                    booking.booking_reference,
+                    float(tip_amount),
+                    currency,
+                )
+
+            transaction.on_commit(_after_commit)
+            return Response({'status': 'tip recorded'}, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.exception("tip webhook error")
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def _handle_trial_will_end(self, subscription):
         """

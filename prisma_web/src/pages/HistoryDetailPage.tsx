@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import AppShell from "../components/AppShell";
 import AuthenticatedImage from "../components/AuthenticatedImage";
+import ReviewDialog, { type ReviewDialogTarget } from "../components/ReviewDialog";
 import { useBookingImages } from "../app-hooks/useBookingImages";
 import {
   bookingImageFilename,
@@ -52,10 +53,31 @@ export default function HistoryDetailPage() {
   const [lightbox, setLightbox] = useState<HistoryImage | null>(null);
   const [busy, setBusy] = useState<"download" | "share" | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewedLocally, setReviewedLocally] = useState<{ rating: number } | null>(null);
 
   const current = useMemo(() => imagesFor(images, tab), [images, tab]);
   const canDownload = Boolean(images?.download_allowed);
   const shareSupported = useMemo(() => canShareBookingImage(), []);
+
+  const isReviewed = Boolean(reviewedLocally) || Boolean(fromList?.is_reviewed);
+  const rating = reviewedLocally?.rating || fromList?.rating || 0;
+
+  const reviewTarget: ReviewDialogTarget | null = fromList?.booking_reference
+    ? {
+        booking_reference: fromList.booking_reference,
+        service_type: fromList.service_type,
+        vehicle_label: fromList.vehicle_reg,
+        detailer_name: fromList.detailer?.name || null,
+      }
+    : images?.booking_reference
+      ? {
+          booking_reference: images.booking_reference,
+          service_type: fromList?.service_type || null,
+          vehicle_label: fromList?.vehicle_reg || null,
+          detailer_name: fromList?.detailer?.name || null,
+        }
+      : null;
 
   useEffect(() => {
     if (!lightbox) return;
@@ -124,11 +146,19 @@ export default function HistoryDetailPage() {
               : images?.booking_reference
                 ? `Reference ${images.booking_reference}`
                 : "Before and after photos from this job."}
+            {isReviewed && rating > 0 ? ` · Rated ${rating}/5` : ""}
           </p>
         </div>
-        <Link to="/history" className="btn btn-secondary">
-          Back to history
-        </Link>
+        <div className="welcome-actions">
+          {reviewTarget && !isReviewed ? (
+            <button type="button" className="btn btn-primary" onClick={() => setReviewOpen(true)}>
+              Rate service
+            </button>
+          ) : null}
+          <Link to="/history" className="btn btn-secondary">
+            Back to history
+          </Link>
+        </div>
       </section>
 
       {error ? (
@@ -147,10 +177,11 @@ export default function HistoryDetailPage() {
           </p>
         </section>
       ) : null}
-      
+
       {!loading && images && images.view_only ? (
-        <div className="banner banner-ok" style={{ marginBottom: '1.5rem' }}>
-          View-only mode: downloading and sharing require an active subscription. <Link to="/settings/subscriptions">Subscribe</Link>
+        <div className="banner banner-ok" style={{ marginBottom: "1.5rem" }}>
+          View-only mode: downloading and sharing require an active subscription.{" "}
+          <Link to="/settings/subscriptions">Subscribe</Link>
         </div>
       ) : null}
 
@@ -178,22 +209,17 @@ export default function HistoryDetailPage() {
           {current.length === 0 ? (
             <section className="card">
               <h2>No photos in this set</h2>
-              <p className="muted">The detailer has not uploaded {TABS.find((item) => item.id === tab)?.label.toLowerCase()} photos yet.</p>
+              <p className="muted">
+                The detailer has not uploaded {TABS.find((item) => item.id === tab)?.label.toLowerCase()} photos
+                yet.
+              </p>
             </section>
           ) : (
             <ul className="photo-grid">
               {current.map((photo) => (
                 <li key={photo.id}>
-                  <button
-                    type="button"
-                    className="photo-tile"
-                    onClick={() => setLightbox(photo)}
-                  >
-                    <AuthenticatedImage
-                      imageId={photo.id}
-                      imageUrl={photo.image_url}
-                      alt=""
-                    />
+                  <button type="button" className="photo-tile" onClick={() => setLightbox(photo)}>
+                    <AuthenticatedImage imageId={photo.id} imageUrl={photo.image_url} alt="" />
                   </button>
                 </li>
               ))}
@@ -248,6 +274,15 @@ export default function HistoryDetailPage() {
           </div>
         </div>
       ) : null}
+
+      <ReviewDialog
+        open={reviewOpen}
+        target={reviewTarget}
+        onClose={() => setReviewOpen(false)}
+        onSubmitted={(_ref, nextRating) => {
+          setReviewedLocally({ rating: nextRating });
+        }}
+      />
     </AppShell>
   );
 }
