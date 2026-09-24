@@ -5,7 +5,6 @@ from datetime import datetime
 from decimal import Decimal
 
 from celery import shared_task
-from django.conf import settings
 from django.template.loader import render_to_string
 from django.utils import timezone
 
@@ -46,7 +45,7 @@ def _voucher_email_window_context(voucher) -> dict:
 @shared_task
 def send_winner_voucher_email(voucher_id: str):
     """
-    Email the assigned address with voucher code, credit, validity window, rules, and app links.
+    Email the assigned address with voucher code, credit, validity window, and rules.
 
     Args:
         voucher_id: ``WinnerVoucher`` UUID/string primary key.
@@ -78,8 +77,6 @@ def send_winner_voucher_email(voucher_id: str):
                 'valid_from_display': validity['valid_from_display'],
                 'expires_at_display': validity['expires_at_display'],
                 'days_to_use': validity['days_to_use'],
-                'app_store_url': settings.APP_STORE_URL,
-                'play_store_url': settings.PLAY_STORE_URL,
                 'current_year': datetime.now().year,
             },
         )
@@ -139,8 +136,6 @@ def send_gift_voucher_email(voucher_id: str):
                 "days_to_use": validity["days_to_use"],
                 "purchaser_display": purchaser_display,
                 "validity_days": voucher.validity_days,
-                "app_store_url": settings.APP_STORE_URL,
-                "play_store_url": settings.PLAY_STORE_URL,
                 "current_year": datetime.now().year,
             },
         )
