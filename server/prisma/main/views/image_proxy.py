@@ -4,12 +4,15 @@ Image proxy for booking photos.
 Authenticated ``BookingImageProxyView`` streams the stored photo to users who
 own (or manage) the booking. Public ``GuestBookingImageProxyView`` serves the
 same bytes when a guest results token matches the booking.
+
+GCS photos are loaded with service-account credentials from the stable object
+path so expired signed URLs in ``image_url`` still work.
 """
 from __future__ import annotations
 
 import logging
+from urllib.parse import urlparse
 
-import requests
 from django.http import HttpResponse
 from django_ratelimit.core import is_ratelimited
 from rest_framework import status
@@ -19,11 +22,10 @@ from rest_framework.views import APIView
 
 from main.models import BookedAppointment, BookedAppointmentImage, Fleet, FleetVehicle
 from main.services.guest import get_valid_guest_access_token
+from main.utils.gcs_media import fetch_image_bytes
 from main.utils.ratelimit_helpers import rate_limit_json_response
 
 logger = logging.getLogger(__name__)
-
-IMAGE_FETCH_TIMEOUT = 10  # seconds
 
 TRUTHY_QUERY_VALUES = ('1', 'true', 'yes')
 
@@ -155,20 +157,15 @@ class BookingImageProxyView(APIView):
 
     def _fetch_image(self, url: str) -> bytes:
         """
-        Fetch image bytes from a URL.
+        Fetch image bytes via GCS credentials when possible, else HTTP.
 
         Args:
-            url: Image URL (GCS or other).
+            url: Stored image URL (may include an expired GCS signature).
 
         Returns:
             Raw image bytes.
-
-        Raises:
-            requests.RequestException: On fetch failure.
         """
-        response = requests.get(url, timeout=IMAGE_FETCH_TIMEOUT)
-        response.raise_for_status()
-        return response.content
+        return fetch_image_bytes(url)
 
     def _image_response(self, data: bytes, content_type: str) -> HttpResponse:
         """
@@ -207,7 +204,7 @@ class BookingImageProxyView(APIView):
 
     def _detect_content_type(self, url: str) -> str:
         """
-        Detect content type from URL extension.
+        Detect content type from URL path extension (ignores query string).
 
         Args:
             url: Image URL.
@@ -215,12 +212,13 @@ class BookingImageProxyView(APIView):
         Returns:
             MIME type string.
         """
-        url_lower = url.lower()
-        if url_lower.endswith('.png'):
+        path = urlparse(url).path if "://" in (url or "") else (url or "")
+        path_lower = path.lower().split("?", 1)[0]
+        if path_lower.endswith('.png'):
             return 'image/png'
-        if url_lower.endswith('.gif'):
+        if path_lower.endswith('.gif'):
             return 'image/gif'
-        if url_lower.endswith('.webp'):
+        if path_lower.endswith('.webp'):
             return 'image/webp'
         return 'image/jpeg'
 

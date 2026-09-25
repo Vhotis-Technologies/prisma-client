@@ -3,14 +3,44 @@ Helpers for syncing detailer job photos onto ``BookedAppointmentImage`` rows.
 
 Duplicate detection uses a normalized storage path so relative and absolute URLs
 for the same file are treated as one image (fixes double-sync on after interior).
+
+Ingest strips GCS V4 query signatures so ``image_url`` stays a stable object URL;
+the image proxy re-authenticates at request time.
 """
 from __future__ import annotations
 
-from urllib.parse import unquote, urlparse
+from urllib.parse import unquote, urlparse, urlunparse
 
 from main.models import BookedAppointment, BookedAppointmentImage
 
 _VALID_SEGMENTS = frozenset({"interior", "exterior"})
+
+
+def canonicalize_booking_image_url(url: str) -> str:
+    """
+    Return a stable URL/path suitable for long-term storage.
+
+    Removes query strings and fragments (expired GCS signatures). Absolute
+    ``http(s)`` URLs keep scheme/host/path; relative paths are returned without
+    query params.
+
+    Args:
+        url: Raw image URL from Redis / detailer payload.
+
+    Returns:
+        str: Canonical URL or path, or empty string when input is blank.
+    """
+    raw = (url or "").strip()
+    if not raw:
+        return ""
+
+    parsed = urlparse(raw)
+    if parsed.scheme in ("http", "https") and parsed.netloc:
+        path = unquote(parsed.path or "")
+        return urlunparse((parsed.scheme, parsed.netloc, path, "", "", ""))
+
+    # Relative path or non-http value: drop query/fragment if present.
+    return unquote(raw.split("?", 1)[0].split("#", 1)[0]).strip()
 
 
 def normalize_booking_image_url(url: str) -> str:
@@ -21,7 +51,7 @@ def normalize_booking_image_url(url: str) -> str:
     lowercases the result so ``/media/jobs/...`` and
     ``https://host/detailer/media/jobs/...`` match.
     """
-    url = (url or "").strip()
+    url = canonicalize_booking_image_url(url)
     if not url:
         return ""
 
@@ -51,6 +81,9 @@ def _existing_url_keys(
     for row in BookedAppointmentImage.objects.filter(
         booking=booking, image_type=image_type
     ).only("image_url"):
+        stored = canonicalize_booking_image_url(row.image_url) or row.image_url
+        exact.add(stored)
+        # Also keep raw for matches against older signed rows still in the DB.
         exact.add(row.image_url)
         norm = normalize_booking_image_url(row.image_url)
         if norm:
@@ -61,6 +94,9 @@ def _existing_url_keys(
 def sync_booking_images(booking: BookedAppointment, images, image_type: str) -> int:
     """
     Persist job images from a Redis payload; skip empty URLs and duplicates.
+
+    Stores a signature-free URL (no ``?X-Goog-…``) so later proxy fetches do not
+    depend on expired signed links.
 
     Args:
         booking: Target ``BookedAppointment``.
@@ -79,12 +115,13 @@ def sync_booking_images(booking: BookedAppointment, images, image_type: str) -> 
     for img_data in images:
         if not isinstance(img_data, dict):
             continue
-        url = (img_data.get("image_url") or "").strip()
+        raw_url = (img_data.get("image_url") or "").strip()
+        url = canonicalize_booking_image_url(raw_url)
         if not url:
             continue
 
         norm = normalize_booking_image_url(url)
-        if url in seen_exact or (norm and norm in seen_normalized):
+        if url in seen_exact or raw_url in seen_exact or (norm and norm in seen_normalized):
             continue
 
         segment = _parse_segment(img_data.get("segment"))
