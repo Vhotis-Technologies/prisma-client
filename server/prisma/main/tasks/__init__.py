@@ -3,7 +3,8 @@ Celery task re-exports for main app.
 
 Notifications: send_push_notification, send_service_reminders, send_promotion_expiration,
 check_loyalty_decay, cleanup_expired_pending_bookings, expire_old_transfers,
-send_b2c_subscription_expiry_reminders (implementation in main.tasks.b2c.subscription_tasks).
+send_b2c_subscription_expiry_reminders, expire_b2c_past_due_subscriptions
+(implementation in main.tasks.b2c.subscription_tasks).
 Bookings: publish_booking_cancelled, publish_booking_rescheduled, publish_review_to_detailer.
 Emails: welcome, booking confirmation, promotional, refund, password reset, transfer, subscription, branch admin.
 Fleet: send_trial_subscription_welcome_email, send_branch_admin_invite_email, etc.
@@ -12,7 +13,10 @@ Fleet: send_trial_subscription_welcome_email, send_branch_admin_invite_email, et
 
 # Notifications
 from main.tasks.notifications.push import send_push_notification
-from main.tasks.b2c.subscription_tasks import send_b2c_subscription_expiry_reminders
+from main.tasks.b2c.subscription_tasks import (
+    expire_b2c_past_due_subscriptions,
+    send_b2c_subscription_expiry_reminders,
+)
 from main.tasks.notifications.scheduled import (
     send_service_reminders,
     send_six_hour_booking_reminder_emails,
@@ -69,6 +73,7 @@ __all__ = [
     'check_loyalty_decay',
     'cleanup_expired_pending_bookings',
     'expire_old_transfers',
+    'expire_b2c_past_due_subscriptions',
     'send_b2c_subscription_expiry_reminders',
     'fulfill_paid_booking_on_detailer',
     'publish_booking_cancelled',

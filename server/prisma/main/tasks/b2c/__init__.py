@@ -2,6 +2,7 @@
 
 from main.tasks.b2c.subscription_tasks import (
     create_subscription,
+    expire_b2c_past_due_subscriptions,
     send_b2c_subscription_expiry_reminders,
 )
 from main.tasks.b2c.subscription_emails import (
@@ -17,6 +18,7 @@ from main.tasks.b2c.subscription_emails import (
 
 __all__ = [
     'create_subscription',
+    'expire_b2c_past_due_subscriptions',
     'send_b2c_subscription_expiry_reminders',
     'send_b2c_subscription_cancelled_email',
     'send_b2c_subscription_expiring_soon_email',

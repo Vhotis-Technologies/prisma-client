@@ -126,6 +126,14 @@ class B2CSubcription(models.Model):
     cancellation_reason = models.TextField(blank=True, null=True)
     expiring_notice_sent_for_end_date = models.DateField(null=True, blank=True)
     complimentary_sparkles_used = models.PositiveIntegerField(default=0)
+    grace_period_until = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            'After a failed renewal, subscriber benefits continue until this time; '
+            'then the subscription is marked expired.'
+        ),
+    )
 
     def __str__(self) -> str:
         return f"{self.user} — {self.plan} [{self.status}]"

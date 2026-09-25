@@ -3324,12 +3324,16 @@ class StripeWebhookView(APIView):
                 billing = seed_billing
                 if existing_transaction:
                     subscription.status = 'active'
+                    if subscription_type == 'b2c_subscription':
+                        subscription.grace_period_until = None
                     subscription.save()
                     billing.status = 'paid'
                     billing.save()
                     return Response({'status': 'subscription payment already recorded'}, status=status.HTTP_200_OK)
             elif renewal_already_recorded:
                 subscription.status = 'active'
+                if subscription_type == 'b2c_subscription':
+                    subscription.grace_period_until = None
                 subscription.save()
                 billing_for_invoice.status = 'paid'
                 billing_for_invoice.save()
@@ -3352,6 +3356,7 @@ class StripeWebhookView(APIView):
                 if subscription_type == 'b2c_subscription':
                     subscription.expiring_notice_sent_for_end_date = None
                     subscription.complimentary_sparkles_used = 0
+                    subscription.grace_period_until = None
                 subscription.save()
 
             # Create payment transaction record for subscription
@@ -3407,6 +3412,8 @@ class StripeWebhookView(APIView):
             
             # Update subscription and billing status
             subscription.status = 'active'
+            if subscription_type == 'b2c_subscription':
+                subscription.grace_period_until = None
             subscription.save()
             
             billing.status = 'paid'
@@ -3594,7 +3601,8 @@ class StripeWebhookView(APIView):
                     billing = B2CSubcriptionBilling.objects.get(id=billing_id)
                     if billing.status == 'pending':
                         subscription.status = 'active'
-                        subscription.save(update_fields=['status'])
+                        subscription.grace_period_until = None
+                        subscription.save(update_fields=['status', 'grace_period_until'])
                         billing.status = 'paid'
                         billing.payment = payment_transaction
                         billing.transaction_id = payment_intent_id
@@ -4079,9 +4087,23 @@ class StripeWebhookView(APIView):
                     'unpaid': 'expired',
                 }
                 new_status = status_mapping.get(stripe_status, db_subscription.status)
+                update_fields = []
                 if db_subscription.status != new_status:
                     db_subscription.status = new_status
-                    db_subscription.save(update_fields=['status'])
+                    update_fields.append('status')
+                if new_status == 'active' and db_subscription.grace_period_until is not None:
+                    db_subscription.grace_period_until = None
+                    update_fields.append('grace_period_until')
+                elif new_status == 'past_due':
+                    now = timezone.now()
+                    if (
+                        not db_subscription.grace_period_until
+                        or db_subscription.grace_period_until <= now
+                    ):
+                        db_subscription.grace_period_until = now + timedelta(days=3)
+                        update_fields.append('grace_period_until')
+                if update_fields:
+                    db_subscription.save(update_fields=update_fields)
 
                 # Payment method updates are confirmed from the B2C API (avoids duplicate mail with Stripe).
                 if subscription.get('cancel_at_period_end') and previous_attributes.get(
@@ -4357,8 +4379,15 @@ class StripeWebhookView(APIView):
                         'error': 'Subscription not found'
                     }, status=status.HTTP_404_NOT_FOUND)
                 subscription.status = 'past_due'
-                subscription.save(update_fields=['status'])
-                grace_until = timezone.now() + timedelta(days=3)
+                # Only start a new grace window if one is not already running.
+                now = timezone.now()
+                if (
+                    not subscription.grace_period_until
+                    or subscription.grace_period_until <= now
+                ):
+                    subscription.grace_period_until = now + timedelta(days=3)
+                subscription.save(update_fields=['status', 'grace_period_until'])
+                grace_until = subscription.grace_period_until
                 plan_name = (
                     subscription.plan.tier.name
                     if subscription.plan and subscription.plan.tier

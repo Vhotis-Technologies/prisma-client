@@ -348,6 +348,7 @@ def _subscription_booking_discount_pct(user, *, is_suv: bool = False) -> Decimal
     Active B2C subscription tier discount on the sticker stack (from tier.service_discount_percent).
 
     Sedan plans do not discount SUV/MPV bookings; SUV/MPV plans cover all vehicles.
+    ``past_due`` only counts while ``grace_period_until`` is still in the future.
 
     Args:
         user: Booking user.
@@ -356,18 +357,12 @@ def _subscription_booking_discount_pct(user, *, is_suv: bool = False) -> Decimal
     Returns:
         Decimal: Plan ``get_service_discount_percent`` or 0.
     """
-    from main.models import B2CSubcription
     from main.utils.vehicle_category import plan_covers_booking
 
     if user is None or getattr(user, "is_guest", False):
         return Decimal("0")
 
-    sub = (
-        B2CSubcription.objects.filter(user=user, status__in=["active", "past_due"])
-        .select_related("plan", "plan__tier")
-        .order_by("-start_date")
-        .first()
-    )
+    sub = get_active_b2c_subscription(user)
     if not sub or not getattr(sub, "plan", None):
         return Decimal("0")
     if not plan_covers_booking(sub.plan, is_suv=is_suv):
@@ -621,21 +616,32 @@ def get_loyalty_quick_sparkle_snapshot(user) -> Dict[str, Any]:
 
 def get_active_b2c_subscription(user):
     """
-    Newest active or past_due B2C subscription for ``user``, with plan/tier loaded.
+    Newest B2C subscription that still confers benefits for ``user``.
+
+    Includes ``active`` rows and ``past_due`` rows whose ``grace_period_until``
+    is still in the future. Past-due with a missing or elapsed grace window are
+    ignored (a beat task marks them ``expired``).
 
     Args:
         user: ``User`` instance.
 
     Returns:
-        B2CSubcription | None: Active subscription row or None.
+        B2CSubcription | None: Benefit-eligible subscription row or None.
     """
+    from django.db.models import Q
+
     from main.models import B2CSubcription
 
     if user is None:
         return None
 
+    now = timezone.now()
     return (
-        B2CSubcription.objects.filter(user=user, status__in=["active", "past_due"])
+        B2CSubcription.objects.filter(user=user)
+        .filter(
+            Q(status="active")
+            | Q(status="past_due", grace_period_until__gt=now)
+        )
         .select_related("plan", "plan__tier")
         .order_by("-start_date")
         .first()

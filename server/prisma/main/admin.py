@@ -566,6 +566,7 @@ class B2CSubcriptionAdmin(admin.ModelAdmin):
         'status',
         'start_date',
         'end_date',
+        'grace_period_until',
         'auto_renew',
         'complimentary_sparkles_used',
         'stripe_subscription_id',
@@ -583,6 +584,7 @@ class B2CSubcriptionAdmin(admin.ModelAdmin):
     date_hierarchy = 'start_date'
     fieldsets = (
         ('Subscription', {'fields': ('user', 'plan', 'status', 'start_date', 'end_date', 'auto_renew')}),
+        ('Payment grace', {'fields': ('grace_period_until',)}),
         ('Complimentary Quick Sparkle ledger', {'fields': ('complimentary_sparkles_used',)}),
         ('Stripe', {'fields': ('stripe_subscription_id',)}),
         ('Cancellation', {'fields': ('cancellation_date', 'cancellation_reason'), 'classes': ('collapse',)}),

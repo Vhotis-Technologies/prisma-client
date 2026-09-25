@@ -116,6 +116,23 @@ def sync_local_subscription_from_stripe(subscription) -> dict:
             subscription.status = local_status
             update_fields.append("status")
 
+    if hasattr(subscription, "grace_period_until"):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        now = timezone.now()
+        if subscription.status == "active" and subscription.grace_period_until is not None:
+            subscription.grace_period_until = None
+            if "grace_period_until" not in update_fields:
+                update_fields.append("grace_period_until")
+        elif subscription.status == "past_due" and (
+            not subscription.grace_period_until or subscription.grace_period_until <= now
+        ):
+            subscription.grace_period_until = now + timedelta(days=3)
+            if "grace_period_until" not in update_fields:
+                update_fields.append("grace_period_until")
+
     period_end = stripe_period_end(data) or _timestamp_to_dt(data.get("trial_end"))
     if period_end and subscription.end_date != period_end:
         subscription.end_date = period_end

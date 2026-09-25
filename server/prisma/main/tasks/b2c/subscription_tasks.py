@@ -4,7 +4,35 @@ from celery import shared_task
 from datetime import timedelta
 from dateutil.relativedelta import relativedelta
 
+from django.db.models import Q
 from django.utils import timezone
+
+
+@shared_task(name='main.tasks.expire_b2c_past_due_subscriptions')
+def expire_b2c_past_due_subscriptions():
+    """
+    Mark past_due B2C subscriptions as expired when their 3-day grace window ends.
+
+    Also expires past_due rows with no grace_period_until (should not receive benefits).
+
+    Returns:
+        str: Count of subscriptions expired.
+    """
+    from main.models import B2CSubcription
+
+    try:
+        now = timezone.now()
+        qs = B2CSubcription.objects.filter(status='past_due').filter(
+            Q(grace_period_until__lte=now) | Q(grace_period_until__isnull=True)
+        )
+        updated = qs.update(
+            status='expired',
+            cancellation_date=now,
+            cancellation_reason='Payment grace period expired (3 days)',
+        )
+        return f'B2C past_due subscriptions expired: {updated}'
+    except Exception as e:
+        return f'Failed expire_b2c_past_due_subscriptions: {str(e)}'
 
 
 @shared_task(name='main.tasks.send_b2c_subscription_expiry_reminders')
@@ -24,12 +52,17 @@ def send_b2c_subscription_expiry_reminders():
         now = timezone.now()
         window_end = now + timedelta(days=7)
 
-        qs = B2CSubcription.objects.filter(
-            status__in=('active', 'past_due'),
-            end_date__gte=now,
-            end_date__lte=window_end,
-        ).select_related('user', 'plan', 'plan__tier')
-
+        qs = (
+            B2CSubcription.objects.filter(
+                end_date__gte=now,
+                end_date__lte=window_end,
+            )
+            .filter(
+                Q(status='active')
+                | Q(status='past_due', grace_period_until__gt=now)
+            )
+            .select_related('user', 'plan', 'plan__tier')
+        )
         sent = 0
         for sub in qs:
             user = sub.user

@@ -177,7 +177,14 @@ class B2CSubscriptionView(APIView):
                     'trialEndDate': trial_end.isoformat() if trial_end else None,
                     'isTrialing': is_trialing,
                     'lastPaidOn': last_paid.isoformat() if last_paid else None,
-                    'paymentFailureStatus': None,
+                    'gracePeriodUntil': (
+                        subscription.grace_period_until.isoformat()
+                        if subscription.grace_period_until
+                        else None
+                    ),
+                    'paymentFailureStatus': (
+                        'past_due' if subscription.status == 'past_due' else None
+                    ),
                     'serialized': B2CSubscriptionSerializer(subscription).data,
                 },
             }, status=status.HTTP_200_OK)

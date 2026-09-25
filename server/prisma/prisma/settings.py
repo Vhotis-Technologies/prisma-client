@@ -540,6 +540,10 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'main.tasks.send_b2c_subscription_expiry_reminders',
         'schedule': crontab(hour=7, minute=30),
     },
+    'expire-b2c-past-due-subscriptions': {
+        'task': 'main.tasks.expire_b2c_past_due_subscriptions',
+        'schedule': crontab(minute=15),  # Every hour at :15
+    },
 }
 
 AUTH_USER_MODEL = 'main.User'
