@@ -46,10 +46,19 @@ export function cancelSubscription(isFleetOwner: boolean, cancelAtPeriodEnd: boo
   });
 }
 
-export function abandonIncompleteSubscription(isFleetOwner: boolean, subscriptionId?: string) {
+export function abandonIncompleteSubscription(
+  isFleetOwner: boolean,
+  opts?: string | { subscriptionId?: string; billingId?: string },
+) {
+  const body =
+    typeof opts === "string"
+      ? { subscriptionId: opts }
+      : opts && (opts.subscriptionId || opts.billingId)
+        ? opts
+        : {};
   return postData(
     `${subscriptionApiBase(isFleetOwner)}/abandon_incomplete_subscription/`,
-    subscriptionId ? { subscriptionId } : {},
+    body,
   );
 }
 

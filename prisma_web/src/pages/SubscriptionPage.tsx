@@ -236,10 +236,13 @@ export default function SubscriptionPage() {
     void finishSetup(setupIntentId);
   }, [finishSetup, redirectStatus, setupIntentId]);
 
-  async function abandon(subscriptionId?: string) {
+  async function abandon(subscriptionId?: string, billingId?: string) {
     if (isFleetOwner) return;
     try {
-      await subscriptionApi.abandonIncompleteSubscription(isFleetOwner, subscriptionId);
+      await subscriptionApi.abandonIncompleteSubscription(isFleetOwner, {
+        subscriptionId,
+        billingId,
+      });
     } catch {
       /* non-fatal */
     }
@@ -389,9 +392,18 @@ export default function SubscriptionPage() {
     setOk(null);
     setPendingBillingRow(null);
     try {
-      await subscriptionApi.abandonIncompleteSubscription(false, row.subscription?.id);
+      const result = await subscriptionApi.abandonIncompleteSubscription(false, {
+        subscriptionId: row.subscription?.id,
+        billingId: row.id,
+      });
       clearCheckout();
-      setOk("Incomplete checkout cancelled.");
+      const msg =
+        (result as { message?: string })?.message || "Incomplete checkout cancelled.";
+      if (/no incomplete/i.test(msg)) {
+        setError("Could not find this pending checkout to cancel. Refresh and try again.");
+      } else {
+        setOk(msg);
+      }
       await load();
     } catch (err) {
       setError(authErrorMessage(err, "Could not cancel this checkout."));

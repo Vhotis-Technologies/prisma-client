@@ -63,7 +63,9 @@ interface SubscriptionBillingHistorySectionProps {
     billingId: string;
   }) => void;
   /** B2C only: cancel / abandon a pending checkout. */
-  onCancelPendingBilling?: (subscriptionId?: string) => void;
+  onCancelPendingBilling?: (
+    opts?: string | { subscriptionId?: string; billingId?: string },
+  ) => void;
   busy?: boolean;
 }
 
@@ -107,8 +109,10 @@ const SubscriptionBillingHistorySection: React.FC<
           text: "Cancel checkout",
           style: "destructive",
           onPress: () => {
-            onCancelPendingBilling?.(rec.subscription?.id);
-            // Refresh after a short delay so abandon can complete
+            onCancelPendingBilling?.({
+              subscriptionId: rec.subscription?.id,
+              billingId: String(rec.id),
+            });
             setTimeout(() => {
               void refetch();
             }, 500);

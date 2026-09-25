@@ -240,21 +240,65 @@ class B2CSubscriptionView(APIView):
             status__in=('pending', 'active', 'past_due'),
         ).exists()
 
+    def _resolve_incomplete_checkout(self, user, subscription_id=None, billing_id=None):
+        """
+        Locate an unpaid B2C checkout by pending billing row (preferred) or pending subscription.
+
+        Billing rows can stay ``pending`` after Stripe sync changes the subscription status,
+        so we key off unpaid invoices first.
+
+        Returns:
+            tuple: ``(subscription, billing)`` or ``(None, None)``.
+        """
+        billing = None
+        billing_qs = B2CSubcriptionBilling.objects.filter(
+            subscription__user=user,
+            status='pending',
+        ).select_related('subscription', 'subscription__plan', 'subscription__plan__tier')
+
+        if billing_id:
+            billing = billing_qs.filter(id=billing_id).first()
+        if billing is None and subscription_id:
+            billing = (
+                billing_qs.filter(subscription_id=subscription_id)
+                .order_by('-billing_date')
+                .first()
+            )
+        if billing is None:
+            billing = billing_qs.order_by('-billing_date').first()
+
+        if billing is not None:
+            return billing.subscription, billing
+
+        qs = B2CSubcription.objects.filter(
+            user=user,
+            status__in=('pending', 'past_due'),
+        ).select_related('plan', 'plan__tier')
+        if subscription_id:
+            qs = qs.filter(id=subscription_id)
+        subscription = qs.order_by('-start_date').first()
+        return subscription, None
+
     def abandon_incomplete_subscription(self, request):
         """
-        Remove a pending (unpaid checkout) subscription so the user can start again.
-        Used when the client payment sheet is closed without paying.
+        Remove an unpaid checkout so the user can start again.
+
+        Accepts ``subscriptionId`` and/or ``billingId``. Prefers resolving via a
+        pending billing row so cancel works even when Stripe sync moved the
+        subscription off ``pending``.
         """
         try:
             subscription_id = (
                 request.data.get('subscriptionId')
                 or request.data.get('subscription_id')
             )
-            qs = B2CSubcription.objects.filter(user=request.user, status='pending')
-            if subscription_id:
-                subscription = qs.filter(id=subscription_id).first()
-            else:
-                subscription = qs.order_by('-start_date').first()
+            billing_id = request.data.get('billingId') or request.data.get('billing_id')
+
+            subscription, billing = self._resolve_incomplete_checkout(
+                request.user,
+                subscription_id=subscription_id,
+                billing_id=billing_id,
+            )
 
             if not subscription:
                 return Response(
@@ -271,16 +315,20 @@ class B2CSubscriptionView(APIView):
             now = timezone.now()
             subscription.status = 'cancelled'
             subscription.cancellation_date = now
-            subscription.cancellation_reason = subscription.cancellation_reason or 'Checkout abandoned'
-            subscription.auto_renew = False
-            subscription.save(
-                update_fields=[
-                    'status',
-                    'cancellation_date',
-                    'cancellation_reason',
-                    'auto_renew',
-                ]
+            subscription.cancellation_reason = (
+                subscription.cancellation_reason or 'Checkout abandoned'
             )
+            subscription.auto_renew = False
+            update_fields = [
+                'status',
+                'cancellation_date',
+                'cancellation_reason',
+                'auto_renew',
+            ]
+            if getattr(subscription, 'grace_period_until', None) is not None:
+                subscription.grace_period_until = None
+                update_fields.append('grace_period_until')
+            subscription.save(update_fields=update_fields)
 
             B2CSubcriptionBilling.objects.filter(
                 subscription=subscription,
@@ -338,10 +386,10 @@ class B2CSubscriptionView(APIView):
 
     def resume_pending_subscription_payment(self, request):
         """
-        Re-issue the Stripe payment sheet for an incomplete (pending) B2C checkout.
+        Re-issue the Stripe payment sheet for an incomplete (unpaid) B2C checkout.
 
         Body may include ``subscriptionId`` / ``billingId`` to target a specific row.
-        Used when the user abandoned checkout and wants to finish paying later.
+        Resolves via pending billing first so resume works after Stripe sync.
         """
         try:
             subscription_id = (
@@ -350,10 +398,11 @@ class B2CSubscriptionView(APIView):
             )
             billing_id = request.data.get('billingId') or request.data.get('billing_id')
 
-            qs = B2CSubcription.objects.filter(user=request.user, status='pending')
-            if subscription_id:
-                qs = qs.filter(id=subscription_id)
-            subscription = qs.select_related('plan', 'plan__tier').order_by('-start_date').first()
+            subscription, billing = self._resolve_incomplete_checkout(
+                request.user,
+                subscription_id=subscription_id,
+                billing_id=billing_id,
+            )
             if not subscription:
                 return Response(
                     {'error': 'No pending subscription checkout found.'},
@@ -365,19 +414,25 @@ class B2CSubscriptionView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            billings = B2CSubcriptionBilling.objects.filter(
-                subscription=subscription,
-                status='pending',
-            ).order_by('-billing_date')
-            if billing_id:
-                billing = billings.filter(id=billing_id).first()
-            else:
-                billing = billings.first()
+            if billing is None:
+                billing = (
+                    B2CSubcriptionBilling.objects.filter(
+                        subscription=subscription,
+                        status='pending',
+                    )
+                    .order_by('-billing_date')
+                    .first()
+                )
             if not billing:
                 return Response(
                     {'error': 'No pending invoice found for this subscription.'},
                     status=status.HTTP_404_NOT_FOUND,
                 )
+
+            # Keep local status aligned with an open checkout so UI stays consistent.
+            if subscription.status not in ('pending', 'past_due'):
+                subscription.status = 'pending'
+                subscription.save(update_fields=['status'])
 
             payment_intent = None
             if billing.transaction_id and not str(billing.transaction_id).startswith('inv_'):
@@ -418,8 +473,11 @@ class B2CSubscriptionView(APIView):
             sheet = self._payment_sheet_for_intent(request.user, payment_intent)
             if sheet.get('error') == 'already_paid':
                 subscription.status = 'active'
-                subscription.grace_period_until = None
-                subscription.save(update_fields=['status', 'grace_period_until'])
+                if getattr(subscription, 'grace_period_until', None) is not None:
+                    subscription.grace_period_until = None
+                    subscription.save(update_fields=['status', 'grace_period_until'])
+                else:
+                    subscription.save(update_fields=['status'])
                 billing.status = 'paid'
                 billing.save(update_fields=['status'])
                 return Response(

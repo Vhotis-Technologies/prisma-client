@@ -82,7 +82,7 @@ const b2cSubscriptionApi = createApi({
     /** Discard incomplete checkout subscription after canceled payment. */
     abandonIncompleteB2cSubscription: builder.mutation<
       { message: string },
-      { subscriptionId?: string } | void
+      { subscriptionId?: string; billingId?: string } | void
     >({
       query: (data) => ({
         url: "/api/v1/b2c-subscription/abandon_incomplete_subscription/",

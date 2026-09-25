@@ -185,11 +185,15 @@ export const useB2cSubscriptions = () => {
 
   /** Tell server to drop incomplete subscription after canceled checkout. */
   const abandonIncompleteCheckout = useCallback(
-    async (subscriptionId?: string) => {
+    async (opts?: string | { subscriptionId?: string; billingId?: string }) => {
       try {
-        await abandonIncompleteSubscription(
-          subscriptionId ? { subscriptionId } : {},
-        ).unwrap();
+        const body =
+          typeof opts === "string"
+            ? { subscriptionId: opts }
+            : opts && typeof opts === "object"
+              ? opts
+              : {};
+        await abandonIncompleteSubscription(body).unwrap();
       } catch {
         /* non-fatal: user may clear via Cancel in UI */
       }
@@ -306,10 +310,12 @@ export const useB2cSubscriptions = () => {
 
   /** Cancel a pending (unpaid) checkout from billing history. */
   const handleCancelPendingBilling = useCallback(
-    async (subscriptionId?: string) => {
+    async (
+      opts?: string | { subscriptionId?: string; billingId?: string },
+    ) => {
       setIsProcessingPayment(true);
       try {
-        await abandonIncompleteCheckout(subscriptionId);
+        await abandonIncompleteCheckout(opts);
         showSnackbarWithConfig({
           message: "Incomplete checkout cancelled.",
           type: "success",
