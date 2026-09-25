@@ -275,7 +275,7 @@ export default function ReviewDialog({ open, target, onClose, onSubmitted }: Rev
                   </label>
                 ) : null}
                 <p className="muted" style={{ marginTop: "0.5rem" }}>
-                  Tips go to your detailer after card payment is confirmed.
+                  Tips go to the detailer that provided the service.
                 </p>
               </fieldset>
 

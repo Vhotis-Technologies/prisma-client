@@ -32,6 +32,69 @@ LOYALTY_TIER_THRESHOLDS: Dict[str, int] = {
 LOYALTY_TIER_ORDER: Tuple[str, ...] = ("bronze", "silver", "gold", "platinum")
 
 
+def loyalty_tier_for_completed_count(completed: int) -> str:
+    """
+    Map a completed-booking count to the loyalty tier name.
+
+    Args:
+        completed: Non–Quick Sparkle completed bookings credited to loyalty.
+
+    Returns:
+        str: ``bronze`` | ``silver`` | ``gold`` | ``platinum``.
+    """
+    n = max(0, int(completed or 0))
+    if n >= LOYALTY_TIER_THRESHOLDS["platinum"]:
+        return "platinum"
+    if n >= LOYALTY_TIER_THRESHOLDS["gold"]:
+        return "gold"
+    if n >= LOYALTY_TIER_THRESHOLDS["silver"]:
+        return "silver"
+    return "bronze"
+
+
+def count_loyalty_eligible_completed_bookings(user) -> int:
+    """
+    Count completed bookings that should contribute to loyalty (excludes Quick Sparkle).
+
+    Args:
+        user: ``User`` whose appointments are counted.
+
+    Returns:
+        int: Eligible completed booking count.
+    """
+    from main.models import BookedAppointment
+
+    return (
+        BookedAppointment.objects.filter(user=user, status="completed")
+        .exclude(service_type__name__icontains="quick sparkle")
+        .count()
+    )
+
+
+def heal_loyalty_overcount(loyalty) -> bool:
+    """
+    Clamp ``completed_bookings`` down when it exceeds eligible completed appointments.
+
+    Preserves loyalty-decay resets (counter below actual history stays unchanged).
+    Recomputes ``current_tier`` when the counter is corrected.
+
+    Args:
+        loyalty: ``LoyaltyProgram`` instance.
+
+    Returns:
+        bool: True when the row was updated.
+    """
+    actual = count_loyalty_eligible_completed_bookings(loyalty.user)
+    stored = int(loyalty.completed_bookings or 0)
+    if stored <= actual:
+        return False
+
+    loyalty.completed_bookings = actual
+    loyalty.current_tier = loyalty_tier_for_completed_count(actual)
+    loyalty.save(update_fields=["completed_bookings", "current_tier", "updated_at"])
+    return True
+
+
 def is_quick_sparkle_service_name(name: Optional[str]) -> bool:
     """
     True when the service title is the Prisma Quick Sparkle line.
@@ -617,6 +680,10 @@ def get_loyalty_progress_snapshot(user) -> Dict[str, Any]:
             "next_threshold": int(LOYALTY_TIER_THRESHOLDS[LOYALTY_TIER_ORDER[1]]),
             "washes_to_next": int(LOYALTY_TIER_THRESHOLDS[LOYALTY_TIER_ORDER[1]]),
         }
+
+    # Self-heal inflated counters from historical double-counts (e.g. review saves).
+    heal_loyalty_overcount(loyalty)
+    loyalty.refresh_from_db()
 
     current_tier = (loyalty.current_tier or "bronze").lower()
     if current_tier not in LOYALTY_TIER_THRESHOLDS:
