@@ -273,9 +273,11 @@ export default function GuestResultsPage() {
           role="dialog"
           aria-modal="true"
           aria-label="Service photo"
-          onClick={() => setLightbox(null)}
+          onClick={(event) => {
+            if (event.target === event.currentTarget) setLightbox(null);
+          }}
         >
-          <div className="lightbox-content" onClick={(event) => event.stopPropagation()}>
+          <div className="lightbox-content">
             <img src={guestImageUrl(lightbox.id, raw)} alt="Service photo" />
             <div className="lightbox-actions">
               <a
@@ -285,7 +287,7 @@ export default function GuestResultsPage() {
               >
                 Download
               </a>
-              <p className="lightbox-footer">Tap outside the photo to close</p>
+              <p className="lightbox-footer">Click outside the photo to close</p>
             </div>
           </div>
         </div>

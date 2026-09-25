@@ -229,8 +229,15 @@ export default function HistoryDetailPage() {
       ) : null}
 
       {lightbox ? (
-        <div className="lightbox" role="dialog" aria-modal="true" onClick={() => setLightbox(null)}>
-          <div className="lightbox-content" onClick={(event) => event.stopPropagation()}>
+        <div
+          className="lightbox"
+          role="dialog"
+          aria-modal="true"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) setLightbox(null);
+          }}
+        >
+          <div className="lightbox-content">
             <AuthenticatedImage
               imageId={lightbox.id}
               imageUrl={lightbox.image_url}
@@ -269,7 +276,7 @@ export default function HistoryDetailPage() {
                   {actionError}
                 </p>
               ) : null}
-              <p className="lightbox-footer">Tap outside the photo to close</p>
+              <p className="lightbox-footer">Click outside the photo to close</p>
             </div>
           </div>
         </div>

@@ -1868,7 +1868,7 @@ select {
   flex-direction: column;
   align-items: center;
   gap: 1rem;
-  width: 100%;
+  width: fit-content;
   max-width: min(92vw, 56rem);
   max-height: 100%;
   cursor: default;
@@ -1878,10 +1878,10 @@ select {
 .lightbox-content img,
 .lightbox-image {
   display: block;
-  width: 100%;
+  width: auto;
+  height: auto;
   max-width: min(92vw, 56rem);
   max-height: min(68vh, calc(100dvh - 9rem));
-  min-height: min(42vh, calc(100dvh - 12rem));
   object-fit: contain;
   border-radius: 12px;
   flex-shrink: 1;
