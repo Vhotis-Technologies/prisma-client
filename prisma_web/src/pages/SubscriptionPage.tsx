@@ -93,6 +93,7 @@ export default function SubscriptionPage() {
   const [checkout, setCheckout] = useState<CheckoutState | null>(() => readCheckout());
   const [busy, setBusy] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [pendingBillingRow, setPendingBillingRow] = useState<SubscriptionBillingRow | null>(null);
 
   const selected = plans.find((tier) => tier.id === tierId) || null;
   const price = selected ? tierPrice(selected, vehicleCategory, cycle) : 0;
@@ -340,6 +341,63 @@ export default function SubscriptionPage() {
     await abandon(checkout?.subscriptionId);
     clearCheckout();
     await load();
+  }
+
+  async function resumePendingPayment(row: SubscriptionBillingRow) {
+    if (isFleetOwner) {
+      setError("Resume checkout is only available for personal subscriptions.");
+      return;
+    }
+    if (!hasStripeKey()) {
+      setError("Stripe is not configured. Set VITE_STRIPE_PUBLISHABLE_KEY.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setOk(null);
+    setPendingBillingRow(null);
+    try {
+      const data = await subscriptionApi.resumePendingSubscriptionPayment(false, {
+        subscriptionId: row.subscription?.id,
+        billingId: row.id,
+      });
+      if (!data.paymentSheet?.paymentIntent) {
+        setOk(data.message || "Subscription is already active.");
+        await load();
+        return;
+      }
+      const secret = data.paymentSheet.paymentIntent;
+      const next: CheckoutState = {
+        kind: "payment",
+        clientSecret: secret,
+        paymentIntentId: intentIdFromClientSecret(secret) || undefined,
+        subscriptionId: data.subscription?.id || row.subscription?.id,
+      };
+      sessionStorage.setItem(CHECKOUT_KEY, JSON.stringify(next));
+      setCheckout(next);
+    } catch (err) {
+      setError(authErrorMessage(err, "Could not resume this payment."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function cancelPendingBilling(row: SubscriptionBillingRow) {
+    if (isFleetOwner) return;
+    setBusy(true);
+    setError(null);
+    setOk(null);
+    setPendingBillingRow(null);
+    try {
+      await subscriptionApi.abandonIncompleteSubscription(false, row.subscription?.id);
+      clearCheckout();
+      setOk("Incomplete checkout cancelled.");
+      await load();
+    } catch (err) {
+      setError(authErrorMessage(err, "Could not cancel this checkout."));
+    } finally {
+      setBusy(false);
+    }
   }
 
   const complimentaryMax = complimentary?.max_subscription ?? 0;
@@ -624,21 +682,98 @@ export default function SubscriptionPage() {
           <p className="muted">No invoices yet.</p>
         ) : (
           <ul className="booking-list">
-            {billing.map((row) => (
-              <li key={row.id} className="booking-item">
-                <div className="booking-item-top">
-                  <strong>{billingPlanLabel(row)}</strong>
-                  <span className={`pill ${row.status === "paid" ? "pill-ok" : "pill-pending"}`}>
-                    {formatStatus(row.status) || "—"}
-                  </span>
-                </div>
-                <p>{row.billing_date ? formatDate(isoDay(row.billing_date)) : "—"}</p>
-                <p className="booking-meta">{formatMoney(Number(row.amount || 0), country)}</p>
-              </li>
-            ))}
+            {billing.map((row) => {
+              const isPendingCheckout = row.status === "pending" && !isFleetOwner;
+              return (
+                <li key={row.id} className="booking-item">
+                  <div className="booking-item-top">
+                    <strong>{billingPlanLabel(row)}</strong>
+                    {isPendingCheckout ? (
+                      <button
+                        type="button"
+                        className="pill pill-pending"
+                        style={{ cursor: "pointer", border: "none" }}
+                        onClick={() => setPendingBillingRow(row)}
+                        disabled={busy || Boolean(checkout)}
+                        aria-label="Manage pending subscription payment"
+                      >
+                        {formatStatus(row.status) || "Pending"}
+                      </button>
+                    ) : (
+                      <span className={`pill ${row.status === "paid" ? "pill-ok" : "pill-pending"}`}>
+                        {formatStatus(row.status) || "—"}
+                      </span>
+                    )}
+                  </div>
+                  <p>{row.billing_date ? formatDate(isoDay(row.billing_date)) : "—"}</p>
+                  <p className="booking-meta">{formatMoney(Number(row.amount || 0), country)}</p>
+                  {isPendingCheckout ? (
+                    <p className="muted" style={{ marginTop: "0.35rem", fontSize: "0.9rem" }}>
+                      Tap pending to finish payment or cancel this checkout.
+                    </p>
+                  ) : null}
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>
+
+      {pendingBillingRow ? (
+        <div
+          className="dialog-backdrop"
+          role="presentation"
+          onClick={() => setPendingBillingRow(null)}
+        >
+          <div
+            className="dialog"
+            role="dialog"
+            aria-labelledby="pending-billing-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="dialog-header">
+              <h2 id="pending-billing-title">Pending payment</h2>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => setPendingBillingRow(null)}
+              >
+                Close
+              </button>
+            </div>
+            <div className="dialog-body">
+              <p>
+                Checkout for <strong>{billingPlanLabel(pendingBillingRow)}</strong> was not
+                finished. Complete payment now, or cancel to discard it.
+              </p>
+              <p className="muted">
+                {formatMoney(Number(pendingBillingRow.amount || 0), country)}
+                {pendingBillingRow.billing_date
+                  ? ` · ${formatDate(isoDay(pendingBillingRow.billing_date))}`
+                  : ""}
+              </p>
+              <div className="card-actions">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => void cancelPendingBilling(pendingBillingRow)}
+                  disabled={busy}
+                >
+                  Cancel checkout
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => void resumePendingPayment(pendingBillingRow)}
+                  disabled={busy}
+                >
+                  {busy ? "Working…" : "Complete payment"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {cancelOpen ? (
         <div className="dialog-backdrop" role="presentation" onClick={() => setCancelOpen(false)}>

@@ -46,6 +46,7 @@ class B2CSubscriptionView(APIView):
         'get_subscription_billing_history': 'get_subscription_billing_history',
         'get_setup_intent': 'get_setup_intent',
         'create_subscription': 'create_subscription',
+        'resume_pending_subscription_payment': 'resume_pending_subscription_payment',
         'update_payment_method': 'update_payment_method',
         'cancel_subscription': 'cancel_subscription',
         'abandon_incomplete_subscription': 'abandon_incomplete_subscription',
@@ -288,6 +289,205 @@ class B2CSubscriptionView(APIView):
 
             return Response(
                 {'message': 'Incomplete subscription removed.'},
+                status=status.HTTP_200_OK,
+            )
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    def _payment_sheet_for_intent(self, user, payment_intent):
+        """
+        Build the client payment-sheet payload for an existing PaymentIntent.
+
+        Args:
+            user: Authenticated user (needs Stripe customer id).
+            payment_intent: Stripe PaymentIntent object or id string.
+
+        Returns:
+            dict: ``success`` plus sheet fields, or ``success=False`` with ``error``.
+        """
+        try:
+            if isinstance(payment_intent, str):
+                pi = stripe.PaymentIntent.retrieve(payment_intent)
+            else:
+                pi = payment_intent
+
+            pi_status = getattr(pi, 'status', None) or ''
+            if pi_status == 'succeeded':
+                return {'success': False, 'error': 'already_paid', 'payment_intent': pi}
+
+            if pi_status in ('canceled', 'cancelled'):
+                return {'success': False, 'error': 'payment_canceled'}
+
+            customer_id = getattr(user, 'stripe_customer_id', None) or getattr(pi, 'customer', None)
+            if not customer_id:
+                return {'success': False, 'error': 'Missing Stripe customer for this payment.'}
+
+            ephemeral_key = stripe.EphemeralKey.create(
+                customer=customer_id,
+                stripe_version='2022-11-15',
+            )
+            return {
+                'success': True,
+                'payment_intent': pi.client_secret,
+                'ephemeral_key': ephemeral_key.secret,
+                'customer': customer_id,
+                'payment_intent_id': pi.id,
+            }
+        except Exception as exc:
+            return {'success': False, 'error': str(exc)}
+
+    def resume_pending_subscription_payment(self, request):
+        """
+        Re-issue the Stripe payment sheet for an incomplete (pending) B2C checkout.
+
+        Body may include ``subscriptionId`` / ``billingId`` to target a specific row.
+        Used when the user abandoned checkout and wants to finish paying later.
+        """
+        try:
+            subscription_id = (
+                request.data.get('subscriptionId')
+                or request.data.get('subscription_id')
+            )
+            billing_id = request.data.get('billingId') or request.data.get('billing_id')
+
+            qs = B2CSubcription.objects.filter(user=request.user, status='pending')
+            if subscription_id:
+                qs = qs.filter(id=subscription_id)
+            subscription = qs.select_related('plan', 'plan__tier').order_by('-start_date').first()
+            if not subscription:
+                return Response(
+                    {'error': 'No pending subscription checkout found.'},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            if not subscription.stripe_subscription_id:
+                return Response(
+                    {'error': 'This checkout has no Stripe subscription to resume.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            billings = B2CSubcriptionBilling.objects.filter(
+                subscription=subscription,
+                status='pending',
+            ).order_by('-billing_date')
+            if billing_id:
+                billing = billings.filter(id=billing_id).first()
+            else:
+                billing = billings.first()
+            if not billing:
+                return Response(
+                    {'error': 'No pending invoice found for this subscription.'},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            payment_intent = None
+            if billing.transaction_id and not str(billing.transaction_id).startswith('inv_'):
+                try:
+                    payment_intent = stripe.PaymentIntent.retrieve(billing.transaction_id)
+                except stripe.error.InvalidRequestError:
+                    payment_intent = None
+
+            if payment_intent is None:
+                stripe_sub = stripe.Subscription.retrieve(
+                    subscription.stripe_subscription_id,
+                    expand=['latest_invoice.payment_intent'],
+                )
+                latest_invoice = stripe_sub.latest_invoice
+                if latest_invoice:
+                    invoice = (
+                        latest_invoice
+                        if not isinstance(latest_invoice, str)
+                        else stripe.Invoice.retrieve(
+                            latest_invoice, expand=['payment_intent']
+                        )
+                    )
+                    payment_intent = getattr(invoice, 'payment_intent', None)
+                    if isinstance(payment_intent, str):
+                        payment_intent = stripe.PaymentIntent.retrieve(payment_intent)
+
+            if payment_intent is None:
+                return Response(
+                    {
+                        'error': (
+                            'Could not find an open payment for this checkout. '
+                            'Cancel it and start a new subscription.'
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            sheet = self._payment_sheet_for_intent(request.user, payment_intent)
+            if sheet.get('error') == 'already_paid':
+                subscription.status = 'active'
+                subscription.grace_period_until = None
+                subscription.save(update_fields=['status', 'grace_period_until'])
+                billing.status = 'paid'
+                billing.save(update_fields=['status'])
+                return Response(
+                    {
+                        'message': 'Payment already completed. Subscription is active.',
+                        'subscription': {
+                            'id': str(subscription.id),
+                            'currentPlan': (
+                                subscription.plan.tier.name
+                                if subscription.plan and subscription.plan.tier
+                                else 'Subscription'
+                            ),
+                            'status': 'active',
+                            'renewsOn': (
+                                subscription.end_date.isoformat()
+                                if subscription.end_date
+                                else None
+                            ),
+                            'billingCycle': subscription.plan.billing_cycle,
+                            'vehicleCategory': subscription.plan.vehicle_category,
+                        },
+                    },
+                    status=status.HTTP_200_OK,
+                )
+
+            if not sheet.get('success'):
+                return Response(
+                    {
+                        'error': sheet.get('error')
+                        or 'Could not resume payment for this checkout.'
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if sheet.get('payment_intent_id') and billing.transaction_id != sheet['payment_intent_id']:
+                billing.transaction_id = sheet['payment_intent_id']
+                billing.save(update_fields=['transaction_id'])
+
+            return Response(
+                {
+                    'message': 'Complete payment to activate your subscription.',
+                    'subscription': {
+                        'id': str(subscription.id),
+                        'currentPlan': (
+                            subscription.plan.tier.name
+                            if subscription.plan and subscription.plan.tier
+                            else 'Subscription'
+                        ),
+                        'status': 'pending',
+                        'renewsOn': (
+                            subscription.end_date.isoformat()
+                            if subscription.end_date
+                            else None
+                        ),
+                        'billingCycle': subscription.plan.billing_cycle,
+                        'vehicleCategory': subscription.plan.vehicle_category,
+                    },
+                    'paymentSheet': {
+                        'paymentIntent': sheet['payment_intent'],
+                        'ephemeralKey': sheet['ephemeral_key'],
+                        'customer': sheet['customer'],
+                    },
+                    'billing': {
+                        'id': str(billing.id),
+                        'transaction_id': billing.transaction_id,
+                        'status': billing.status,
+                    },
+                },
                 status=status.HTTP_200_OK,
             )
         except Exception as e:

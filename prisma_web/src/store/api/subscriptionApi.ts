@@ -53,6 +53,16 @@ export function abandonIncompleteSubscription(isFleetOwner: boolean, subscriptio
   );
 }
 
+export function resumePendingSubscriptionPayment(
+  isFleetOwner: boolean,
+  body?: { subscriptionId?: string; billingId?: string },
+) {
+  return postData<CreateSubscriptionResponse>(
+    `${subscriptionApiBase(isFleetOwner)}/resume_pending_subscription_payment/`,
+    body || {},
+  );
+}
+
 export function updateSubscriptionPaymentMethod(isFleetOwner: boolean, paymentMethodId: string) {
   return postData(`${subscriptionApiBase(isFleetOwner)}/update_payment_method/`, {
     payment_method_id: paymentMethodId,

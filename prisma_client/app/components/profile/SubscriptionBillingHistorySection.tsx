@@ -4,6 +4,8 @@ import {
   StyleSheet,
   ActivityIndicator,
   ScrollView,
+  Pressable,
+  Alert,
 } from "react-native";
 import StyledText from "@/app/components/helpers/StyledText";
 import { useGetSubscriptionBillingHistoryQuery } from "@/app/store/api/subscriptionApi";
@@ -15,6 +17,7 @@ type LooseBillingRecord = {
   billing_date?: string;
   status?: string;
   subscription?: {
+    id?: string;
     plan?: {
       name?: string;
       tier?: { name?: string };
@@ -54,6 +57,14 @@ interface SubscriptionBillingHistorySectionProps {
   primaryColor: string;
   errorColor: string;
   mutedColor: string;
+  /** B2C only: resume Stripe checkout for a pending billing row. */
+  onResumePendingPayment?: (opts: {
+    subscriptionId?: string;
+    billingId: string;
+  }) => void;
+  /** B2C only: cancel / abandon a pending checkout. */
+  onCancelPendingBilling?: (subscriptionId?: string) => void;
+  busy?: boolean;
 }
 
 const SubscriptionBillingHistorySection: React.FC<
@@ -65,6 +76,9 @@ const SubscriptionBillingHistorySection: React.FC<
   primaryColor,
   errorColor,
   mutedColor,
+  onResumePendingPayment,
+  onCancelPendingBilling,
+  busy = false,
 }) => {
   const fleetQuery = useGetSubscriptionBillingHistoryQuery(undefined, {
     skip: !isFleetOwner,
@@ -73,12 +87,45 @@ const SubscriptionBillingHistorySection: React.FC<
     skip: isFleetOwner,
   });
 
-  const { data, isLoading, isError } = isFleetOwner ? fleetQuery : b2cQuery;
+  const { data, isLoading, isError, refetch } = isFleetOwner
+    ? fleetQuery
+    : b2cQuery;
 
   const rows = useMemo(
     () => (Array.isArray(data) ? (data as LooseBillingRecord[]) : []),
     [data],
   );
+
+  const openPendingActions = (rec: LooseBillingRecord) => {
+    if (isFleetOwner || busy) return;
+    Alert.alert(
+      "Pending payment",
+      `Checkout for ${planSubtitle(rec)} was not finished. Complete payment now, or cancel to discard it.`,
+      [
+        { text: "Not now", style: "cancel" },
+        {
+          text: "Cancel checkout",
+          style: "destructive",
+          onPress: () => {
+            onCancelPendingBilling?.(rec.subscription?.id);
+            // Refresh after a short delay so abandon can complete
+            setTimeout(() => {
+              void refetch();
+            }, 500);
+          },
+        },
+        {
+          text: "Complete payment",
+          onPress: () => {
+            onResumePendingPayment?.({
+              subscriptionId: rec.subscription?.id,
+              billingId: String(rec.id),
+            });
+          },
+        },
+      ],
+    );
+  };
 
   return (
     <View style={[styles.card, { borderColor }]}>
@@ -120,15 +167,26 @@ const SubscriptionBillingHistorySection: React.FC<
             const st = rec.status ?? "";
             const paid = st === "paid";
             const failed = st === "failed";
+            const pending = st === "pending" && !isFleetOwner;
             const statusTone = paid
               ? primaryColor
               : failed
                 ? errorColor
                 : mutedColor;
+            const RowWrapper = pending ? Pressable : View;
+            const rowProps = pending
+              ? {
+                  onPress: () => openPendingActions(rec),
+                  disabled: busy,
+                  accessibilityRole: "button" as const,
+                  accessibilityLabel: "Manage pending subscription payment",
+                }
+              : {};
             return (
-              <View
+              <RowWrapper
                 key={String(rec.id)}
                 style={[styles.row, { borderTopColor: borderColor }]}
+                {...rowProps}
               >
                 <View style={styles.rowMain}>
                   <StyledText
@@ -145,21 +203,35 @@ const SubscriptionBillingHistorySection: React.FC<
                   >
                     {dt}
                   </StyledText>
+                  {pending ? (
+                    <StyledText
+                      variant="labelSmall"
+                      style={{ color: primaryColor, marginTop: 2 }}
+                    >
+                      Tap to finish payment or cancel
+                    </StyledText>
+                  ) : null}
                 </View>
                 <View style={styles.rowEnd}>
                   <StyledText variant="bodyMedium" style={{ color: textColor }}>
                     {Number.isFinite(amt) ? formatEuro(amt) : "—"}
                   </StyledText>
-                  <StyledText variant="labelSmall" style={{ color: statusTone }}>
+                  <StyledText
+                    variant="labelSmall"
+                    style={{
+                      color: pending ? primaryColor : statusTone,
+                      textDecorationLine: pending ? "underline" : "none",
+                    }}
+                  >
                     {statusLabel(st)}
                   </StyledText>
                 </View>
-              </View>
+              </RowWrapper>
             );
           })}
         </ScrollView>
       ) : null}
-     </View>
+    </View>
   );
 };
 

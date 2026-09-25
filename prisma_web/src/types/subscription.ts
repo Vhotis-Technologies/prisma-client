@@ -80,7 +80,10 @@ export type SubscriptionBillingRow = {
   amount?: number | string;
   billing_date?: string;
   status?: string;
+  transaction_id?: string | null;
   subscription?: {
+    id?: string;
+    status?: string;
     plan?: {
       name?: string;
       billing_cycle?: string;

@@ -82,6 +82,13 @@ const SubscriptionPlanScreen = () => {
     handleUpdatePaymentMethod,
   } = isFleetOwner ? fleetHook : b2cHook;
 
+  const handleResumePendingPayment = isFleetOwner
+    ? undefined
+    : b2cHook.handleResumePendingPayment;
+  const handleCancelPendingBilling = isFleetOwner
+    ? undefined
+    : b2cHook.handleCancelPendingBilling;
+
   const selectedVehicleCategory = isFleetOwner
     ? undefined
     : b2cHook.selectedVehicleCategory;
@@ -444,6 +451,9 @@ const SubscriptionPlanScreen = () => {
           primaryColor={primaryColor}
           errorColor={errorColor}
           mutedColor={mutedColor}
+          onResumePendingPayment={handleResumePendingPayment}
+          onCancelPendingBilling={handleCancelPendingBilling}
+          busy={isProcessingPayment}
         />
 
         {isLoadingPlans ? (

@@ -92,6 +92,19 @@ const b2cSubscriptionApi = createApi({
       invalidatesTags: ["B2cSubscription", "B2cBilling"],
     }),
 
+    /** Re-open Stripe payment sheet for a pending (unpaid) B2C checkout. */
+    resumePendingB2cSubscriptionPayment: builder.mutation<
+      CreateSubscriptionResponse,
+      { subscriptionId?: string; billingId?: string } | void
+    >({
+      query: (data) => ({
+        url: "/api/v1/b2c-subscription/resume_pending_subscription_payment/",
+        method: "POST",
+        data: data && typeof data === "object" ? data : {},
+      }),
+      invalidatesTags: ["B2cSubscription", "B2cBilling"],
+    }),
+
     /** Attach a new default payment method to the B2C subscription. */
     updateB2cPaymentMethod: builder.mutation<
       { message: string },
@@ -125,6 +138,7 @@ export const {
   useGetB2cBillingHistoryQuery,
   useCancelB2cSubscriptionMutation,
   useAbandonIncompleteB2cSubscriptionMutation,
+  useResumePendingB2cSubscriptionPaymentMutation,
   useUpdateB2cPaymentMethodMutation,
   useGetB2cSetupIntentQuery,
   useLazyGetB2cSetupIntentQuery,

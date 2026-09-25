@@ -10,6 +10,7 @@ import {
   useCreateB2cSubscriptionMutation,
   useCancelB2cSubscriptionMutation,
   useAbandonIncompleteB2cSubscriptionMutation,
+  useResumePendingB2cSubscriptionPaymentMutation,
   useUpdateB2cPaymentMethodMutation,
   useLazyGetB2cSetupIntentQuery,
 } from "@/app/store/api/b2cSubscriptionApi";
@@ -78,6 +79,8 @@ export const useB2cSubscriptions = () => {
   const [cancelSubscription] = useCancelB2cSubscriptionMutation();
   const [abandonIncompleteSubscription] =
     useAbandonIncompleteB2cSubscriptionMutation();
+  const [resumePendingSubscriptionPayment] =
+    useResumePendingB2cSubscriptionPaymentMutation();
   const [updatePaymentMethod] = useUpdateB2cPaymentMethodMutation();
   const [getSetupIntent] = useLazyGetB2cSetupIntentQuery();
 
@@ -193,6 +196,140 @@ export const useB2cSubscriptions = () => {
       await refetchSubscription();
     },
     [abandonIncompleteSubscription, refetchSubscription],
+  );
+
+  /**
+   * Resume Stripe checkout for a pending billing row without creating a new subscription.
+   * Dismissing the sheet leaves the pending checkout intact (unlike first-time subscribe).
+   */
+  const handleResumePendingPayment = useCallback(
+    async (opts?: { subscriptionId?: string; billingId?: string }) => {
+      setIsProcessingPayment(true);
+      try {
+        const response = (await resumePendingSubscriptionPayment(
+          opts || {},
+        ).unwrap()) as CreateSubscriptionResponse;
+
+        if (!response.paymentSheet?.paymentIntent) {
+          showSnackbarWithConfig({
+            message: response.message ?? "Subscription is already active.",
+            type: "success",
+            duration: 3000,
+          });
+          await refetchSubscription();
+          return;
+        }
+
+        const paymentSecret = response.paymentSheet.paymentIntent;
+        const initialized = await initializeSubscriptionPaymentSheet(
+          paymentSecret,
+          response.paymentSheet.ephemeralKey,
+          response.paymentSheet.customer,
+        );
+        if (!initialized) {
+          setIsProcessingPayment(false);
+          return;
+        }
+
+        const { error } = await presentPaymentSheet();
+        if (error) {
+          const err = error as { code?: string; message?: string };
+          if (err.code === "Canceled") {
+            showSnackbarWithConfig({
+              message: "You can finish this payment anytime from billing history.",
+              type: "info",
+              duration: 4000,
+            });
+          } else {
+            showSnackbarWithConfig({
+              message: `Payment failed: ${err.message}`,
+              type: "error",
+              duration: 5000,
+            });
+          }
+          return;
+        }
+
+        const paymentIntentId =
+          response.billing?.transaction_id ?? paymentSecret.split("_secret_")[0];
+        showSnackbarWithConfig({
+          message: "Payment successful! Activating subscription...",
+          type: "success",
+          duration: 3000,
+        });
+        try {
+          const confirmation = await waitForPaymentConfirmation(
+            paymentIntentId,
+            60000,
+            2500,
+          );
+          if (confirmation.confirmed) {
+            await refetchSubscription();
+            showSnackbarWithConfig({
+              message: "Subscription activated successfully!",
+              type: "success",
+              duration: 3000,
+            });
+          }
+        } catch {
+          await refetchSubscription();
+          showSnackbarWithConfig({
+            message:
+              "Payment received. Subscription is being activated. Please check back shortly.",
+            type: "info",
+            duration: 5000,
+          });
+        }
+      } catch (error: unknown) {
+        const err = error as { data?: { error?: string }; message?: string };
+        showSnackbarWithConfig({
+          message:
+            err?.data?.error ??
+            err?.message ??
+            "Could not resume this payment. Please try again.",
+          type: "error",
+          duration: 5000,
+        });
+      } finally {
+        setIsProcessingPayment(false);
+      }
+    },
+    [
+      resumePendingSubscriptionPayment,
+      initializeSubscriptionPaymentSheet,
+      presentPaymentSheet,
+      refetchSubscription,
+      showSnackbarWithConfig,
+      waitForPaymentConfirmation,
+    ],
+  );
+
+  /** Cancel a pending (unpaid) checkout from billing history. */
+  const handleCancelPendingBilling = useCallback(
+    async (subscriptionId?: string) => {
+      setIsProcessingPayment(true);
+      try {
+        await abandonIncompleteCheckout(subscriptionId);
+        showSnackbarWithConfig({
+          message: "Incomplete checkout cancelled.",
+          type: "success",
+          duration: 3000,
+        });
+      } catch (error: unknown) {
+        const err = error as { data?: { error?: string }; message?: string };
+        showSnackbarWithConfig({
+          message:
+            err?.data?.error ??
+            err?.message ??
+            "Could not cancel this checkout.",
+          type: "error",
+          duration: 5000,
+        });
+      } finally {
+        setIsProcessingPayment(false);
+      }
+    },
+    [abandonIncompleteCheckout, showSnackbarWithConfig],
   );
 
   /** Create B2C subscription and present Stripe payment sheet when required. */
@@ -614,6 +751,8 @@ export const useB2cSubscriptions = () => {
     handleVehicleCategoryChange,
     handleStartVehicleClassChange,
     handleSubscribe,
+    handleResumePendingPayment,
+    handleCancelPendingBilling,
     handleCancelSubscription,
     handleUpdatePaymentMethod,
   };
