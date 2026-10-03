@@ -22,7 +22,8 @@ def get_partner_for_user(user):
     attr = ReferralAttribution.objects.filter(referred_user=user).first()
     if attr is None:
         return None
-    # Expired attributions no longer count for commission or offers.
+    # New partner links leave expires_at empty so commission is lifetime.
+    # A set expires_at still ends commission once that time has passed.
     if attr.expires_at is not None and attr.expires_at < timezone.now():
         return None
     return attr.partner

@@ -247,8 +247,9 @@ def apply_guest_referral(user: User, referral_code: Optional[str]) -> None:
     """
     Attach an optional referral code to a guest shadow user. No password is set.
 
-    Matches registration: a partner code (``DP`` prefix) creates a 60-day
-    ``ReferralAttribution`` and a 40% ``Promotions`` row for later bookings.
+    Matches registration: a partner code (``DP`` prefix) creates a lifetime
+    ``ReferralAttribution`` (commission from the first completed booking) and a
+    20% ``Promotions`` row that lasts 60 days.
     Any other code sets ``User.referred_by`` and a ``Referral`` row. The
     referrer's reward still waits until this guest has €100 of completed,
     paid bookings.
@@ -287,18 +288,20 @@ def apply_guest_referral(user: User, referral_code: Optional[str]) -> None:
         partner_email = (getattr(partner.user, "email", None) or "").strip().lower()
         if partner_email and partner_email == email:
             raise GuestReferralInvalid("You cannot use your own referral code")
-        # Same 60-day window registration uses. Does not change this payment.
+        # Empty expires_at: commission is lifetime and starts on the first completed booking.
+        # The promotion below is the only 60-day limit, and it does not apply to this wash.
         ReferralAttribution.objects.create(
             referred_user=user,
             partner=partner,
             source="partner",
-            expires_at=timezone.now() + timedelta(days=60),
+            attribution_type="lifetime",
+            expires_at=None,
         )
         Promotions.objects.create(
             user=user,
             title="Partner Referral Discount",
-            description=f"40% off washes for 60 days (referred by {partner.business_name})",
-            discount_percentage=40,
+            description=f"20% off washes for 60 days (referred by {partner.business_name})",
+            discount_percentage=20,
             valid_until=(timezone.now() + timedelta(days=60)).date(),
             is_active=True,
             terms_conditions=(

@@ -216,19 +216,21 @@ class AuthenticationView(CreateAPIView):
                 from ..models import PartnerMetricsCache
                 PartnerMetricsCache.objects.create(partner=partner)
 
-            # Create ReferralAttribution if referred by partner (after user exists)
+            # Lifetime attribution so partner commission starts on the first completed
+            # booking and does not expire. The 20% promotion is the 60-day customer discount.
             if referrer_partner:
                 ReferralAttribution.objects.create(
                     referred_user=user,
                     partner=referrer_partner,
                     source='partner',
-                    expires_at=timezone.now() + timedelta(days=60)
+                    attribution_type='lifetime',
+                    expires_at=None,
                 )
                 Promotions.objects.create(
                     user=user,
                     title="Partner Referral Discount",
-                    description=f"40% off washes for 60 days (referred by {referrer_partner.business_name})",
-                    discount_percentage=40,
+                    description=f"20% off washes for 60 days (referred by {referrer_partner.business_name})",
+                    discount_percentage=20,
                     valid_until=(timezone.now() + timedelta(days=60)).date(),
                     is_active=True,
                     terms_conditions="Valid for 60 days from signup. Partner referral. Cannot be combined with other offers.",
