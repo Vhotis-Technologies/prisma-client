@@ -151,6 +151,8 @@ export default function GuestBookPage() {
   const [contactName, setContactName] = useState("");
   const [contactEmail, setContactEmail] = useState("");
   const [contactPhone, setContactPhone] = useState("");
+  /** Optional. Sent only with payment. It does not change the guest quote. */
+  const [referralCode, setReferralCode] = useState("");
 
   const [quote, setQuote] = useState<BookingQuote | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
@@ -288,6 +290,7 @@ export default function GuestBookPage() {
     if (!service) return;
     setQuoteLoading(true);
     try {
+      // Referral code is not sent here. This wash stays at the anonymous list price.
       const next = await quoteGuestBooking({
         service_type_id: asId(service.id),
         addon_ids: selectedAddons.map((item) => asId(item.id)),
@@ -455,6 +458,8 @@ export default function GuestBookPage() {
     setPaying(true);
     setError(null);
     const bookingReference = newBookingReference();
+    // Recorded on the shadow user at payment. Omitted when blank. Does not change amount.
+    const referral = referralCode.trim().toUpperCase();
     try {
       const { bookingData, detailerData } = buildCheckoutPayloads({
         user: { name: contactName.trim(), email: contactEmail.trim(), phone: contactPhone.trim() },
@@ -493,6 +498,7 @@ export default function GuestBookPage() {
         email: contactEmail.trim(),
         phone: contactPhone.trim(),
         lookup_token: lookupToken,
+        ...(referral ? { referral_code: referral } : {}),
         amount: Math.round(amountDue * 100),
         booking_reference: bookingReference,
         booking_data: bookingData,
@@ -786,6 +792,18 @@ export default function GuestBookPage() {
             />
           </label>
           <label className="field">
+            <span>Referral code (optional)</span>
+            <input
+              value={referralCode}
+              onChange={(e) => setReferralCode(e.target.value)}
+              autoCapitalize="characters"
+              autoComplete="off"
+              placeholder="If you have one"
+              maxLength={12}
+            />
+            <p className="muted">Saved with this booking. It does not change today’s price.</p>
+          </label>
+          <label className="field">
             <span>Special instructions (optional)</span>
             <textarea
               rows={3}
@@ -839,6 +857,12 @@ export default function GuestBookPage() {
                     {contactName} · {contactEmail}
                   </dd>
                 </div>
+                {referralCode.trim() ? (
+                  <div>
+                    <dt>Referral code</dt>
+                    <dd>{referralCode.trim().toUpperCase()}</dd>
+                  </div>
+                ) : null}
                 {selectedAddons.length > 0 ? (
                   <div>
                     <dt>Add-ons</dt>

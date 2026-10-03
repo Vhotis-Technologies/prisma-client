@@ -39,6 +39,19 @@ PLATE_BLOCK_MESSAGES = {
 }
 
 
+class GuestReferralInvalid(Exception):
+    """Raised when a guest checkout referral code cannot be accepted."""
+
+    code = "invalid_referral"
+
+    def __init__(self, message: str):
+        """
+        Args:
+            message: Client-facing reason the code was rejected.
+        """
+        super().__init__(message)
+
+
 class GuestEmailInUse(Exception):
     """Raised when a guest checkout email already belongs to a registered account."""
 
@@ -212,6 +225,102 @@ def get_or_create_guest_user(*, name: str, email: str, phone: str = "") -> User:
         has_signup_promotions=False,
         allow_marketing_emails=False,
     )
+
+
+def _guest_already_referred(user: User) -> bool:
+    """
+    True when this shadow user already has a referrer we must not replace.
+
+    Covers a customer ``referred_by`` link, a ``Referral`` row, and a partner
+    ``ReferralAttribution``. A later guest checkout keeps whichever was first.
+    """
+    from main.models import Referral, ReferralAttribution
+
+    if user.referred_by_id is not None:
+        return True
+    if Referral.objects.filter(referred=user).exists():
+        return True
+    return ReferralAttribution.objects.filter(referred_user=user).exists()
+
+
+def apply_guest_referral(user: User, referral_code: Optional[str]) -> None:
+    """
+    Attach an optional referral code to a guest shadow user. No password is set.
+
+    Matches registration: a partner code (``DP`` prefix) creates a 60-day
+    ``ReferralAttribution`` and a 40% ``Promotions`` row for later bookings.
+    Any other code sets ``User.referred_by`` and a ``Referral`` row. The
+    referrer's reward still waits until this guest has €100 of completed,
+    paid bookings.
+
+    This checkout is not discounted. Guest quotes stay anonymous, and
+    ``sanitize_guest_booking_data`` keeps ``apply_partner_booking_discount``
+    false, so the promotion is not applied to the wash being paid now.
+
+    A blank code does nothing. If this email was already referred, the
+    existing link is left alone. An unknown code, or a code owned by this
+    same email, is rejected.
+
+    Args:
+        user: Shadow guest ``User`` (``is_guest=True``).
+        referral_code: Optional code from checkout (``referral_code``,
+            ``referred_code``, or ``referredCode``).
+
+    Raises:
+        GuestReferralInvalid: The code is unknown or belongs to this email.
+    """
+    from main.models import Partner, Promotions, Referral, ReferralAttribution
+
+    code = str(referral_code or "").strip().upper()
+    if not code:
+        return
+    # Repeat checkout must not swap or stack a second referrer.
+    if _guest_already_referred(user):
+        return
+
+    email = (user.email or "").strip().lower()
+    if code.startswith("DP"):
+        try:
+            partner = Partner.objects.select_related("user").get(referral_code=code)
+        except Partner.DoesNotExist:
+            raise GuestReferralInvalid("Invalid referral code")
+        partner_email = (getattr(partner.user, "email", None) or "").strip().lower()
+        if partner_email and partner_email == email:
+            raise GuestReferralInvalid("You cannot use your own referral code")
+        # Same 60-day window registration uses. Does not change this payment.
+        ReferralAttribution.objects.create(
+            referred_user=user,
+            partner=partner,
+            source="partner",
+            expires_at=timezone.now() + timedelta(days=60),
+        )
+        Promotions.objects.create(
+            user=user,
+            title="Partner Referral Discount",
+            description=f"40% off washes for 60 days (referred by {partner.business_name})",
+            discount_percentage=40,
+            valid_until=(timezone.now() + timedelta(days=60)).date(),
+            is_active=True,
+            terms_conditions=(
+                "Valid for 60 days from signup. Partner referral. "
+                "Cannot be combined with other offers. "
+                "Not applied to the guest checkout that entered this code."
+            ),
+        )
+        return
+
+    try:
+        referrer = User.objects.get(referral_code=code)
+    except User.DoesNotExist:
+        raise GuestReferralInvalid("Invalid referral code")
+    except User.MultipleObjectsReturned:
+        raise GuestReferralInvalid("Invalid referral code")
+    referrer_email = (referrer.email or "").strip().lower()
+    if referrer.pk == user.pk or (referrer_email and referrer_email == email):
+        raise GuestReferralInvalid("You cannot use your own referral code")
+    user.referred_by = referrer
+    user.save(update_fields=["referred_by"])
+    Referral.objects.get_or_create(referrer=referrer, referred=user)
 
 
 def guest_vehicle_ownership_status(
@@ -885,8 +994,9 @@ def sanitize_guest_booking_data(booking_data: dict) -> dict:
     Strip loyalty, complimentary, and bulk flags from guest checkout.
 
     Winner and gift vouchers are allowed when the guest email matches the
-    voucher recipient. Loyalty, partner promos, complimentary washes, and bulk
-    booking remain blocked.
+    voucher recipient. Loyalty, complimentary washes, and bulk booking stay
+    blocked. ``apply_partner_booking_discount`` stays false so a referral
+    recorded by ``apply_guest_referral`` does not reduce this wash.
 
     Args:
         booking_data: Checkout payload from the SPA (copied, not mutated).
@@ -896,6 +1006,7 @@ def sanitize_guest_booking_data(booking_data: dict) -> dict:
     """
     data = dict(booking_data or {})
     data["applied_free_quick_sparkle"] = False
+    # Partner attribution may exist on the shadow user; this wash still pays list price.
     data["apply_partner_booking_discount"] = False
     data["is_bulk"] = False
     data.pop("complimentary_quick_sparkle_source", None)

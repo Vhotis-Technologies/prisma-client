@@ -2,9 +2,11 @@
 Public guest checkout APIs: catalog, Ireland reg lookup, quote, timeslots, payment, claim.
 
 Guests never receive a JWT until they claim. Contact details are collected at payment
-time and stored on a ``User`` with ``is_guest=True``. Winner and gift vouchers tied to
-the guest email are supported; loyalty, promos, complimentary washes, and bulk booking
-are not. Claiming sets a password on the same row so garage and history are preserved.
+time and stored on a ``User`` with ``is_guest=True``. An optional referral code on
+``create_payment_sheet`` is stored on that same shadow user and does not discount
+the wash being paid. Winner and gift vouchers tied to the guest email are supported;
+loyalty, complimentary washes, and bulk booking are not. Claiming sets a password
+on the same row so garage, history, and the referral link are preserved.
 """
 from __future__ import annotations
 
@@ -59,9 +61,11 @@ from main.services.guest import (
     GuestEmailInUse,
     GuestPasswordInvalid,
     GuestPlateBlocked,
+    GuestReferralInvalid,
     PLATE_OWNED_BY_REGISTERED,
     canonical_guest_country,
     canonical_guest_registration,
+    apply_guest_referral,
     claim_guest_account,
     get_or_create_guest_user,
     get_valid_guest_access_token,
@@ -611,7 +615,9 @@ class GuestBookingView(APIView):
         Create a guest user, persist vehicle/address, then reuse the paid booking sheet.
 
         Extra IP limit: 8/hour. Body must include name, email, phone, ``lookup_token``,
-        and ``booking_data``. Loyalty fields in ``booking_data`` are stripped; vouchers
+        and ``booking_data``. Optional ``referral_code`` (also ``referred_code`` /
+        ``referredCode``) is attached to the shadow user and does not change
+        ``amount``. Loyalty fields in ``booking_data`` are stripped; vouchers
         are validated at payment when present.
         """
         if _ip_limited(request, "guest_create_payment_sheet", "8/h"):
@@ -648,8 +654,15 @@ class GuestBookingView(APIView):
 
         try:
             user = get_or_create_guest_user(name=name, email=email, phone=phone)
+            # Record only. sanitize_guest_booking_data still blocks a discount on this wash.
+            apply_guest_referral(
+                user,
+                body.get("referral_code") or body.get("referred_code") or body.get("referredCode"),
+            )
         except GuestEmailInUse as exc:
             return Response({"error": str(exc), "code": exc.code}, status=status.HTTP_409_CONFLICT)
+        except GuestReferralInvalid as exc:
+            return Response({"error": str(exc), "code": exc.code}, status=status.HTTP_400_BAD_REQUEST)
         except ValueError as exc:
             return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 

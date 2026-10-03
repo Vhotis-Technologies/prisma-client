@@ -1,4 +1,11 @@
-import type { AddOn, BookingQuote, PaymentConfirmResponse, PaymentSheetResponse, ServiceType, ValetType } from "../../types/booking";
+import type {
+  AddOn,
+  BookingQuote,
+  PaymentConfirmResponse,
+  PaymentSheetResponse,
+  ServiceType,
+  ValetType,
+} from "../../types/booking";
 import type { LookupPreview } from "../../types/garage";
 import type { LoginResponse } from "../../types/user";
 import { getApiBaseUrl, getData, postData } from "./client";
@@ -79,12 +86,18 @@ type GuestVoucherApplyBody = {
 
 /** Validate a winner voucher for guest checkout (email must match voucher recipient). */
 export function applyGuestWinnerVoucher(body: GuestVoucherApplyBody) {
-  return postData<GuestVoucherApplyResponse>("/api/v1/guest/apply_winner_voucher/", body);
+  return postData<GuestVoucherApplyResponse>(
+    "/api/v1/guest/apply_winner_voucher/",
+    body,
+  );
 }
 
 /** Validate a gift voucher for guest checkout (email must match voucher recipient). */
 export function applyGuestGiftVoucher(body: GuestVoucherApplyBody) {
-  return postData<GuestVoucherApplyResponse>("/api/v1/guest/apply_gift_voucher/", body);
+  return postData<GuestVoucherApplyResponse>(
+    "/api/v1/guest/apply_gift_voucher/",
+    body,
+  );
 }
 
 /**
@@ -92,18 +105,26 @@ export function applyGuestGiftVoucher(body: GuestVoucherApplyBody) {
  * @param params - date, country, city, optional coords and duration.
  */
 export function fetchGuestTimeslots(params: Record<string, string | number>) {
-  return getData<{ slots?: { start_time?: string; end_time?: string; is_available?: boolean }[]; error?: string }>(
-    "/api/v1/guest/get_timeslots/",
-    { params },
-  );
+  return getData<{
+    slots?: {
+      start_time?: string;
+      end_time?: string;
+      is_available?: boolean;
+    }[];
+    error?: string;
+  }>("/api/v1/guest/get_timeslots/", { params });
 }
 
 /**
  * Create a guest user + PaymentIntent. Contact details and lookup_token are required.
- * @param body - name, email, phone, lookup_token, booking_data, amount.
+ * Optional `referral_code` is stored on the shadow user and does not change `amount`.
+ * @param body - name, email, phone, lookup_token, booking_data, amount, optional referral_code.
  */
 export function createGuestPaymentSheet(body: Record<string, unknown>) {
-  return postData<PaymentSheetResponse>("/api/v1/guest/create_payment_sheet/", body);
+  return postData<PaymentSheetResponse>(
+    "/api/v1/guest/create_payment_sheet/",
+    body,
+  );
 }
 
 /**
@@ -111,9 +132,12 @@ export function createGuestPaymentSheet(body: Record<string, unknown>) {
  * Member intents are treated as unconfirmed on this public endpoint.
  */
 export function confirmGuestPaymentIntent(paymentIntentId: string) {
-  return postData<PaymentConfirmResponse>("/api/v1/guest/confirm_payment_intent/", {
-    payment_intent_id: paymentIntentId,
-  });
+  return postData<PaymentConfirmResponse>(
+    "/api/v1/guest/confirm_payment_intent/",
+    {
+      payment_intent_id: paymentIntentId,
+    },
+  );
 }
 
 /** Photo metadata from the results API; bytes are fetched via {@link guestImageUrl}. */
@@ -147,7 +171,10 @@ export type GuestResultsResponse = {
     after_exterior: GuestResultsPhoto[];
   };
   health_check_ready: boolean;
-  health_check: { items: GuestHealthCheckItem[]; inspected_at: string | null } | null;
+  health_check: {
+    items: GuestHealthCheckItem[];
+    inspected_at: string | null;
+  } | null;
   link_expires_at: string | null;
   cancelled: boolean;
   can_claim?: boolean;
@@ -169,7 +196,11 @@ export function fetchGuestResults(token: string) {
  * @param token - Same raw token as the results page.
  * @param download - When true, the proxy sets Content-Disposition: attachment.
  */
-export function guestImageUrl(imageId: string, token: string, download = false): string {
+export function guestImageUrl(
+  imageId: string,
+  token: string,
+  download = false,
+): string {
   const base = getApiBaseUrl().replace(/\/$/, "");
   const query = new URLSearchParams({ token });
   if (download) query.set("download", "1");
