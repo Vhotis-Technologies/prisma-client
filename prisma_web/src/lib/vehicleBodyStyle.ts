@@ -10,6 +10,11 @@ const SUV_MPV_NEEDLES = [
   "crossover",
   "van",
   "minivan",
+  "pickup",
+  "truck",
+  "jeep",
+  "pickup truck",
+  "pick up"
 ];
 
 export function vehicleBodyStyleRequiresSuvMpvSurcharge(

@@ -14,6 +14,7 @@ import {
 } from "../lib/bookingCheckout";
 import { formatClock, formatDate, formatDuration, formatMoney, vehicleLabel } from "../lib/format";
 import { hasStripeKey, intentIdFromClientSecret } from "../lib/stripe";
+import { readReferralCode, referralQuery } from "../lib/referralLink";
 import { vehicleBodyStyleRequiresSuvMpvSurcharge } from "../lib/vehicleBodyStyle";
 import { parseCrewSlots, type TimeSlot } from "../store/api/eventApi";
 import {
@@ -151,8 +152,8 @@ export default function GuestBookPage() {
   const [contactName, setContactName] = useState("");
   const [contactEmail, setContactEmail] = useState("");
   const [contactPhone, setContactPhone] = useState("");
-  /** Optional. Sent only with payment. It does not change the guest quote. */
-  const [referralCode, setReferralCode] = useState("");
+  /** Optional. Prefilled from ?ref= when the partner link was used. Sent only with payment. */
+  const [referralCode, setReferralCode] = useState(() => readReferralCode());
 
   const [quote, setQuote] = useState<BookingQuote | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
@@ -1031,7 +1032,7 @@ export default function GuestBookPage() {
         )}
       </div>
       <p className="auth-footer">
-        Prefer a full account? <Link to="/register">Join us</Link>
+        Prefer a full account? <Link to={`/register${referralQuery()}`}>Join us</Link>
       </p>
     </GuestBookShell>
   );

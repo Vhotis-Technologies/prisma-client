@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { authErrorMessage, useAuth } from "../auth/AuthProvider";
 import { getPartnerDashboard } from "../store/api/partnerApi";
 import { formatMoney } from "../lib/format";
+import { partnerShareUrl } from "../lib/referralLink";
 import type { PartnerDashboardResponse } from "../types/partner";
 
 function conversionPercent(rate: number): string {
@@ -35,16 +36,18 @@ export default function PartnerDashboard() {
     void load();
   }, [load]);
 
-  async function copyCode() {
+  async function copyLink() {
     const code = data?.partner.referral_code;
     if (!code) return;
-    const message = `Get one free basic wash and 40% off washes for 60 days! Use my partner code: ${code}`;
+    // Share the site URL, not a sentence. Pasting the old invite into the
+    // 12-character referral box kept only "Get one free".
+    const link = partnerShareUrl(code);
     try {
-      await navigator.clipboard.writeText(message);
+      await navigator.clipboard.writeText(link);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);
     } catch {
-      setError("Could not copy the referral code.");
+      setError("Could not copy the referral link.");
     }
   }
 
@@ -90,14 +93,16 @@ export default function PartnerDashboard() {
       </section>
 
       <section className="card">
-        <p className="stat-label">Your referral code</p>
+        <p className="stat-label">Your referral link</p>
         <div className="card-row">
-          <p className="stat-value referral-code">{data.partner.referral_code}</p>
-          <button type="button" className="btn btn-secondary" onClick={() => void copyCode()}>
-            {copied ? "Copied" : "Copy invite"}
+          <p className="stat-value referral-link">{partnerShareUrl(data.partner.referral_code)}</p>
+          <button type="button" className="btn btn-secondary" onClick={() => void copyLink()}>
+            {copied ? "Copied" : "Copy link"}
           </button>
         </div>
-        <p className="muted">Share this code so new customers get a welcome offer and you earn commission.</p>
+        <p className="muted">
+          Share this link. Anyone who opens it keeps your code ({data.partner.referral_code}) when they book as a guest or create an account.
+        </p>
       </section>
 
       <section className="stat-grid stat-grid--3">

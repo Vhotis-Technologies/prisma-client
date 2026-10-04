@@ -4,6 +4,7 @@ import { authErrorMessage, useAuth } from "../auth/AuthProvider";
 import AddressSearchInput from "../components/AddressSearchInput";
 import AuthSplit from "../components/AuthSplit";
 import LegalDialog from "../components/LegalDialog";
+import { readReferralCode, referralQuery } from "../lib/referralLink";
 import type { BusinessAddress, RegisterCredentials, SignUpAccountType } from "../types/user";
 
 const ACCOUNT_TITLE: Record<SignUpAccountType, string> = {
@@ -32,7 +33,7 @@ export default function RegisterDetailsPage() {
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [referredCode, setReferredCode] = useState("");
+  const [referredCode, setReferredCode] = useState(() => readReferralCode());
   const [businessName, setBusinessName] = useState("");
   const [businessAddress, setBusinessAddress] = useState<BusinessAddress | null>(null);
   const [termsAccepted, setTermsAccepted] = useState(false);
@@ -60,7 +61,7 @@ export default function RegisterDetailsPage() {
   }, [accountType]);
 
   if (!accountType) {
-    return <Navigate to="/register" replace />;
+    return <Navigate to={`/register${referralQuery()}`} replace />;
   }
 
   async function onSubmit(event: FormEvent) {
@@ -128,7 +129,7 @@ export default function RegisterDetailsPage() {
           <span>
             Signing up as <strong>{ACCOUNT_TITLE[accountType]}</strong>
           </span>
-          <Link to="/register">Change</Link>
+          <Link to={`/register${referralQuery()}`}>Change</Link>
         </div>
         <h2>Your details</h2>
         <p className="lede">Complete your details to finish signing up.</p>
@@ -259,9 +260,9 @@ export default function RegisterDetailsPage() {
         </form>
 
         <p className="auth-footer">
-          Already have an account? <Link to="/login">Sign in</Link>
+          Already have an account? <Link to={`/login${referralQuery()}`}>Sign in</Link>
           {" · "}
-          <Link to="/book/guest">Book without an account</Link>
+          <Link to={`/book/guest${referralQuery()}`}>Book without an account</Link>
         </p>
       </div>
 

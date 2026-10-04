@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import AuthSplit from "../components/AuthSplit";
+import { referralQuery } from "../lib/referralLink";
 import type { SignUpAccountType } from "../types/user";
 
 const OPTIONS: {
@@ -25,6 +26,7 @@ const OPTIONS: {
 ];
 
 export default function RegisterPage() {
+  const refQuery = referralQuery();
   return (
     <AuthSplit
       kicker="Create account"
@@ -40,7 +42,7 @@ export default function RegisterPage() {
             <Link
               key={option.type}
               className="choice-card"
-              to={`/register/details?type=${option.type}`}
+              to={`/register/details${referralQuery({ type: option.type })}`}
             >
               <strong>{option.title}</strong>
               <span>{option.subtitle}</span>
@@ -49,9 +51,9 @@ export default function RegisterPage() {
         </div>
 
         <p className="auth-footer">
-          Already have an account? <Link to="/login">Sign in</Link>
+          Already have an account? <Link to={`/login${refQuery}`}>Sign in</Link>
           {" · "}
-          <Link to="/book/guest">Book without an account</Link>
+          <Link to={`/book/guest${refQuery}`}>Book without an account</Link>
         </p>
       </div>
     </AuthSplit>

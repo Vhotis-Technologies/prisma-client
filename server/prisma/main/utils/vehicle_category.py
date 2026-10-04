@@ -21,6 +21,11 @@ SUV_MPV_NEEDLES = (
     "crossover",
     "van",
     "minivan",
+    "pickup",
+    "truck",
+    "jeep",
+    "pickup truck",
+    "pick up"
 )
 
 SEDAN = B2CSubcriptionTier.VEHICLE_CATEGORY_SEDAN

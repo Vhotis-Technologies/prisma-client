@@ -1,5 +1,6 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "./AuthProvider";
+import { referralQuery } from "../lib/referralLink";
 
 export function RequireAuth() {
   const { isAuthenticated } = useAuth();
@@ -22,5 +23,6 @@ export function GuestOnly() {
 /** App root: dashboard when signed in, welcome (join vs guest) when not. */
 export function HomeRedirect() {
   const { isAuthenticated } = useAuth();
-  return <Navigate to={isAuthenticated ? "/dashboard" : "/welcome"} replace />;
+  if (isAuthenticated) return <Navigate to="/dashboard" replace />;
+  return <Navigate to={`/welcome${referralQuery()}`} replace />;
 }

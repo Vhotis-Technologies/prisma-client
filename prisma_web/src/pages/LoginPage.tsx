@@ -2,8 +2,10 @@ import { useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { loginErrorMessage, useAuth } from "../auth/AuthProvider";
 import BrandMark from "../components/BrandMark";
+import { referralQuery } from "../lib/referralLink";
 
 export default function LoginPage() {
+  const refQuery = referralQuery();
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -114,7 +116,7 @@ export default function LoginPage() {
           </form>
 
           <p className="auth-footer">
-            New to Prisma Car Care? <Link to="/welcome">Get started</Link>
+            New to Prisma Car Care? <Link to={`/welcome${refQuery}`}>Get started</Link>
           </p>
         </div>
       </main>

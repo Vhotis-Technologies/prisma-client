@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import AuthSplit from "../components/AuthSplit";
+import { referralQuery } from "../lib/referralLink";
 
 const OPTIONS = [
   {
@@ -16,6 +17,7 @@ const OPTIONS = [
 
 /** Logged-out choice: register vs guest checkout. Signed-in users never see this (GuestOnly). */
 export default function WelcomePage() {
+  const refQuery = referralQuery();
   return (
     <AuthSplit
       kicker="Prisma Car Care"
@@ -28,7 +30,7 @@ export default function WelcomePage() {
 
         <div className="choice-list">
           {OPTIONS.map((option) => (
-            <Link key={option.to} className="choice-card" to={option.to}>
+            <Link key={option.to} className="choice-card" to={`${option.to}${refQuery}`}>
               <strong>{option.title}</strong>
               <span>{option.subtitle}</span>
             </Link>
@@ -36,7 +38,7 @@ export default function WelcomePage() {
         </div>
 
         <p className="auth-footer">
-          Already have an account? <Link to="/login">Sign in</Link>
+          Already have an account? <Link to={`/login${refQuery}`}>Sign in</Link>
         </p>
       </div>
     </AuthSplit>
