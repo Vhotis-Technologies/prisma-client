@@ -643,7 +643,7 @@ export default function BookPage() {
                     <strong>
                       {item.year} {item.make} {item.model}
                     </strong>
-                    <span>{plateOf(item) || "No plate"}</span>
+                    <span>{plateOf(item) || "No registration"}</span>
                     <span>
                       {item.color}
                       {item.body_style ? ` · ${item.body_style}` : ""}

@@ -54,7 +54,7 @@ export default function PayoutsPage() {
             <Link to="/dashboard">Dashboard</Link>
           </p>
           <h1 className="page-title">Payouts</h1>
-          <p className="lede">Payouts are for dealership accounts.</p>
+          <p className="lede">Payouts are for partnership accounts.</p>
         </section>
       </AppShell>
     );

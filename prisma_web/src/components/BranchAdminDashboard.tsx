@@ -339,7 +339,7 @@ export default function BranchAdminDashboard() {
                   <strong>
                     {vehicle.year} {vehicle.make} {vehicle.model}
                   </strong>
-                  <p className="muted">{vehicle.registration_number || "No plate"}</p>
+                  <p className="muted">{vehicle.registration_number || "No registration"}</p>
                   <p className="muted">
                     {[vehicle.color, vehicle.body_style, vehicle.country].filter(Boolean).join(" · ")}
                   </p>

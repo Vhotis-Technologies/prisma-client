@@ -89,7 +89,7 @@ export default function HistoryPage() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Plate, amount, or reference"
+            placeholder="Registration, amount, or reference"
           />
         </label>
       ) : null}

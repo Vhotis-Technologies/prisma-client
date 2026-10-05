@@ -74,7 +74,7 @@ export default function EditVehicleDialog({ vehicle, onClose, onSaved }: EditVeh
               </div>
             ) : null}
             <label className="field">
-              <span>Plate</span>
+              <span>Registration</span>
               <input
                 value={licence}
                 onChange={(e) => setLicence(e.target.value.toUpperCase())}

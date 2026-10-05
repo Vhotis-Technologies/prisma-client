@@ -233,10 +233,10 @@ export default function AddVehicleDialog({ open, onClose, onAdded }: AddVehicleD
           {step === "lookup" ? (
             <form className="auth-form" onSubmit={(e) => void runLookup(e)}>
               <p className="muted">
-                Irish plates first. We look the car up, then you confirm. One lookup every five minutes.
+                Irish registrations first. We look the car up, then you confirm. One lookup every five minutes.
               </p>
               <label className="field">
-                <span>Plate</span>
+                <span>Registration</span>
                 <input
                   value={licence}
                   onChange={(e) => setLicence(e.target.value.toUpperCase())}
@@ -295,7 +295,7 @@ export default function AddVehicleDialog({ open, onClose, onAdded }: AddVehicleD
           {step === "manual" ? (
             <form className="auth-form" onSubmit={(e) => void submitManual(e)}>
               <label className="field">
-                <span>Plate</span>
+                <span>Registration</span>
                 <input
                   value={licence}
                   onChange={(e) => setLicence(e.target.value.toUpperCase())}

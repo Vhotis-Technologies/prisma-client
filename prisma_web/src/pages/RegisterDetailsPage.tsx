@@ -10,7 +10,7 @@ import type { BusinessAddress, RegisterCredentials, SignUpAccountType } from "..
 const ACCOUNT_TITLE: Record<SignUpAccountType, string> = {
   b2c: "Personal",
   fleet_operator: "Fleet",
-  dealership: "Dealership",
+  dealership: "Partnership",
 };
 
 function parseAccountType(value: string | null): SignUpAccountType | null {
@@ -50,7 +50,7 @@ export default function RegisterDetailsPage() {
     }
     if (accountType === "dealership") {
       return {
-        headline: "Your dealership account.",
+        headline: "Your partnership account.",
         support: "Add the business. Partnership tools sit on the same account.",
       };
     }

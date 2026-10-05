@@ -18,7 +18,7 @@ export function isBusinessAccount(user: UserProfile | null): boolean {
 
 export function roleLabel(user: UserProfile | null): string {
   if (!user) return "Account";
-  if (user.is_dealership || user.partner_referral_code) return "Dealership partner";
+  if (user.is_dealership || user.partner_referral_code) return "Partnership";
   if (user.is_fleet_owner) return "Fleet owner";
   if (user.is_branch_admin) return "Branch admin";
   return "Personal account";

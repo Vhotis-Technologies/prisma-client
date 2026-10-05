@@ -25,7 +25,7 @@ export default function GaragePage() {
         <div>
           <p className="kicker">Garage</p>
           <h1 className="page-title">Your cars</h1>
-          <p className="lede">Add a car by plate, or type the details.</p>
+          <p className="lede">Add a car by registration, or type the details.</p>
         </div>
         <button type="button" className="btn btn-primary" onClick={() => setAdding(true)}>
           Add a car
@@ -60,7 +60,7 @@ export default function GaragePage() {
                 <strong>
                   {vehicle.year} {vehicle.make} {vehicle.model}
                 </strong>
-                <p className="muted">{plateOf(vehicle) || "No plate"}</p>
+                <p className="muted">{plateOf(vehicle) || "No registration"}</p>
                 <p className="muted">
                   {vehicle.color}
                   {vehicle.body_style ? ` · ${vehicle.body_style}` : ""}

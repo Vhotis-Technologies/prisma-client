@@ -20,7 +20,7 @@ const OPTIONS: {
   },
   {
     type: "dealership",
-    title: "Dealership",
+    title: "Partnership",
     subtitle: "For a forecourt and a Prisma partnership.",
   },
 ];
@@ -31,7 +31,7 @@ export default function RegisterPage() {
     <AuthSplit
       kicker="Create account"
       headline="What kind of account?"
-      support="Personal, fleet, or dealership."
+      support="Personal, fleet, or partnership."
     >
       <div className="auth-card auth-card--wide">
         <h2>Choose one</h2>

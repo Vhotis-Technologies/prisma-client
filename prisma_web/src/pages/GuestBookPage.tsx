@@ -366,7 +366,7 @@ export default function GuestBookPage() {
     setError(null);
     const plate = licence.trim();
     if (!plate) {
-      setError("Enter a plate.");
+      setError("Enter a registration.");
       return;
     }
     setLookupBusy(true);
@@ -691,11 +691,11 @@ export default function GuestBookPage() {
 
       {!catalogLoading && step === 1 ? (
         <section className="wizard-panel">
-          <h2 className="section-title">{carEntry === "manual" ? "Car details" : "Plate"}</h2>
+          <h2 className="section-title">{carEntry === "manual" ? "Car details" : "Registration"}</h2>
           {carEntry === "lookup" ? (
             <>
               <label className="field">
-                <span>Irish plate</span>
+                <span>Irish registration</span>
                 <input
                   value={licence}
                   onChange={(e) => setLicence(e.target.value.toUpperCase())}
@@ -714,9 +714,9 @@ export default function GuestBookPage() {
             </>
           ) : (
             <>
-              <p className="muted">Type the car if the plate lookup does not have it.</p>
+              <p className="muted">Type the car if the registration lookup does not have it.</p>
               <label className="field">
-                <span>Plate</span>
+                <span>Registration</span>
                 <input
                   value={licence}
                   onChange={(e) => updateManual({ licence: e.target.value.toUpperCase() })}
