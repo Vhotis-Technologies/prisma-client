@@ -4,6 +4,7 @@ Celery tasks and helpers for booking confirmation and 6-hour reminder emails.
 Uses Microsoft Graph mail and ``email_legal_context`` for footer links.
 """
 from celery import shared_task
+from django.conf import settings
 from django.template.loader import render_to_string
 from datetime import datetime
 from main.utils.graph_mail import send_mail as graph_send_mail
@@ -105,6 +106,7 @@ def send_guest_photos_ready_email(
         guest_results_url=guest_results_url or "",
         guest_results_expires_days=guest_results_expires_days,
         guest_claim_url=guest_claim_url or "",
+        google_review_url=(getattr(settings, "GOOGLE_REVIEW_URL", "") or "").strip(),
     )
     html_message = render_to_string("guest_photos_ready.html", context)
     try:

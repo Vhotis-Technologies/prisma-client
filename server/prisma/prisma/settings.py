@@ -575,6 +575,8 @@ STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY')
 STRIPE_PUBLISHABLE_KEY = os.getenv('STRIPE_PUBLISHABLE_KEY', '')
 STRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET')
 GOOGLE_PLACES_API_KEY = os.getenv('GOOGLE_PLACES_API_KEY', '')
+# Public Google review page included in the guest photos-ready email.
+GOOGLE_REVIEW_URL = "https://g.page/r/CSzio3a0NjzrEBI/review"
 
 # Late reschedule fee (minor units / “cents”, same as Stripe PaymentIntent.amount)
 RESCHEDULE_FEE_CENTS = int(os.getenv('RESCHEDULE_FEE_CENTS', '1000'))
