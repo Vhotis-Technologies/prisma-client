@@ -83,12 +83,12 @@ export default function BookingConfirmationPage() {
         </h1>
         <p className="lede">
           {status === "confirming"
-            ? "Waiting for Stripe to confirm. This usually takes a few seconds."
+            ? "Waiting for payment. This takes a few seconds."
             : status === "failed"
-              ? error || "If you were charged, check Dashboard or contact support."
+              ? error || "If you were charged, check the dashboard or email support."
               : snapshot?.invoiceLater
-                ? "A Stripe invoice has been emailed. Your order will appear on your dashboard shortly."
-                : "Your booking will appear on your dashboard shortly."}
+                ? "We emailed the invoice. The booking will show on your dashboard."
+                : "It will show on your dashboard shortly."}
         </p>
       </section>
 
@@ -128,7 +128,7 @@ export default function BookingConfirmationPage() {
               </dd>
             </div>
             <div>
-              <dt>{snapshot.numberOfVehicles ? "Vehicles" : "Vehicle"}</dt>
+              <dt>{snapshot.numberOfVehicles ? "Cars" : "Car"}</dt>
               <dd>{snapshot.vehicleLine}</dd>
             </div>
             <div>
@@ -142,7 +142,7 @@ export default function BookingConfirmationPage() {
           </dl>
           <div className="card-actions">
             <Link to="/dashboard" className="btn btn-primary">
-              View dashboard
+              Dashboard
             </Link>
             <Link to="/book" className="btn btn-secondary">
               Book another
@@ -151,11 +151,11 @@ export default function BookingConfirmationPage() {
         </section>
       ) : (
         <section className="card">
-          <h2>No booking details</h2>
-          <p className="muted">If payment succeeded, it should still appear on your dashboard.</p>
+          <h2>No details here</h2>
+          <p className="muted">If the payment went through, the booking is on your dashboard.</p>
           <div className="card-actions">
             <Link to="/dashboard" className="btn btn-primary">
-              Go to dashboard
+              Dashboard
             </Link>
           </div>
         </section>

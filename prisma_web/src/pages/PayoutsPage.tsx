@@ -54,7 +54,7 @@ export default function PayoutsPage() {
             <Link to="/dashboard">Dashboard</Link>
           </p>
           <h1 className="page-title">Payouts</h1>
-          <p className="lede">Payouts are for dealership partner accounts.</p>
+          <p className="lede">Payouts are for dealership accounts.</p>
         </section>
       </AppShell>
     );
@@ -69,7 +69,7 @@ export default function PayoutsPage() {
     const name = holder.trim();
     const ibanVal = iban.trim().replace(/\s/g, "");
     if (!name || !ibanVal) {
-      setError("Fill in account holder name and IBAN.");
+      setError("Add the account holder and IBAN.");
       return;
     }
     setBusy(true);
@@ -114,7 +114,7 @@ export default function PayoutsPage() {
           <Link to="/dashboard">Dashboard</Link> · Partner
         </p>
         <h1 className="page-title">Payouts</h1>
-        <p className="lede">Request commission payouts and keep your bank details up to date.</p>
+        <p className="lede">Request a payout and keep the bank details current.</p>
       </section>
 
       {error ? (
@@ -133,7 +133,7 @@ export default function PayoutsPage() {
       <section className="card">
         <p className="stat-label">Available balance</p>
         <p className="stat-value">{formatMoney(pending, country)}</p>
-        <p className="muted">Request a payout to receive approved commission. Processed within 24 hours.</p>
+        <p className="muted">Request a payout for approved commission. Paid within 24 hours.</p>
         <div className="card-actions">
           <button
             type="button"
@@ -202,7 +202,7 @@ export default function PayoutsPage() {
                 </button>
               ) : null}
               <button type="submit" className="btn btn-primary" disabled={busy}>
-                {busy ? "Saving…" : "Save bank details"}
+                {busy ? "Saving…" : "Save"}
               </button>
             </div>
           </form>
@@ -212,7 +212,7 @@ export default function PayoutsPage() {
       <section className="card">
         <h2>Payout history</h2>
         {history.length === 0 ? (
-          <p className="muted">No payout requests yet.</p>
+          <p className="muted">No payouts yet.</p>
         ) : (
           <ul className="booking-list">
             {history.map((item) => (

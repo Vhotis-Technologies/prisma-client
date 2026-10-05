@@ -52,7 +52,7 @@ export default function PartnerDashboard() {
   }
 
   if (loading && !data) {
-    return <p className="muted">Loading partner dashboard…</p>;
+    return <p className="muted">Loading…</p>;
   }
 
   if (error && !data) {
@@ -101,7 +101,7 @@ export default function PartnerDashboard() {
           </button>
         </div>
         <p className="muted">
-          Share this link. Anyone who opens it keeps your code ({data.partner.referral_code}) when they book as a guest or create an account.
+          Share this link. Anyone who opens it keeps your code ({data.partner.referral_code}) when they book or create an account.
         </p>
       </section>
 
@@ -117,14 +117,14 @@ export default function PartnerDashboard() {
           <p className="muted">Booked in the last 90 days</p>
         </article>
         <article className="stat-card">
-          <p className="stat-label">Vehicles</p>
+          <p className="stat-label">Cars</p>
           <p className="stat-value">{data.referral_metrics.vehicles_registered}</p>
-          <p className="muted">Registered by referrals</p>
+          <p className="muted">Added by people you referred</p>
         </article>
       </section>
 
       <section className="card">
-        <h2>Referral metrics</h2>
+        <h2>Referrals</h2>
         <dl className="meta">
           <div>
             <dt>Conversion</dt>
@@ -195,7 +195,7 @@ export default function PartnerDashboard() {
 
       {data.vehicle_insights.total_vehicles > 0 ? (
         <section className="card">
-          <h2>Vehicle insights</h2>
+          <h2>Cars</h2>
           <dl className="meta">
             <div>
               <dt>Total vehicles</dt>

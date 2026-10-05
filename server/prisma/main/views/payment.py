@@ -2691,6 +2691,10 @@ class StripeWebhookView(APIView):
                     if metadata.get('type') == 'gift_voucher':
                         return self._handle_gift_voucher_payment_intent(payment_intent, metadata)
 
+                    # Guest checkout: account, car, and booking are created only after payment.
+                    if metadata.get('type') == 'guest_booking':
+                        return self._handle_guest_booking_payment_intent(payment_intent, metadata)
+
                     # Client tip for a completed booking.
                     if metadata.get('type') == 'tip':
                         return self._handle_tip_payment_intent(payment_intent, metadata)
@@ -2863,6 +2867,9 @@ class StripeWebhookView(APIView):
             elif event_type == 'payment_intent.payment_failed':
                 payment_intent = event['data']['object']
                 metadata = payment_intent.get('metadata', {})
+                # No account was created for an unpaid guest checkout.
+                if metadata.get('type') == 'guest_booking':
+                    return Response({'status': 'guest payment failed'}, status=status.HTTP_200_OK)
                 pending_booking_id = metadata.get('pending_booking_id')
                 
                 if pending_booking_id:
@@ -3478,6 +3485,121 @@ class StripeWebhookView(APIView):
             return Response({
                 'error': f'Failed to process subscription payment: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def _handle_guest_booking_payment_intent(self, payment_intent, metadata):
+        """
+        Create the guest account and booking after Stripe confirms payment.
+
+        The checkout snapshot lives in cache until this event. Abandoned card
+        forms never reach here, so they leave no user. A repeat delivery finds
+        the booking and acknowledges without a second charge record.
+        """
+        from django.core.cache import cache
+        from main.services.guest import (
+            GuestEmailInUse,
+            GuestPlateBlocked,
+            GuestReferralInvalid,
+            guest_checkout_cache_key,
+            open_guest_account_for_booking,
+        )
+        from main.tasks.bookings.events import fulfill_paid_booking_on_detailer
+        from main.utils.observability import log_timed, new_request_id
+
+        checkout_id = (metadata.get("guest_checkout_id") or "").strip()
+        booking_reference = (metadata.get("booking_reference") or "").strip()
+        payment_intent_id = payment_intent.get("id")
+        if not checkout_id or not booking_reference or not payment_intent_id:
+            return Response({"error": "Guest checkout metadata is incomplete"}, status=status.HTTP_400_BAD_REQUEST)
+
+        def _enqueue(pending_booking, booking):
+            request_id = new_request_id()
+            webhook_started = time.monotonic()
+            fulfill_paid_booking_on_detailer.delay(
+                str(pending_booking.id),
+                payment_intent_id,
+                booking_id=str(booking.id) if booking else None,
+                request_id=request_id,
+            )
+            log_timed(
+                "webhook.guest_booking_fulfill_enqueued",
+                webhook_started,
+                booking_reference=booking_reference,
+                request_id=request_id,
+            )
+
+        existing_tx = PaymentTransaction.objects.filter(
+            stripe_payment_intent_id=payment_intent_id,
+            status="succeeded",
+        ).select_related("booking").first()
+        if existing_tx and existing_tx.booking_id:
+            pending = PendingBooking.objects.filter(stripe_payment_intent_id=payment_intent_id).first()
+            if pending:
+                _enqueue(pending, existing_tx.booking)
+            return Response({"status": "booking already created"}, status=status.HTTP_200_OK)
+
+        snapshot = cache.get(guest_checkout_cache_key(checkout_id))
+        if not snapshot:
+            if BookedAppointment.objects.filter(booking_reference=booking_reference).exists():
+                return Response({"status": "booking already created"}, status=status.HTTP_200_OK)
+            return Response({"error": "Guest checkout expired"}, status=status.HTTP_400_BAD_REQUEST)
+
+        pending_booking = None
+        booking = None
+        try:
+            with transaction.atomic():
+                user, booking_data = open_guest_account_for_booking(snapshot)
+                booking_data["booking_reference"] = booking_reference
+                detailer_payload = build_detailer_payload_from_booking_data(
+                    booking_data, user, booking_reference
+                )
+                pending_booking = PendingBooking.objects.create(
+                    booking_reference=booking_reference,
+                    user=user,
+                    booking_data=booking_data,
+                    detailer_booking_data=detailer_payload,
+                    stripe_payment_intent_id=payment_intent_id,
+                    payment_status="succeeded",
+                    expires_at=timezone.now() + timedelta(hours=24),
+                )
+                booking = create_booking_from_pending(pending_booking)
+                winner_id = booking_data.get("winner_voucher_id")
+                gift_id = booking_data.get("gift_voucher_id")
+                if winner_id:
+                    redeem_winner_voucher_for_booking(str(winner_id), user, booking)
+                if gift_id:
+                    redeem_gift_voucher_for_booking(str(gift_id), user, booking)
+                payment_method_details = payment_intent.get("payment_method_details") or {}
+                card_details = payment_method_details.get("card") or {}
+                PaymentTransaction.objects.create(
+                    booking=booking,
+                    user=user,
+                    booking_reference=booking_reference,
+                    stripe_payment_intent_id=payment_intent_id,
+                    transaction_type="payment",
+                    amount=Decimal(payment_intent.get("amount", 0)) / 100,
+                    currency=payment_intent.get("currency", "eur"),
+                    last_4_digits=card_details.get("last4"),
+                    card_brand=card_details.get("brand"),
+                    status="succeeded",
+                )
+        except IntegrityError:
+            existing = BookedAppointment.objects.filter(booking_reference=booking_reference).first()
+            pending = PendingBooking.objects.filter(booking_reference=booking_reference).first()
+            if existing and pending:
+                _enqueue(pending, existing)
+                return Response({"status": "booking already created"}, status=status.HTTP_200_OK)
+            logger.exception("guest booking payment conflict for %s", booking_reference)
+            return Response({"error": "Guest booking could not be saved"}, status=status.HTTP_400_BAD_REQUEST)
+        except (GuestPlateBlocked, GuestEmailInUse, GuestReferralInvalid, ValueError) as exc:
+            logger.exception("guest booking could not be opened for %s", booking_reference)
+            if try_refund_payment_intent(payment_intent_id, booking_reference, "guest_checkout_unfulfillable"):
+                cache.delete(guest_checkout_cache_key(checkout_id))
+                return Response({"status": "guest checkout refunded"}, status=status.HTTP_200_OK)
+            return Response({"error": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        cache.delete(guest_checkout_cache_key(checkout_id))
+        _enqueue(pending_booking, booking)
+        return Response({"status": "booking created successfully"}, status=status.HTTP_200_OK)
 
     def _handle_fleet_subscription_payment_intent(self, payment_intent, metadata):
         """

@@ -39,9 +39,9 @@ function imagesFor(data: BookingImages | null, tab: ImageTab): HistoryImage[] {
 function actionErrorMessage(err: unknown): string {
   const statusCode = (err as { response?: { status?: number } })?.response?.status;
   if (statusCode === 403) {
-    return "An active subscription is required to download or share these photos.";
+    return "A subscription is needed to download or share these photos.";
   }
-  return "We couldn’t prepare that photo. Please try again.";
+  return "Could not save that photo. Try again.";
 }
 
 export default function HistoryDetailPage() {
@@ -139,20 +139,20 @@ export default function HistoryDetailPage() {
           <p className="kicker">
             <Link to="/history">History</Link>
           </p>
-          <h1 className="page-title">{fromList?.service_type || "Service photos"}</h1>
+          <h1 className="page-title">{fromList?.service_type || "Photos"}</h1>
           <p className="lede">
             {fromList
               ? `${formatDate(dateKey(fromList.appointment_date))} · ${fromList.vehicle_reg || "Vehicle"}`
               : images?.booking_reference
                 ? `Reference ${images.booking_reference}`
-                : "Before and after photos from this job."}
+                : "Before and after photos."}
             {isReviewed && rating > 0 ? ` · Rated ${rating}/5` : ""}
           </p>
         </div>
         <div className="welcome-actions">
           {reviewTarget && !isReviewed ? (
             <button type="button" className="btn btn-primary" onClick={() => setReviewOpen(true)}>
-              Rate service
+              Rate this visit
             </button>
           ) : null}
           <Link to="/history" className="btn btn-secondary">
@@ -163,7 +163,7 @@ export default function HistoryDetailPage() {
 
       {error ? (
         <div className="banner banner-error" role="alert">
-          We couldn’t load these photos. Please try again.
+          We couldn't load these photos. Try again.
         </div>
       ) : null}
 
@@ -173,14 +173,14 @@ export default function HistoryDetailPage() {
         <section className="card">
           <h2>Photos are locked</h2>
           <p className="muted">
-            {images.message || "Detailed vehicle photos are only available with an active subscription."}
+            {images.message || "Photos need an active subscription."}
           </p>
         </section>
       ) : null}
 
       {!loading && images && images.view_only ? (
         <div className="banner banner-ok" style={{ marginBottom: "1.5rem" }}>
-          View-only mode: downloading and sharing require an active subscription.{" "}
+          Downloading needs a subscription.{" "}
           <Link to="/settings/subscriptions">Subscribe</Link>
         </div>
       ) : null}
@@ -208,10 +208,9 @@ export default function HistoryDetailPage() {
 
           {current.length === 0 ? (
             <section className="card">
-              <h2>No photos in this set</h2>
+              <h2>No photos yet</h2>
               <p className="muted">
-                The detailer has not uploaded {TABS.find((item) => item.id === tab)?.label.toLowerCase()} photos
-                yet.
+                {TABS.find((item) => item.id === tab)?.label} photos are not up yet.
               </p>
             </section>
           ) : (

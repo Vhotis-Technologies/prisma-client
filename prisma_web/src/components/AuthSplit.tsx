@@ -10,7 +10,7 @@ type AuthSplitProps = {
 };
 
 export default function AuthSplit({
-  kicker = "Client portal",
+  kicker = "Prisma Car Care",
   headline,
   support,
   children,
@@ -18,15 +18,17 @@ export default function AuthSplit({
 }: AuthSplitProps) {
   return (
     <div className="auth-layout">
-      <aside className="auth-panel">
+      <header className="auth-header">
         <BrandMark inverted />
-        <div className="auth-panel-copy">
+      </header>
+      <main className={`auth-main${alignTop ? " auth-main--top" : ""}`}>
+        <div className="auth-intro">
           <p className="auth-kicker">{kicker}</p>
           <h1>{headline}</h1>
           <p>{support}</p>
         </div>
-      </aside>
-      <main className={`auth-main${alignTop ? " auth-main--top" : ""}`}>{children}</main>
+        {children}
+      </main>
     </div>
   );
 }

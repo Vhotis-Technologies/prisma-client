@@ -166,7 +166,7 @@ export default function AppShell({ children }: AppShellProps) {
     { to: "/settings/notifications", label: "Notifications", icon: "bell", match: "exact" },
     { to: "/settings/tickets", label: "Tickets", icon: "tickets" },
     { to: "/settings/addresses", label: "Addresses", icon: "pin", match: "exact" },
-    { to: "/settings/payments", label: "Payment & Vouchers", icon: "card" },
+    { to: "/settings/payments", label: "Payments", icon: "card" },
     { to: "/settings/subscriptions", label: "Subscription", icon: "spark" },
   ];
   if (isBulkBookingEligible(user)) {
@@ -208,14 +208,14 @@ export default function AppShell({ children }: AppShellProps) {
             </svg>
           )}
         </button>
-        <BrandMark />
+        <BrandMark inverted />
       </header>
 
       <div className="shell-scrim" hidden={!open} onClick={() => setOpen(false)} />
 
       <aside id="app-sidebar" className="shell-sidebar">
         <div className="shell-sidebar-brand">
-          <BrandMark />
+          <BrandMark inverted />
         </div>
         <nav className="shell-nav" aria-label="Main">
           <p className="shell-nav-label">Work</p>

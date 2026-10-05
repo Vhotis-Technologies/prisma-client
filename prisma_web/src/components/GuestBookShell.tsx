@@ -22,7 +22,7 @@ export default function GuestBookShell({
   return (
     <div className="guest-shell">
       <header className="guest-shell-header">
-        <BrandMark />
+        <BrandMark inverted />
         <nav className="guest-shell-nav">
           <Link to={backTo} className="btn btn-ghost">
             {backLabel}

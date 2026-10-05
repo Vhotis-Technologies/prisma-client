@@ -1129,3 +1129,243 @@ def persist_guest_vehicle(user: User, lookup_token: str) -> Vehicle:
         vehicle.save(update_fields=["owner_count", "updated_at"])
     _attach_provider_image_from_lookup(vehicle, blob)
     return vehicle
+
+
+def _manual_vehicle_year(value) -> int:
+    """
+    Year typed on guest checkout.
+
+    Raises:
+        ValueError: Missing or outside 1900 through next year.
+    """
+    try:
+        year = int(value)
+    except (TypeError, ValueError):
+        raise ValueError("Enter a valid year.") from None
+    limit = timezone.now().year + 1
+    if year < 1900 or year > limit:
+        raise ValueError("Enter a valid year.")
+    return year
+
+
+def persist_guest_vehicle_manual(user: User, details: dict) -> Vehicle:
+    """
+    Create or reuse a vehicle from details the guest typed, then attach ownership.
+
+    Plate rules match a looked-up car: a registered owner is blocked, and another
+    guest's plate is blocked unless this checkout email already owns it.
+
+    Args:
+        user: Guest being checked out.
+        details: ``make``, ``model``, ``year``, ``color``, ``registration_number``
+            (or ``licence``), and ``country``.
+
+    Returns:
+        Vehicle: Existing or newly created row owned by this guest.
+
+    Raises:
+        ValueError: Required fields missing or the year is not valid.
+        GuestPlateBlocked: Plate belongs to a registered account or another guest.
+    """
+    if not isinstance(details, dict):
+        raise ValueError("Car details are required.")
+    reg = canonical_guest_registration(details.get("registration_number") or details.get("licence") or "")
+    country = canonical_guest_country(details.get("country"))
+    make = (details.get("make") or "").strip()
+    model = (details.get("model") or "").strip()
+    color = (details.get("color") or details.get("colour") or "").strip()
+    if not reg or not make or not model or not color:
+        raise ValueError("Plate, make, model, and colour are required.")
+    year_int = _manual_vehicle_year(details.get("year"))
+
+    allowed, info = guest_may_book_vehicle(reg, country, guest_user=user)
+    if not allowed:
+        raise GuestPlateBlocked(
+            info.get("message") or "This vehicle cannot be booked as a guest.",
+            status=info.get("status") or PLATE_OWNED_BY_REGISTERED,
+        )
+
+    vehicle = info.get("vehicle")
+    if vehicle is None:
+        vehicle = Vehicle(
+            registration_number=reg,
+            country=country,
+            make=make[:100],
+            model=model[:100],
+            year=year_int,
+            color=color[:100],
+            body_style=(details.get("body_style") or "")[:100] or None,
+            owner_count=0,
+        )
+        vehicle.save()
+
+    if info.get("status") != PLATE_OWNED_BY_THIS_GUEST:
+        VehicleOwnership.objects.create(
+            vehicle=vehicle,
+            owner=user,
+            ownership_type="private",
+            start_date=timezone.now().date(),
+        )
+        vehicle.owner_count = (vehicle.owner_count or 0) + 1
+        vehicle.save(update_fields=["owner_count", "updated_at"])
+    return vehicle
+
+
+GUEST_CHECKOUT_TTL_SECONDS = 24 * 60 * 60
+
+
+def guest_checkout_cache_key(checkout_id: str) -> str:
+    """Cache key for a guest checkout that has not created an account yet."""
+    return f"guest_checkout:{checkout_id}"
+
+
+def assert_guest_email_available(email: str) -> Optional[User]:
+    """
+    Return an existing guest for ``email``, or None when the address is new.
+
+    Raises:
+        GuestEmailInUse: A registered account already uses this email.
+    """
+    existing = User.objects.filter(email__iexact=(email or "").strip()).first()
+    if existing and not existing.is_guest:
+        raise GuestEmailInUse(existing.email)
+    return existing
+
+
+def assert_guest_referral_code(email: str, referral_code: str) -> None:
+    """
+    Reject an unknown or self-owned referral code before any account is created.
+
+    A blank code is ignored. A guest who was already referred keeps that link.
+    """
+    from main.models import Partner
+
+    code = str(referral_code or "").strip().upper()
+    if not code:
+        return
+    existing = User.objects.filter(email__iexact=(email or "").strip(), is_guest=True).first()
+    if existing and _guest_already_referred(existing):
+        return
+    cleaned = (email or "").strip().lower()
+    if code.startswith("DP"):
+        try:
+            partner = Partner.objects.select_related("user").get(referral_code=code)
+        except Partner.DoesNotExist:
+            raise GuestReferralInvalid("Invalid referral code")
+        partner_email = (getattr(partner.user, "email", None) or "").strip().lower()
+        if partner_email and partner_email == cleaned:
+            raise GuestReferralInvalid("You cannot use your own referral code")
+        return
+    try:
+        referrer = User.objects.get(referral_code=code)
+    except (User.DoesNotExist, User.MultipleObjectsReturned):
+        raise GuestReferralInvalid("Invalid referral code")
+    referrer_email = (referrer.email or "").strip().lower()
+    if referrer_email and referrer_email == cleaned:
+        raise GuestReferralInvalid("You cannot use your own referral code")
+
+
+def guest_vehicle_fields_for_checkout(*, email: str, lookup_token: str = "", typed: Optional[dict] = None) -> dict:
+    """
+    Plate fields to save when the booking is confirmed.
+
+    Reads a live lookup cache or typed details. Does not create a user or vehicle.
+    """
+    from django.core.cache import cache
+
+    from main.views.garage import lookup_cache_key
+
+    existing = assert_guest_email_available(email)
+    if lookup_token:
+        blob = cache.get(lookup_cache_key(lookup_token.strip()))
+        if not blob:
+            raise ValueError("Vehicle lookup expired. Look up the registration again.")
+        fields = {
+            "registration_number": blob.get("registration_number"),
+            "country": blob.get("country") or "Ireland",
+            "make": blob.get("make"),
+            "model": blob.get("model"),
+            "year": blob.get("year"),
+            "color": blob.get("color") or "Unknown",
+            "body_style": blob.get("body_style"),
+            "provider_image_url": blob.get("provider_image_url"),
+        }
+    else:
+        fields = dict(typed or {})
+    reg = canonical_guest_registration(fields.get("registration_number") or fields.get("licence") or "")
+    country = canonical_guest_country(fields.get("country"))
+    allowed, info = guest_may_book_vehicle(reg, country, guest_user=existing)
+    if not allowed:
+        raise GuestPlateBlocked(
+            info.get("message") or "This vehicle cannot be booked as a guest.",
+            status=info.get("status") or PLATE_OWNED_BY_REGISTERED,
+        )
+    fields["registration_number"] = reg
+    fields["licence"] = reg
+    fields["country"] = country
+    make = (fields.get("make") or "").strip()
+    model = (fields.get("model") or "").strip()
+    color = (fields.get("color") or fields.get("colour") or "").strip()
+    if not reg or not make or not model or not color:
+        raise ValueError("Plate, make, model, and colour are required.")
+    fields["make"] = make
+    fields["model"] = model
+    fields["color"] = color
+    fields["year"] = _manual_vehicle_year(fields.get("year"))
+    return fields
+
+
+def open_guest_account_for_booking(snapshot: dict) -> tuple[User, dict]:
+    """
+    Create the guest, car, and address now that the booking is being written.
+
+    Args:
+        snapshot: Name, email, phone, referral code, vehicle fields, and booking_data.
+
+    Returns:
+        tuple: Guest user and booking_data with real vehicle and address ids.
+    """
+    name = (snapshot.get("name") or "").strip()
+    email = (snapshot.get("email") or "").strip().lower()
+    phone = sanitize_guest_phone(snapshot.get("phone") or "")
+    user = get_or_create_guest_user(name=name, email=email, phone=phone)
+    apply_guest_referral(user, snapshot.get("referral_code"))
+    vehicle_fields = snapshot.get("vehicle") if isinstance(snapshot.get("vehicle"), dict) else {}
+    vehicle = persist_guest_vehicle_manual(user, vehicle_fields)
+    image_url = vehicle_fields.get("provider_image_url")
+    if image_url:
+        from main.services.regcheck_ireland import store_lookup_vehicle_image
+
+        store_lookup_vehicle_image(vehicle, image_url)
+        vehicle.refresh_from_db()
+    address_payload = {}
+    booking_data = dict(snapshot.get("booking_data") or {})
+    raw_address = booking_data.get("address")
+    if isinstance(raw_address, dict):
+        address_payload = raw_address
+    address = persist_guest_address(user, address_payload)
+    vehicle_payload = booking_data.get("vehicle") if isinstance(booking_data.get("vehicle"), dict) else {}
+    vehicle_payload.update(
+        {
+            "id": str(vehicle.id),
+            "make": vehicle.make,
+            "model": vehicle.model,
+            "year": vehicle.year,
+            "color": vehicle.color,
+            "registration_number": vehicle.registration_number,
+            "licence": vehicle.registration_number,
+            "country": vehicle.country,
+            "body_style": vehicle.body_style,
+        }
+    )
+    booking_data["vehicle"] = vehicle_payload
+    booking_data["address"] = {
+        "id": str(address.id),
+        "address": address.address,
+        "post_code": address.post_code,
+        "city": address.city,
+        "country": address.country,
+        "latitude": float(address.latitude) if address.latitude is not None else None,
+        "longitude": float(address.longitude) if address.longitude is not None else None,
+    }
+    return user, booking_data

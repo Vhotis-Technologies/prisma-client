@@ -4,8 +4,7 @@ import { authErrorMessage } from "../auth/AuthProvider";
 import AuthSplit from "../components/AuthSplit";
 import { requestPasswordReset } from "../store/api/authApi";
 
-const SUCCESS_COPY =
-  "If an account with that email exists, a password reset link has been sent.";
+const SUCCESS_COPY = "If that email is on an account, we sent a reset link.";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -34,16 +33,14 @@ export default function ForgotPasswordPage() {
 
   return (
     <AuthSplit
-      kicker="Account"
+      kicker="Password"
       headline="Reset your password."
-      support="We will email a link if that address is on an account. The link expires in one hour."
+      support="We email a link if that address is on an account. It lasts one hour."
     >
       <div className="auth-card">
         <h2>Forgot password</h2>
         <p className="lede">
-          {sent
-            ? "Check your inbox, then follow the link to choose a new password."
-            : "Enter the email you use to sign in."}
+          {sent ? "Check your inbox and follow the link." : "Use the email you sign in with."}
         </p>
 
         {sent ? (

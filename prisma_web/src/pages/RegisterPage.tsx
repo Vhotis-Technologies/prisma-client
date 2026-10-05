@@ -11,17 +11,17 @@ const OPTIONS: {
   {
     type: "b2c",
     title: "Personal",
-    subtitle: "Book washes for your own vehicles. No business details required.",
+    subtitle: "For your own cars.",
   },
   {
     type: "fleet_operator",
-    title: "Fleet operator",
-    subtitle: "Manage fleets, branches, and vehicle servicing at scale.",
+    title: "Fleet",
+    subtitle: "For several vehicles or branches.",
   },
   {
     type: "dealership",
     title: "Dealership",
-    subtitle: "Business profile, fleet tools, and a partnership with Prisma Car Care.",
+    subtitle: "For a forecourt and a Prisma partnership.",
   },
 ];
 
@@ -30,12 +30,12 @@ export default function RegisterPage() {
   return (
     <AuthSplit
       kicker="Create account"
-      headline="Choose how you will use Prisma Car Care."
-      support="Personal, fleet, or dealership — choose the account type that fits you."
+      headline="What kind of account?"
+      support="Personal, fleet, or dealership."
     >
       <div className="auth-card auth-card--wide">
-        <h2>Get started</h2>
-        <p className="lede">Select the account that fits you.</p>
+        <h2>Choose one</h2>
+        <p className="lede">You can book on the web or in the app.</p>
 
         <div className="choice-list">
           {OPTIONS.map((option) => (
@@ -53,7 +53,7 @@ export default function RegisterPage() {
         <p className="auth-footer">
           Already have an account? <Link to={`/login${refQuery}`}>Sign in</Link>
           {" · "}
-          <Link to={`/book/guest${refQuery}`}>Book without an account</Link>
+          <Link to={`/book/guest${refQuery}`}>Book as a guest</Link>
         </p>
       </div>
     </AuthSplit>

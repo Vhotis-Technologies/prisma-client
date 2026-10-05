@@ -188,14 +188,14 @@ export default function PaymentsPage() {
         <div>
           <p className="kicker">Account</p>
           <h1 className="page-title">Payments</h1>
-          <p className="lede">Cards saved on this account, and gift vouchers for someone else.</p>
+          <p className="lede">Saved cards, and gift vouchers for someone else.</p>
         </div>
       </section>
 
       <section className="welcome welcome--split">
         <div>
           <h2 className="section-title">Saved cards</h2>
-          <p className="muted">Cards appear here after a booking or gift voucher payment. There is no separate add-card step.</p>
+          <p className="muted">A card is saved when you pay for a visit or a gift voucher.</p>
         </div>
       </section>
 
@@ -210,7 +210,7 @@ export default function PaymentsPage() {
       {!cardsLoading && cards.length === 0 ? (
         <section className="card">
           <h2>No saved cards</h2>
-          <p className="muted">Pay for a booking or a gift voucher and the card can be saved for next time.</p>
+          <p className="muted">Pay for a visit or a gift voucher and the card can be saved.</p>
         </section>
       ) : null}
 
@@ -241,18 +241,18 @@ export default function PaymentsPage() {
         <div>
           <h2 className="section-title">Gift voucher</h2>
           <p className="muted">
-            You are charged now. After Stripe confirms, we email the recipient their code. Validity is 30–60 days.
+            You pay now. We email the code. It lasts 30 to 60 days.
           </p>
         </div>
       </section>
 
       {payStatus === "success" ? (
         <section className="card">
-          <h2>Voucher paid</h2>
+          <h2>Voucher sent</h2>
           <p className="muted">
             {pending
-              ? `Payment successful. ${pending.recipientEmail} will receive an email shortly with their code.`
-              : "Payment successful. The recipient will receive an email shortly with their code."}
+              ? `Payment went through. ${pending.recipientEmail} will get the code by email.`
+              : "Payment went through. The recipient will get the code by email."}
           </p>
           <div className="card-actions">
             <button
@@ -275,7 +275,7 @@ export default function PaymentsPage() {
       {payStatus === "confirming" ? (
         <section className="card">
           <h2>Confirming payment</h2>
-          <p className="muted">Waiting for Stripe to settle. This usually takes a few seconds.</p>
+          <p className="muted">Waiting for payment. This takes a few seconds.</p>
         </section>
       ) : null}
 
@@ -304,7 +304,7 @@ export default function PaymentsPage() {
             />
           </label>
           <label className="field">
-            <span>Credit amount</span>
+            <span>Amount</span>
             <input
               inputMode="decimal"
               value={amount}
@@ -312,10 +312,10 @@ export default function PaymentsPage() {
               placeholder="e.g. 50"
               required
             />
-            <p className="field-hint">Recipient can use up to this amount on an eligible booking. Minimum {MIN_GIFT_CREDIT_AMOUNT}.</p>
+            <p className="field-hint">They can spend up to this on a booking. Minimum {MIN_GIFT_CREDIT_AMOUNT}.</p>
           </label>
           <div className="field">
-            <span>Use window ({validityDays} days)</span>
+            <span>Valid for ({validityDays} days)</span>
             <div className="stepper">
               <button
                 type="button"
@@ -335,10 +335,10 @@ export default function PaymentsPage() {
                 +
               </button>
             </div>
-            <p className="field-hint">30 to 60 days from the moment payment confirms.</p>
+            <p className="field-hint">From the moment payment confirms.</p>
           </div>
           <button type="submit" className="btn btn-primary" disabled={sheetBusy}>
-            {sheetBusy ? "Starting…" : "Continue to payment"}
+            {sheetBusy ? "Starting…" : "Continue"}
           </button>
         </form>
       ) : null}
@@ -347,7 +347,7 @@ export default function PaymentsPage() {
         <section className="card">
           <h2>Pay {payAmountLabel || "now"}</h2>
           <p className="muted">
-            Gift credit for {pending?.recipientEmail || "the recipient"}. This card can be saved on your account.
+            Gift for {pending?.recipientEmail || "the recipient"}. This card can be saved on your account.
           </p>
           <StripeCheckout clientSecret={clientSecret}>
             <PaymentForm

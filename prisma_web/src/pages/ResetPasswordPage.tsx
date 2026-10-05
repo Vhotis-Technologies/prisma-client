@@ -82,15 +82,15 @@ export default function ResetPasswordPage() {
 
   return (
     <AuthSplit
-      kicker="Account"
+      kicker="Password"
       headline="Choose a new password."
-      support="Use at least eight characters, with one uppercase and one lowercase letter."
+      support="At least eight characters, with one uppercase and one lowercase letter."
     >
       <div className="auth-card">
         {tokenState.status === "checking" ? (
           <>
             <h2>Reset password</h2>
-            <p className="lede">Checking your reset link…</p>
+            <p className="lede">Checking the link…</p>
           </>
         ) : null}
 
@@ -111,8 +111,8 @@ export default function ResetPasswordPage() {
             <h2>New password</h2>
             <p className="lede">
               {tokenState.email
-                ? `Set a new password for ${tokenState.email}.`
-                : "Set a new password for your account."}
+                ? `For ${tokenState.email}.`
+                : "For your account."}
             </p>
 
             <form className="auth-form" onSubmit={(e) => void onSubmit(e)}>

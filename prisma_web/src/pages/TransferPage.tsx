@@ -99,9 +99,9 @@ export default function TransferPage() {
 
   return (
     <AuthSplit
-      kicker="Vehicle transfer"
+      kicker="Transfer"
       headline="Review this request."
-      support="Approve to move the vehicle out of your garage, or reject to keep it."
+      support="Approve to move the car out of your garage, or reject to keep it."
     >
       <div className="auth-card">
         {page.status === "checking" ? (
@@ -142,7 +142,7 @@ export default function TransferPage() {
             <h2>{vehicleLine(data?.vehicle)}</h2>
             <p className="lede">
               {requester}
-              {data?.requester?.email ? ` (${data.requester.email})` : ""} asked to take ownership.
+              {data?.requester?.email ? ` (${data.requester.email})` : ""} asked to take this car.
             </p>
 
             <dl className="meta">

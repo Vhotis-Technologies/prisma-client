@@ -11,7 +11,7 @@ import {
 } from "../store/api/guestApi";
 
 const STATUS_COPY: Record<string, string> = {
-  pending: "Confirmed — waiting for your detailer",
+  pending: "Confirmed. Waiting for the visit.",
   confirmed: "Confirmed",
   scheduled: "Scheduled",
   in_progress: "In progress",
@@ -101,9 +101,9 @@ export default function GuestResultsPage() {
   return (
     <GuestBookShell backTo="/welcome" backLabel="Home">
       <section className="welcome">
-        <p className="kicker">Guest booking</p>
+        <p className="kicker">Guest</p>
         <h1 className="page-title">
-          {error ? "Link unavailable" : loading ? "Loading booking" : "Your booking"}
+          {error ? "Link unavailable" : loading ? "Loading" : "Your visit"}
         </h1>
         <p className="lede">
           {error
@@ -111,10 +111,10 @@ export default function GuestResultsPage() {
             : loading
               ? "Checking this link…"
               : data?.cancelled
-                ? "This booking was cancelled. Email support if you need help."
+                ? "This visit was cancelled. Email support if you need help."
                 : data?.photos_ready
-                  ? "Photos from this visit are ready to view and download."
-                  : "Your booking is confirmed. Photos and detailer notes will appear here after the job."}
+                  ? "Photos from this visit are ready."
+                  : "You're booked. Photos and notes show up here after the job."}
         </p>
       </section>
 
@@ -148,7 +148,7 @@ export default function GuestResultsPage() {
               </dd>
             </div>
             <div>
-              <dt>Vehicle</dt>
+              <dt>Car</dt>
               <dd>{data.vehicle_line}</dd>
             </div>
             {data.address_line ? (
@@ -159,7 +159,7 @@ export default function GuestResultsPage() {
             ) : null}
             {data.detailer_name ? (
               <div>
-                <dt>Detailer</dt>
+                <dt>Crew</dt>
                 <dd>{data.detailer_name}</dd>
               </div>
             ) : null}
@@ -196,11 +196,11 @@ export default function GuestResultsPage() {
 
           {current.length === 0 ? (
             <section className="card">
-              <h2>No photos in this set</h2>
+              <h2>No photos yet</h2>
               <p className="muted">
                 {data.photos_ready
-                  ? "The detailer has not uploaded this set yet."
-                  : "Photos will appear here after the job."}
+                  ? "These photos are not up yet."
+                  : "Photos show up here after the job."}
               </p>
             </section>
           ) : (
@@ -223,7 +223,7 @@ export default function GuestResultsPage() {
 
       {data?.health_check && data.health_check.items.length > 0 ? (
         <section className="card">
-          <h2>Vehicle health check</h2>
+          <h2>Health check</h2>
           {data.health_check.inspected_at ? (
             <p className="muted">Recorded {formatDateTime(data.health_check.inspected_at)}</p>
           ) : null}
@@ -238,8 +238,8 @@ export default function GuestResultsPage() {
         </section>
       ) : data && !data.cancelled ? (
         <section className="card">
-          <h2>Vehicle health check</h2>
-          <p className="muted">Notes will appear here when the detailer finishes the job.</p>
+          <h2>Health check</h2>
+          <p className="muted">Notes show up here after the job.</p>
         </section>
       ) : null}
 
@@ -247,17 +247,16 @@ export default function GuestResultsPage() {
         <>
           <p className="muted">
             To change or cancel, email{" "}
-            <a href="mailto:support@prismavalet.com">support@prismavalet.com</a> with your booking
-            reference.
+            <a href="mailto:support@prismavalet.com">support@prismavalet.com</a> with the reference.
           </p>
           <div className="card-actions">
             {data.can_claim !== false ? (
               <Link to={`/guest/claim/${encodeURIComponent(raw)}`} className="btn btn-primary">
-                Keep this booking
+                Keep this visit
               </Link>
             ) : (
               <Link to="/login" className="btn btn-primary">
-                Sign in to your garage
+                Sign in
               </Link>
             )}
             <Link to="/book/guest" className="btn btn-secondary">

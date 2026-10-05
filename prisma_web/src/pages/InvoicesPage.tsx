@@ -17,7 +17,7 @@ export default function InvoicesPage() {
         <section className="welcome">
           <p className="kicker">Account</p>
           <h1 className="page-title">Invoices</h1>
-          <p className="lede">Bulk invoices are for fleet, branch, and partner accounts.</p>
+          <p className="lede">Invoices are for fleet, branch, and partner accounts.</p>
         </section>
       </AppShell>
     );
@@ -29,7 +29,7 @@ export default function InvoicesPage() {
         <div>
           <p className="kicker">Account</p>
           <h1 className="page-title">Invoices</h1>
-          <p className="lede">Pay-later bulk bookings. Unpaid invoices open Stripe’s hosted payment page.</p>
+          <p className="lede">Pay-later bulk bookings. Open an unpaid invoice to pay.</p>
         </div>
         <button type="button" className="btn btn-secondary" onClick={() => void load()} disabled={loading}>
           {loading ? "Loading…" : "Refresh"}
@@ -47,7 +47,7 @@ export default function InvoicesPage() {
       {!loading && invoices.length === 0 ? (
         <section className="card">
           <h2>No invoices yet</h2>
-          <p className="muted">Invoice-later bulk bookings will appear here.</p>
+          <p className="muted">Pay-later bulk bookings show up here.</p>
           <div className="card-actions">
             <Link to="/book" className="btn btn-primary">
               Book
@@ -68,7 +68,7 @@ export default function InvoicesPage() {
                   </span>
                 </div>
                 <p>
-                  {formatMoney(invoice.total_amount ?? 0, country)} · {invoice.number_of_vehicles} vehicles
+                  {formatMoney(invoice.total_amount ?? 0, country)} · {invoice.number_of_vehicles} cars
                 </p>
                 {invoice.created_at ? <p className="muted">{formatDateTime(invoice.created_at)}</p> : null}
                 {showCreator && invoice.created_by?.name ? (

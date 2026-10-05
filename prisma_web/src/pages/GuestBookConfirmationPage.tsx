@@ -81,7 +81,7 @@ export default function GuestBookConfirmationPage() {
   return (
     <GuestBookShell>
       <section className="welcome">
-        <p className="kicker">Guest booking</p>
+        <p className="kicker">Guest</p>
         <h1 className="page-title">
           {status === "failed"
             ? "Payment needs attention"
@@ -91,10 +91,10 @@ export default function GuestBookConfirmationPage() {
         </h1>
         <p className="lede">
           {status === "confirming"
-            ? "Waiting for Stripe to confirm. This usually takes a few seconds."
+            ? "Waiting for payment. This takes a few seconds."
             : status === "failed"
-              ? error || "If you were charged, keep your booking reference and contact support."
-              : "We emailed a link so you can check this booking. After the job, photos and notes will appear on that page."}
+              ? error || "If you were charged, keep the reference and email support."
+              : "We emailed a link for this visit. Photos and notes show up there after the job."}
         </p>
       </section>
 
@@ -128,7 +128,7 @@ export default function GuestBookConfirmationPage() {
               </dd>
             </div>
             <div>
-              <dt>Vehicle</dt>
+              <dt>Car</dt>
               <dd>{snapshot.vehicleLine}</dd>
             </div>
             <div>
@@ -146,8 +146,7 @@ export default function GuestBookConfirmationPage() {
             </Link>
           </div>
           <p className="muted">
-            We emailed a link to view this booking. Use that same link to create a password so this
-            vehicle stays in your garage.
+            We emailed a link for this visit. Use that link to set a password so this car stays in your garage.
           </p>
         </section>
       ) : null}

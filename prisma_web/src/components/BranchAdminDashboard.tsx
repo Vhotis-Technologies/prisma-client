@@ -160,7 +160,7 @@ export default function BranchAdminDashboard() {
           </p>
         ) : null}
         {spend.status === "ok" && !hasLimit ? (
-          <p className="muted">No spending limit set for your branch.</p>
+          <p className="muted">No spend limit on this branch.</p>
         ) : null}
         {spend.status === "ok" && hasLimit ? (
           <>
@@ -190,14 +190,14 @@ export default function BranchAdminDashboard() {
           <p className="stat-value">
             {stats.status === "ok" ? stats.data.services_this_month : stats.status === "error" ? "—" : "…"}
           </p>
-          <p className="muted">Services at this branch</p>
+          <p className="muted">Visits at this branch</p>
         </article>
         <article className="stat-card">
           <p className="stat-label">This year</p>
           <p className="stat-value">
             {stats.status === "ok" ? stats.data.services_this_year : stats.status === "error" ? "—" : "…"}
           </p>
-          <p className="muted">Services at this branch</p>
+          <p className="muted">Visits at this branch</p>
         </article>
       </section>
       {stats.status === "error" ? (
@@ -210,12 +210,12 @@ export default function BranchAdminDashboard() {
         <div className="card-heading">
           <h2>Upcoming</h2>
           {upcoming.status === "ok" ? (
-            <span className="pill pill-pending" aria-label={`${upcoming.data.length} upcoming bookings`}>
+            <span className="pill pill-pending" aria-label={`${upcoming.data.length} upcoming visits`}>
               {upcoming.data.length}
             </span>
           ) : null}
         </div>
-        <div className="photo-tabs" role="tablist" aria-label="Upcoming bookings">
+        <div className="photo-tabs" role="tablist" aria-label="Upcoming visits">
           <button
             type="button"
             role="tab"
@@ -232,10 +232,10 @@ export default function BranchAdminDashboard() {
             aria-selected={bookingScope === "mine"}
             onClick={() => setBookingScope("mine")}
           >
-            My bookings
+            My visits
           </button>
         </div>
-        {upcoming.status === "loading" ? <p className="muted">Loading bookings…</p> : null}
+        {upcoming.status === "loading" ? <p className="muted">Loading…</p> : null}
         {upcoming.status === "error" ? (
           <p className="banner banner-error" role="alert">
             {upcoming.message}
@@ -244,8 +244,8 @@ export default function BranchAdminDashboard() {
         {upcoming.status === "ok" && upcoming.data.length === 0 ? (
           <p className="muted">
             {bookingScope === "mine"
-              ? "You have no upcoming bookings."
-              : "No upcoming bookings at this branch."}
+              ? "Nothing booked yet."
+              : "Nothing booked at this branch."}
           </p>
         ) : null}
         {upcoming.status === "ok" && upcoming.data.length > 0 ? (
@@ -257,7 +257,7 @@ export default function BranchAdminDashboard() {
                     {job.service_type?.name || "Service"}
                     {job.valet_type?.name ? ` · ${job.valet_type.name}` : ""}
                     {job.is_bulk && job.number_of_vehicles
-                      ? ` · ${job.number_of_vehicles} vehicles`
+                      ? ` · ${job.number_of_vehicles} cars`
                       : ""}
                   </strong>
                   <span
@@ -284,7 +284,7 @@ export default function BranchAdminDashboard() {
       </section>
 
       <section className="card">
-        <h2>Recent service</h2>
+        <h2>Recent visits</h2>
         {recent.status === "loading" ? <p className="muted">Loading…</p> : null}
         {recent.status === "error" ? (
           <p className="banner banner-error" role="alert">
@@ -292,7 +292,7 @@ export default function BranchAdminDashboard() {
           </p>
         ) : null}
         {recent.status === "ok" && !recent.data ? (
-          <p className="muted">No completed services at this branch yet.</p>
+          <p className="muted">No finished visits at this branch yet.</p>
         ) : null}
         {recent.status === "ok" && recent.data ? (
           <div className="booking-item booking-item--flush">
@@ -315,21 +315,21 @@ export default function BranchAdminDashboard() {
 
       <section className="card">
         <div className="card-heading">
-          <h2>Vehicles</h2>
+          <h2>Cars</h2>
           {vehicles.status === "ok" ? (
             <span className="pill pill-pending" aria-label={`${vehicles.data.length} vehicles`}>
               {vehicles.data.length}
             </span>
           ) : null}
         </div>
-        {vehicles.status === "loading" ? <p className="muted">Loading vehicles…</p> : null}
+        {vehicles.status === "loading" ? <p className="muted">Loading…</p> : null}
         {vehicles.status === "error" ? (
           <p className="banner banner-error" role="alert">
             {vehicles.message}
           </p>
         ) : null}
         {vehicles.status === "ok" && vehicles.data.length === 0 ? (
-          <p className="muted">No vehicles at this branch yet.</p>
+          <p className="muted">No cars at this branch yet.</p>
         ) : null}
         {vehicles.status === "ok" && vehicles.data.length > 0 ? (
           <ul className="vehicle-grid">

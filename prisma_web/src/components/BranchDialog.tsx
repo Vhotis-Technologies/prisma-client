@@ -116,7 +116,7 @@ export default function BranchDialog({ open, initial, onClose, onSaved }: Branch
             </label>
             <AddressSearchInput
               label="Branch address"
-              placeholder="Search the branch address"
+              placeholder="Search for the address"
               value={address}
               onSelect={setAddress}
               onClear={() => setAddress(null)}

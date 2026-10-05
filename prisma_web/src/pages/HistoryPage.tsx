@@ -75,8 +75,8 @@ export default function HistoryPage() {
       <section className="welcome welcome--split">
         <div>
           <p className="kicker">History</p>
-          <h1 className="page-title">Past services</h1>
-          <p className="lede">Completed jobs on your account. Open one to see before and after photos.</p>
+          <h1 className="page-title">Past visits</h1>
+          <p className="lede">Open a visit to see the photos.</p>
         </div>
         <button type="button" className="btn btn-secondary" onClick={() => void load()}>
           Refresh
@@ -89,14 +89,14 @@ export default function HistoryPage() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by plate, amount, or reference"
+            placeholder="Plate, amount, or reference"
           />
         </label>
       ) : null}
 
       {error ? (
         <div className="banner banner-error" role="alert">
-          We couldn’t load your service history. Please try again.
+          We couldn't load your visits. Try again.
         </div>
       ) : null}
 
@@ -104,11 +104,11 @@ export default function HistoryPage() {
 
       {!loading && items.length === 0 ? (
         <section className="card">
-          <h2>No completed jobs yet</h2>
-          <p className="muted">When a wash is finished, it will show up here with before and after photos.</p>
+          <h2>No finished visits yet</h2>
+          <p className="muted">They show up here with before and after photos.</p>
           <div className="card-actions">
             <Link to="/book" className="btn btn-primary">
-              Book a service
+              Book
             </Link>
           </div>
         </section>
@@ -117,7 +117,7 @@ export default function HistoryPage() {
       {!loading && items.length > 0 && grouped.length === 0 ? (
         <section className="card">
           <h2>No matches</h2>
-          <p className="muted">Nothing matches “{query.trim()}”. Try a plate, amount, or booking reference.</p>
+          <p className="muted">Nothing matches that search.</p>
         </section>
       ) : null}
 

@@ -19,7 +19,7 @@ export default function InvoiceDetailPage() {
             <Link to="/settings/invoices">Invoices</Link>
           </p>
           <h1 className="page-title">Invoice</h1>
-          <p className="lede">Bulk invoices are for fleet, branch, and partner accounts.</p>
+          <p className="lede">Invoices are for fleet, branch, and partner accounts.</p>
         </section>
       </AppShell>
     );
@@ -37,7 +37,7 @@ export default function InvoiceDetailPage() {
             <Link to="/settings/invoices">Invoices</Link>
           </p>
           <h1 className="page-title">{checkout?.booking_reference || "Invoice"}</h1>
-          <p className="lede">Pay on Stripe’s hosted invoice page. Refresh after you finish to update the status.</p>
+          <p className="lede">Pay on the invoice page. Refresh after you finish.</p>
         </div>
         <button type="button" className="btn btn-secondary" onClick={() => void load()} disabled={loading}>
           {loading ? "Loading…" : "Refresh"}
@@ -62,7 +62,7 @@ export default function InvoiceDetailPage() {
           </div>
           <dl className="meta">
             <div>
-              <dt>Vehicles</dt>
+              <dt>Cars</dt>
               <dd>{checkout.number_of_vehicles}</dd>
             </div>
             <div>
@@ -79,13 +79,13 @@ export default function InvoiceDetailPage() {
           {payable ? (
             <div className="card-actions">
               <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void payOnStripe()}>
-                {busy ? "Opening…" : "Pay on Stripe"}
+                {busy ? "Opening…" : "Pay"}
               </button>
             </div>
           ) : null}
           {checkout.already_paid ? <p className="muted">This invoice is paid.</p> : null}
           {!checkout.already_paid && !payable && checkout.payment_status !== "invoice_later" ? (
-            <p className="muted">This invoice is not payable.</p>
+            <p className="muted">This invoice cannot be paid.</p>
           ) : null}
         </section>
       ) : null}

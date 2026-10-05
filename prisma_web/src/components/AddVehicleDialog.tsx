@@ -115,7 +115,7 @@ export default function AddVehicleDialog({ open, onClose, onAdded }: AddVehicleD
     event.preventDefault();
     if (!lookupToken) return;
     if (isFleetOwner && !branchId) {
-      setError("Select a branch for this vehicle.");
+      setError("Select a branch for this car.");
       return;
     }
     setBusy(true);
@@ -134,7 +134,7 @@ export default function AddVehicleDialog({ open, onClose, onAdded }: AddVehicleD
       onAdded();
       onClose();
     } catch (err) {
-      setError(authErrorMessage(err, "Could not save this vehicle."));
+      setError(authErrorMessage(err, "Could not save this car."));
     } finally {
       setBusy(false);
     }
@@ -150,7 +150,7 @@ export default function AddVehicleDialog({ open, onClose, onAdded }: AddVehicleD
       return;
     }
     if (!photo) {
-      setError("Add a photo of the vehicle.");
+      setError("Add a photo of the car.");
       return;
     }
     if (!Number.isFinite(yearNum) || yearNum < 1900 || yearNum > new Date().getFullYear() + 1) {
@@ -158,7 +158,7 @@ export default function AddVehicleDialog({ open, onClose, onAdded }: AddVehicleD
       return;
     }
     if (isFleetOwner && !branchId) {
-      setError("Select a branch for this vehicle.");
+      setError("Select a branch for this car.");
       return;
     }
     setBusy(true);
@@ -182,7 +182,7 @@ export default function AddVehicleDialog({ open, onClose, onAdded }: AddVehicleD
       onAdded();
       onClose();
     } catch (err) {
-      setError(authErrorMessage(err, "Could not save this vehicle."));
+      setError(authErrorMessage(err, "Could not save this car."));
     } finally {
       setBusy(false);
     }
@@ -213,7 +213,7 @@ export default function AddVehicleDialog({ open, onClose, onAdded }: AddVehicleD
         onClick={(e) => e.stopPropagation()}
       >
         <div className="dialog-header">
-          <h2 id="add-vehicle-title">Add a vehicle</h2>
+          <h2 id="add-vehicle-title">Add a car</h2>
           <button type="button" className="text-btn" onClick={onClose}>
             Close
           </button>
@@ -233,11 +233,10 @@ export default function AddVehicleDialog({ open, onClose, onAdded }: AddVehicleD
           {step === "lookup" ? (
             <form className="auth-form" onSubmit={(e) => void runLookup(e)}>
               <p className="muted">
-                Irish plates first — we look the car up, then you confirm. Lookup is limited to once
-                every five minutes.
+                Irish plates first. We look the car up, then you confirm. One lookup every five minutes.
               </p>
               <label className="field">
-                <span>Registration</span>
+                <span>Plate</span>
                 <input
                   value={licence}
                   onChange={(e) => setLicence(e.target.value.toUpperCase())}
@@ -251,7 +250,7 @@ export default function AddVehicleDialog({ open, onClose, onAdded }: AddVehicleD
                 {busy ? "Looking up…" : "Look up"}
               </button>
               <button type="button" className="btn btn-ghost btn-block" onClick={goManual}>
-                Enter details manually
+                Enter details by hand
               </button>
             </form>
           ) : null}
@@ -276,7 +275,7 @@ export default function AddVehicleDialog({ open, onClose, onAdded }: AddVehicleD
                 </div>
               </div>
               <label className="field">
-                <span>Photo (optional — replaces the lookup image)</span>
+                <span>Photo (optional)</span>
                 <input
                   type="file"
                   accept="image/*"
@@ -288,7 +287,7 @@ export default function AddVehicleDialog({ open, onClose, onAdded }: AddVehicleD
                 {busy ? "Saving…" : "Add to garage"}
               </button>
               <button type="button" className="btn btn-ghost btn-block" onClick={goManual}>
-                Details look wrong — enter manually
+                Details look wrong. Enter them by hand.
               </button>
             </form>
           ) : null}
@@ -296,7 +295,7 @@ export default function AddVehicleDialog({ open, onClose, onAdded }: AddVehicleD
           {step === "manual" ? (
             <form className="auth-form" onSubmit={(e) => void submitManual(e)}>
               <label className="field">
-                <span>Registration</span>
+                <span>Plate</span>
                 <input
                   value={licence}
                   onChange={(e) => setLicence(e.target.value.toUpperCase())}

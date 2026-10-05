@@ -88,6 +88,21 @@ def gift_voucher_validity_user_message(issue: str) -> str:
     }.get(issue, "This code cannot be used right now.")
 
 
+def gift_voucher_matches_email(voucher: GiftVoucher, email: str) -> bool:
+    """
+    Whether this email may preview the gift voucher, without assigning it.
+
+    An already assigned voucher matches only that user's email. An unassigned
+    voucher matches ``assigned_email``.
+    """
+    if gift_voucher_validity_issue(voucher):
+        return False
+    if voucher.assigned_user_id:
+        assigned_email = getattr(voucher.assigned_user, "email", "") or ""
+        return _normalized_emails_match(assigned_email, email)
+    return _normalized_emails_match(voucher.assigned_email, email)
+
+
 def gift_voucher_eligible_for_checkout(voucher: GiftVoucher, user) -> bool:
     """
     Determine whether ``user`` may apply this gift voucher at checkout.

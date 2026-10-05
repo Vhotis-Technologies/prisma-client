@@ -78,6 +78,21 @@ def winner_voucher_validity_user_message(issue: str) -> str:
     }.get(issue, "This code cannot be used right now.")
 
 
+def winner_voucher_matches_email(voucher: WinnerVoucher, email: str) -> bool:
+    """
+    Whether this email may preview the voucher, without assigning it to a user.
+
+    An already assigned voucher matches only that user's email. An unassigned
+    voucher matches ``assigned_email``.
+    """
+    if winner_voucher_validity_issue(voucher):
+        return False
+    if voucher.assigned_user_id:
+        assigned_email = getattr(voucher.assigned_user, "email", "") or ""
+        return _normalized_emails_match(assigned_email, email)
+    return _normalized_emails_match(voucher.assigned_email, email)
+
+
 def voucher_eligible_for_checkout(voucher: WinnerVoucher, user) -> bool:
     """
     Whether ``user`` may apply this winner voucher at checkout.

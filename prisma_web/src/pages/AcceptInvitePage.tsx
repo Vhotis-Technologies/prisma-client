@@ -82,15 +82,15 @@ export default function AcceptInvitePage() {
 
   return (
     <AuthSplit
-      kicker="Invitation"
+      kicker="Invite"
       headline="Set your password."
-      support="Use at least eight characters, with one uppercase and one lowercase letter."
+      support="At least eight characters, with one uppercase and one lowercase letter."
     >
       <div className="auth-card">
         {tokenState.status === "checking" ? (
           <>
             <h2>Accept invite</h2>
-            <p className="lede">Checking your invitation…</p>
+            <p className="lede">Checking the invite…</p>
           </>
         ) : null}
 
@@ -109,8 +109,8 @@ export default function AcceptInvitePage() {
             <h2>{tokenState.purpose || "Branch admin"}</h2>
             <p className="lede">
               {tokenState.email
-                ? `Create a password for ${tokenState.email}, then you can sign in.`
-                : "Create a password for this account, then you can sign in."}
+                ? `For ${tokenState.email}. Then you can sign in.`
+                : "Then you can sign in."}
             </p>
 
             <form className="auth-form" onSubmit={(e) => void onSubmit(e)}>
@@ -149,7 +149,7 @@ export default function AcceptInvitePage() {
               </label>
 
               <button type="submit" className="btn btn-primary btn-block" disabled={submitting}>
-                {submitting ? "Saving…" : "Set password and continue"}
+                {submitting ? "Saving…" : "Set password"}
               </button>
             </form>
           </>

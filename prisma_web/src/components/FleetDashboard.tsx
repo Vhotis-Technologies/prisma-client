@@ -105,7 +105,7 @@ export default function FleetDashboard() {
 
       <section className="card">
         <h2>Spend by branch</h2>
-        <p className="muted">Net spend in the selected dates.</p>
+        <p className="muted">Spend in these dates.</p>
         {loading && !data ? <p className="muted">Loading chart…</p> : null}
         {!loading && spendBars.length === 0 ? <p className="muted">No spend in this range yet.</p> : null}
         {spendBars.length > 0 ? (
@@ -117,15 +117,15 @@ export default function FleetDashboard() {
         <h2>Spend over time</h2>
         <p className="muted">Daily spend per branch.</p>
         {loading && !data ? <p className="muted">Loading chart…</p> : null}
-        {!loading && trendSeries.length === 0 ? <p className="muted">No trend data in this range.</p> : null}
+        {!loading && trendSeries.length === 0 ? <p className="muted">No spend in this range yet.</p> : null}
         {trendSeries.length > 0 ? <SpendTrendChart series={trendSeries} /> : null}
       </section>
 
       <section className="card">
-        <h2>Booking activity</h2>
-        <p className="muted">Counts by status in the selected dates.</p>
+        <h2>Visits</h2>
+        <p className="muted">Counts by status in these dates.</p>
         {loading && !data ? <p className="muted">Loading chart…</p> : null}
-        {!loading && activityBars.length === 0 ? <p className="muted">No bookings in this range yet.</p> : null}
+        {!loading && activityBars.length === 0 ? <p className="muted">No visits in this range yet.</p> : null}
         {activityBars.length > 0 ? <HorizontalBars items={activityBars} /> : null}
       </section>
 
@@ -133,14 +133,14 @@ export default function FleetDashboard() {
         <div className="card-row">
           <div>
             <h2>Branches</h2>
-            <p className="muted">Create locations and invite admins from the branches page.</p>
+            <p className="muted">Add a branch and invite an admin from Branches.</p>
           </div>
           <Link to="/branches" className="btn btn-primary">
             Manage
           </Link>
         </div>
         {list.length === 0 ? (
-          <p className="muted">No branches yet. Add one to invite a branch admin.</p>
+          <p className="muted">No branches yet. Add one, then invite an admin.</p>
         ) : (
           <ul className="address-list">
             {list.map((branch) => (
@@ -148,11 +148,11 @@ export default function FleetDashboard() {
                 <div>
                   <strong>{branch.name}</strong>
                   <p className="muted">
-                    {[branch.address, branch.city, branch.postcode].filter(Boolean).join(", ") || "No address on file"}
+                    {[branch.address, branch.city, branch.postcode].filter(Boolean).join(", ") || "No address yet"}
                   </p>
                   <p className="muted">
-                    {branch.vehicle_count ?? 0} vehicles
-                    {branch.booking_count != null ? ` · ${branch.booking_count} bookings` : ""}
+                    {branch.vehicle_count ?? 0} cars
+                    {branch.booking_count != null ? ` · ${branch.booking_count} visits` : ""}
                     {branch.admin_count != null ? ` · ${branch.admin_count} admins` : ""}
                   </p>
                   <p className="muted">
@@ -171,7 +171,7 @@ export default function FleetDashboard() {
 
       {data?.recent_bookings?.length ? (
         <section className="card">
-          <h2>Recent bookings</h2>
+          <h2>Recent visits</h2>
           <ul className="booking-list">
             {data.recent_bookings.map((booking) => (
               <li key={booking.id} className="booking-item">
@@ -182,7 +182,7 @@ export default function FleetDashboard() {
                   </span>
                 </div>
                 <p>{formatDate(String(booking.appointment_date).slice(0, 10))}</p>
-                <p className="muted">{booking.vehicle_reg || "Vehicle"}</p>
+                <p className="muted">{booking.vehicle_reg || "Car"}</p>
                 <p className="booking-meta">
                   {formatMoney(booking.total_amount || 0, country)}
                   {booking.booking_reference ? ` · ${booking.booking_reference}` : ""}

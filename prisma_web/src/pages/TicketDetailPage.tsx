@@ -17,7 +17,7 @@ export default function TicketDetailPage() {
           </p>
           <h1 className="page-title">{ticket?.ticket_code || "Ticket"}</h1>
           <p className="lede">
-            {ticket ? issueTypeLabel(ticket.issue_type) : "Updates from Prisma Car Care support appear here."}
+            {ticket ? issueTypeLabel(ticket.issue_type) : "Replies from support show up here."}
           </p>
         </div>
         {ticket ? (
@@ -44,7 +44,7 @@ export default function TicketDetailPage() {
               </div>
               {ticket.booking_reference ? (
                 <div>
-                  <dt>Booking</dt>
+                  <dt>Visit</dt>
                   <dd>{ticket.booking_reference}</dd>
                 </div>
               ) : null}
@@ -55,7 +55,7 @@ export default function TicketDetailPage() {
           <section className="welcome">
             <h2 className="section-title">Updates</h2>
             {ticket.updates.length === 0 ? (
-              <p className="muted">No replies yet. We will email you when support responds.</p>
+              <p className="muted">No replies yet. We email you when support replies.</p>
             ) : (
               <ol className="ticket-timeline">
                 {ticket.updates.map((update, index) => (

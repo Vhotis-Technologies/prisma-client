@@ -43,9 +43,9 @@ import type {
 
 const STEPS = [
   { id: 1, title: "Service" },
-  { id: 2, title: "Valet" },
-  { id: 3, title: "Details" },
-  { id: 4, title: "Capacity" },
+  { id: 2, title: "Type" },
+  { id: 3, title: "Place" },
+  { id: 4, title: "Time" },
 ] as const;
 
 function asId(value: string | number | undefined): string {
@@ -209,7 +209,7 @@ export default function BulkBookPage() {
 
   async function checkCapacity() {
     if (!service || !address || vehicleTotal < MIN_BULK_VEHICLES) {
-      setCapacityError("Choose a service, address, date, and at least 2 vehicles first.");
+      setCapacityError("Choose a service, a place, a date, and at least 2 cars first.");
       return;
     }
     if (!address.city || !address.country) {
@@ -234,7 +234,7 @@ export default function BulkBookPage() {
       const data = await checkBulkCapacity(params);
       if (data.error || !data.available || !data.options?.length) {
         setCapacityError(
-          data.error || "Not enough capacity on this date. Try another date or fewer vehicles.",
+          data.error || "Not enough time that day. Try another date or fewer cars.",
         );
         return;
       }
@@ -269,7 +269,7 @@ export default function BulkBookPage() {
       dateIso,
       timeSlot: selectedOption?.best_start_time || "06:00",
       endTime: selectedOption?.estimated_finish_time,
-      vehicleLine: `${pricing.count} vehicle${pricing.count === 1 ? "" : "s"}`,
+      vehicleLine: `${pricing.count} car${pricing.count === 1 ? "" : "s"}`,
       addressLine: addressLine(address),
       total: payable,
       free: payable === 0,
@@ -301,7 +301,7 @@ export default function BulkBookPage() {
   async function submitOrder() {
     if (!service || !valet || !address || !selectedOption) return;
     if (vehicleTotal < MIN_BULK_VEHICLES) {
-      setError("Bulk bookings need at least 2 vehicles.");
+      setError("This order needs at least 2 cars.");
       return;
     }
     if (!coolingOff) {
@@ -373,9 +373,9 @@ export default function BulkBookPage() {
     <AppShell>
       <section className="welcome">
         <p className="kicker">Book</p>
-        <h1 className="page-title">Bulk order</h1>
+        <h1 className="page-title">Book several cars</h1>
         <p className="lede">
-          Same-site fleet booking: pick a service, count, and window, then pay now or email an invoice.
+          Same place, same package. Pick a count and a time, then pay now or send an invoice.
         </p>
       </section>
 
@@ -403,11 +403,11 @@ export default function BulkBookPage() {
         ))}
       </ol>
 
-      {catalogLoading ? <p className="muted">Loading booking options…</p> : null}
+      {catalogLoading ? <p className="muted">Loading packages…</p> : null}
 
       {!catalogLoading && step === 1 ? (
         <section className="wizard-panel">
-          <h2 className="section-title">Service type</h2>
+          <h2 className="section-title">Choose a service</h2>
           <ul className="stack-list">
             {serviceTypes.map((item) => {
               const selected = asId(service?.id) === asId(item.id);
@@ -422,7 +422,7 @@ export default function BulkBookPage() {
                       <strong>{item.name}</strong>
                       <span>{formatMoney(fleetUnitPrice(item), country)}</span>
                     </div>
-                    <p className="muted">{formatDuration(asNum(item.duration))} per vehicle</p>
+                    <p className="muted">{formatDuration(asNum(item.duration))} per car</p>
                     {descriptionLines(item.description).length > 0 ? (
                       <ul className="stack-copy">
                         {descriptionLines(item.description).map((line) => (
@@ -437,7 +437,7 @@ export default function BulkBookPage() {
           </ul>
 
           <label className="field">
-            <span>Number of vehicles</span>
+            <span>Number of cars</span>
             <input
               type="number"
               min={MIN_BULK_VEHICLES}
@@ -464,21 +464,21 @@ export default function BulkBookPage() {
               }}
             />
             {typeof vehicleCount === "number" && vehicleCount > 0 && vehicleCount < MIN_BULK_VEHICLES ? (
-              <span className="muted">Enter at least 2 vehicles to continue.</span>
+              <span className="muted">Enter at least 2 cars to continue.</span>
             ) : (
-              <span className="muted">Minimum 2 vehicles.</span>
+              <span className="muted">At least 2 cars.</span>
             )}
           </label>
           <label className="check-row">
             <input type="checkbox" checked={isSuv} onChange={(e) => setIsSuv(e.target.checked)} />
-            <span>SUV / MPV vehicles — 20% surcharge for the whole order.</span>
+            <span>SUV / MPV cars — 20% extra for the whole order.</span>
           </label>
         </section>
       ) : null}
 
       {!catalogLoading && step === 2 ? (
         <section className="wizard-panel">
-          <h2 className="section-title">Valet type</h2>
+          <h2 className="section-title">Choose a type</h2>
           <ul className="stack-list">
             {valetTypes.map((item) => {
               const selected = asId(valet?.id) === asId(item.id);
@@ -496,8 +496,8 @@ export default function BulkBookPage() {
               );
             })}
           </ul>
-          <h2 className="section-title">Add-ons (optional)</h2>
-          <p className="muted">Applied to every vehicle in the order.</p>
+          <h2 className="section-title">Add-ons</h2>
+          <p className="muted">Optional. Applied to every car.</p>
           <ul className="stack-list">
             {addOns.map((item) => {
               const selected = selectedAddons.some((addon) => asId(addon.id) === asId(item.id));
@@ -512,7 +512,7 @@ export default function BulkBookPage() {
                       <strong>{item.name}</strong>
                       <span>{formatMoney(asNum(item.price), country)}</span>
                     </div>
-                    <p className="muted">+{formatDuration(asNum(item.extra_duration))} per vehicle</p>
+                    <p className="muted">+{formatDuration(asNum(item.extra_duration))} per car</p>
                   </button>
                 </li>
               );
@@ -523,14 +523,14 @@ export default function BulkBookPage() {
 
       {!catalogLoading && step === 3 ? (
         <section className="wizard-panel">
-          <h2 className="section-title">Site address</h2>
+          <h2 className="section-title">Where</h2>
           {addresses.length === 0 ? (
             <div className="card">
               <h2>No address yet</h2>
               <p className="muted">
                 {branchAddresses
-                  ? "Add a branch first so bulk orders have a site."
-                  : "Save a service address, then come back to book."}
+                  ? "Add a branch first so this order has a place."
+                  : "Add the place we should come to."}
               </p>
               <div className="card-actions">
                 {branchAddresses && user?.is_fleet_owner ? (
@@ -566,7 +566,7 @@ export default function BulkBookPage() {
           {!branchAddresses ? (
             <div className="card-actions">
               <button type="button" className="btn btn-secondary" onClick={() => setAddingAddress(true)}>
-                Add another address
+                Add another
               </button>
             </div>
           ) : null}
@@ -581,12 +581,12 @@ export default function BulkBookPage() {
             />
           </label>
           <label className="field">
-            <span>Special instructions (optional)</span>
+            <span>Notes (optional)</span>
             <textarea
               rows={3}
               value={instructions}
               onChange={(e) => setInstructions(e.target.value)}
-              placeholder="Gate code, parking, or notes for the crew"
+              placeholder="Gate code, parking, anything we should know."
             />
           </label>
         </section>
@@ -594,7 +594,7 @@ export default function BulkBookPage() {
 
       {!catalogLoading && step === 4 ? (
         <section className="wizard-panel">
-          <h2 className="section-title">Capacity window</h2>
+          <h2 className="section-title">When</h2>
           {capacityError ? (
             <div className="banner banner-error" role="alert">
               {capacityError}
@@ -603,7 +603,7 @@ export default function BulkBookPage() {
           {!capacityOptions?.length ? (
             <div className="card">
               <p className="muted">
-                Check crew capacity for {pricing.count} vehicle{pricing.count === 1 ? "" : "s"} on{" "}
+                Check times for {pricing.count} car{pricing.count === 1 ? "" : "s"} on{" "}
                 {formatDate(dateIso)}.
               </p>
               <div className="card-actions">
@@ -613,7 +613,7 @@ export default function BulkBookPage() {
                   onClick={() => void checkCapacity()}
                   disabled={capacityLoading}
                 >
-                  {capacityLoading ? "Checking…" : "Check capacity"}
+                  {capacityLoading ? "Checking…" : "Check times"}
                 </button>
               </div>
             </div>
@@ -648,7 +648,7 @@ export default function BulkBookPage() {
                 <h2>Order total</h2>
                 <dl className="meta">
                   <div>
-                    <dt>Vehicles</dt>
+                    <dt>Cars</dt>
                     <dd>
                       {pricing.count} × {formatMoney(pricing.unit, country)}
                     </dd>
@@ -673,7 +673,7 @@ export default function BulkBookPage() {
                   ) : null}
                   {sparkleCredit > 0 ? (
                     <div>
-                      <dt>Complimentary washes (−{complimentaryApplied})</dt>
+                      <dt>Free washes (−{complimentaryApplied})</dt>
                       <dd>−{formatMoney(sparkleCredit, country)}</dd>
                     </div>
                   ) : null}
@@ -686,18 +686,18 @@ export default function BulkBookPage() {
 
               {complimentaryAvailable?.available && isQuickSparkle ? (
                 <div className="card" style={{ marginBottom: "1.5rem" }}>
-                  <h3>Fleet complimentary Quick Sparkles</h3>
+                  <h3>Free Quick Sparkles</h3>
                   <p className="muted">
-                    {complimentaryAvailable.remaining} of {complimentaryAvailable.quota} remaining this month
+                    {complimentaryAvailable.remaining} of {complimentaryAvailable.quota} left this month
                     {complimentaryAvailable.period_end
                       ? ` (resets ${formatDate(complimentaryAvailable.period_end.split("T")[0])})`
                       : ""}
-                    . Unused sparkles do not roll over.
+                    . Unused ones do not carry over.
                   </p>
                   {complimentaryAvailable.branch_usage ? (
                     <p className="muted">
                       Your branch ({complimentaryAvailable.branch_usage.branch_name}) has used{" "}
-                      {complimentaryAvailable.branch_usage.used_this_period} this period.
+                      {complimentaryAvailable.branch_usage.used_this_period} this month.
                     </p>
                   ) : null}
                   {complimentaryAvailable.remaining > 0 ? (
@@ -709,23 +709,23 @@ export default function BulkBookPage() {
                         onChange={(e) => setUseComplimentary(e.target.checked)}
                       />
                       <span>
-                        Apply complimentary sparkles to this order
+                        Use free Quick Sparkles on this order
                         {useComplimentary && complimentaryApplied > 0
-                          ? ` (${complimentaryApplied} of ${pricing.count} washes free; add-ons still billed)`
+                          ? ` (${complimentaryApplied} of ${pricing.count} washes free; add-ons are still charged)`
                           : ""}
                       </span>
                     </label>
                   ) : (
-                    <p className="muted">No complimentary sparkles remaining this period.</p>
+                    <p className="muted">No free Quick Sparkles left this month.</p>
                   )}
                   {useComplimentary && complimentaryApplied > 0 && payable > 0 ? (
                     <p className="muted">
-                      Complimentary covers the wash only. Add-ons stay on the bill for every vehicle.
-                      Balance due: {formatMoney(payable, country)}. Pay now or invoice later.
+                      The free wash covers the package only. Add-ons stay on the bill for every car.
+                      Balance due: {formatMoney(payable, country)}. Pay now or send an invoice.
                     </p>
                   ) : null}
                   {useComplimentary && complimentaryApplied > 0 && payable === 0 ? (
-                    <p className="muted">Complimentary sparkles cover the washes and there are no add-ons, so nothing is due.</p>
+                    <p className="muted">The free washes cover this order, so nothing is due.</p>
                   ) : null}
                 </div>
               ) : null}
@@ -772,8 +772,8 @@ export default function BulkBookPage() {
                   ) : (
                     <p className="muted">
                       {payLater
-                        ? "We email a Stripe invoice (due in 30 days) for the balance. The order is confirmed now."
-                        : "Pay the balance with card now. The order is confirmed after payment succeeds."}
+                        ? "We email an invoice, due in 30 days. The order is confirmed now."
+                        : "Pay by card now. The order is confirmed after payment."}
                     </p>
                   )}
                 </>
@@ -799,7 +799,7 @@ export default function BulkBookPage() {
               {clientSecret && stripePromise ? (
                 <div className="card">
                   <h2>Pay</h2>
-                  {paying ? <p className="muted">Confirming payment with the server…</p> : null}
+                  {paying ? <p className="muted">Confirming payment…</p> : null}
                   <StripeCheckout clientSecret={clientSecret}>
                     <PaymentForm
                       clientSecret={clientSecret}
@@ -823,7 +823,7 @@ export default function BulkBookPage() {
             Continue
           </button>
         ) : clientSecret ? (
-          <span className="muted">Complete payment above.</span>
+          <span className="muted">Pay above.</span>
         ) : (
           <button
             type="button"

@@ -33,10 +33,10 @@ import type { GarageVehicle, LookupPreview } from "../types/garage";
 import type { BusinessAddress } from "../types/user";
 
 const STEPS = [
-  { id: 1, title: "Vehicle" },
+  { id: 1, title: "Car" },
   { id: 2, title: "Service" },
-  { id: 3, title: "Valet" },
-  { id: 4, title: "Details" },
+  { id: 3, title: "Type" },
+  { id: 4, title: "Place" },
   { id: 5, title: "Pay" },
 ] as const;
 
@@ -116,9 +116,46 @@ async function waitForGuestPayment(paymentIntentId: string, maxWaitMs = 60000): 
   throw new Error("Payment is still confirming. Check the email we sent, or try again in a moment.");
 }
 
+type CarEntry = "lookup" | "manual";
+
+function manualYearOk(year: string): number | null {
+  const yearNum = Number(year);
+  if (!Number.isFinite(yearNum) || yearNum < 1900 || yearNum > new Date().getFullYear() + 1) return null;
+  return yearNum;
+}
+
+function vehicleFromManual(fields: {
+  licence: string;
+  make: string;
+  model: string;
+  year: string;
+  color: string;
+  country: string;
+}): GarageVehicle | null {
+  const plate = fields.licence.trim().toUpperCase().replace(/\s+/g, "");
+  const yearNum = manualYearOk(fields.year);
+  const make = fields.make.trim();
+  const model = fields.model.trim();
+  const color = fields.color.trim();
+  const country = fields.country.trim();
+  if (!plate || !make || !model || !color || !country || yearNum == null) return null;
+  return {
+    id: plate,
+    make,
+    model,
+    year: yearNum,
+    color,
+    registration_number: plate,
+    licence: plate,
+    country,
+    body_style: null,
+    image: null,
+  };
+}
+
 /**
- * Five-step guest checkout: Ireland lookup → service → valet → address/slots/contact → pay.
- * No account; confirmation and photos arrive by email.
+ * Five-step guest checkout: look up a plate or type the car, then service, type, place, and pay.
+ * The price quote does not create an account.
  */
 export default function GuestBookPage() {
   const navigate = useNavigate();
@@ -131,6 +168,12 @@ export default function GuestBookPage() {
   const [addOns, setAddOns] = useState<AddOn[]>([]);
 
   const [licence, setLicence] = useState("");
+  const [carEntry, setCarEntry] = useState<CarEntry>("lookup");
+  const [make, setMake] = useState("");
+  const [model, setModel] = useState("");
+  const [year, setYear] = useState("");
+  const [color, setColor] = useState("");
+  const [vehicleCountry, setVehicleCountry] = useState("Ireland");
   const [lookupBusy, setLookupBusy] = useState(false);
   const [lookupToken, setLookupToken] = useState<string | null>(null);
   const [lookup, setLookup] = useState<GuestLookupResponse | null>(null);
@@ -196,8 +239,12 @@ export default function GuestBookPage() {
     setVoucherCode("");
   }, [contactEmail]);
 
+  const manualVehicle = vehicleFromManual({ licence, make, model, year, color, country: vehicleCountry });
   const stepValid = {
-    1: Boolean(vehicle && lookupToken && lookup?.plate.can_book !== false),
+    1:
+      carEntry === "manual"
+        ? Boolean(manualVehicle)
+        : Boolean(vehicle && lookupToken && lookup?.plate.can_book !== false),
     2: Boolean(service),
     3: Boolean(valet),
     4: Boolean(
@@ -222,7 +269,7 @@ export default function GuestBookPage() {
         setValetTypes(catalog.valets || []);
         setAddOns(catalog.add_ons || []);
       } catch (err) {
-        if (!cancelled) setError(authErrorMessage(err, "Could not load booking options."));
+        if (!cancelled) setError(authErrorMessage(err, "Could not load packages."));
       } finally {
         if (!cancelled) setCatalogLoading(false);
       }
@@ -319,17 +366,18 @@ export default function GuestBookPage() {
     setError(null);
     const plate = licence.trim();
     if (!plate) {
-      setError("Enter a vehicle registration.");
+      setError("Enter a plate.");
       return;
     }
     setLookupBusy(true);
     try {
       const data = await lookupGuestVehicle(plate);
+      setCarEntry("lookup");
       setLookup(data);
       setLookupToken(data.lookup_token);
       if (data.plate.status === "owned_by_registered") {
         setVehicle(null);
-        setError(data.plate.message || "This vehicle is already on a Prisma account. Sign in to book.");
+        setError(data.plate.message || "This car is already on an account. Sign in to book.");
         return;
       }
       setVehicle(previewToVehicle(data.preview));
@@ -346,6 +394,51 @@ export default function GuestBookPage() {
     }
   }
 
+  function showManualEntry() {
+    setError(null);
+    setCarEntry("manual");
+    setLookup(null);
+    setLookupToken(null);
+    setClientSecret(null);
+    setPaymentIntentId(null);
+    setVehicle(vehicleFromManual({ licence, make, model, year, color, country: vehicleCountry }));
+  }
+
+  function showLookupEntry() {
+    setError(null);
+    setCarEntry("lookup");
+    setVehicle(null);
+    setLookup(null);
+    setLookupToken(null);
+    setClientSecret(null);
+    setPaymentIntentId(null);
+  }
+
+  function updateManual(next: {
+    licence?: string;
+    make?: string;
+    model?: string;
+    year?: string;
+    color?: string;
+    country?: string;
+  }) {
+    const fields = {
+      licence: next.licence ?? licence,
+      make: next.make ?? make,
+      model: next.model ?? model,
+      year: next.year ?? year,
+      color: next.color ?? color,
+      country: next.country ?? vehicleCountry,
+    };
+    if (next.licence != null) setLicence(next.licence);
+    if (next.make != null) setMake(next.make);
+    if (next.model != null) setModel(next.model);
+    if (next.year != null) setYear(next.year);
+    if (next.color != null) setColor(next.color);
+    if (next.country != null) setVehicleCountry(next.country);
+    setVehicle(vehicleFromManual(fields));
+  }
+
   function toggleAddon(item: AddOn) {
     setSelectedAddons((current) =>
       current.some((addon) => asId(addon.id) === asId(item.id))
@@ -357,7 +450,7 @@ export default function GuestBookPage() {
   function goNext() {
     setError(null);
     if (step === 1 && suvLocked && !isSuv) {
-      setError("This vehicle needs the SUV / MPV surcharge.");
+      setError("This car needs the SUV / MPV extra.");
       return;
     }
     setStep((current) => Math.min(5, current + 1));
@@ -443,9 +536,12 @@ export default function GuestBookPage() {
   }
 
   async function startCheckout() {
-    if (!vehicle || !service || !valet || !address || !timeSlot || !payable || !quote || !lookupToken) return;
+    const typedCar = carEntry === "manual" ? manualVehicle : null;
+    if (!vehicle || !service || !valet || !address || !timeSlot || !payable || !quote) return;
+    if (carEntry === "lookup" && !lookupToken) return;
+    if (carEntry === "manual" && !typedCar) return;
     if (suvLocked && !isSuv) {
-      setError("This vehicle needs the SUV / MPV surcharge.");
+      setError("This car needs the SUV / MPV extra.");
       return;
     }
     if (!coolingOff) {
@@ -459,7 +555,7 @@ export default function GuestBookPage() {
     setPaying(true);
     setError(null);
     const bookingReference = newBookingReference();
-    // Recorded on the shadow user at payment. Omitted when blank. Does not change amount.
+    // Stored on the guest when the booking is confirmed. Omitted when blank. Does not change amount.
     const referral = referralCode.trim().toUpperCase();
     try {
       const { bookingData, detailerData } = buildCheckoutPayloads({
@@ -498,7 +594,19 @@ export default function GuestBookPage() {
         name: contactName.trim(),
         email: contactEmail.trim(),
         phone: contactPhone.trim(),
-        lookup_token: lookupToken,
+        ...(lookupToken
+          ? { lookup_token: lookupToken }
+          : {
+              vehicle: {
+                make: typedCar?.make,
+                model: typedCar?.model,
+                year: typedCar?.year,
+                color: typedCar?.color,
+                registration_number: typedCar?.registration_number,
+                licence: typedCar?.licence,
+                country: typedCar?.country,
+              },
+            }),
         ...(referral ? { referral_code: referral } : {}),
         amount: Math.round(amountDue * 100),
         booking_reference: bookingReference,
@@ -536,16 +644,16 @@ export default function GuestBookPage() {
 
   const plateHint = useMemo(() => {
     if (!lookup || lookup.plate.status !== "owned_by_other_guest") return null;
-    return "If you booked this car as a guest before, use the same email at checkout.";
+    return "If you booked this car as a guest before, use the same email.";
   }, [lookup]);
 
   return (
     <GuestBookShell>
       <section className="welcome">
-        <p className="kicker">Guest booking</p>
-        <h1 className="page-title">Book without an account</h1>
+        <p className="kicker">Guest</p>
+        <h1 className="page-title">Book as a guest</h1>
         <p className="lede">
-          Look up the vehicle, choose a time, and pay. We will email your booking reference.
+          Look up the car or type the details, pick a time, and pay. We email the reference.
         </p>
       </section>
 
@@ -579,24 +687,78 @@ export default function GuestBookPage() {
         ))}
       </ol>
 
-      {catalogLoading ? <p className="muted">Loading booking options…</p> : null}
+      {catalogLoading ? <p className="muted">Loading packages…</p> : null}
 
       {!catalogLoading && step === 1 ? (
         <section className="wizard-panel">
-          <h2 className="section-title">Vehicle registration</h2>
-          <label className="field">
-            <span>Irish registration</span>
-            <input
-              value={licence}
-              onChange={(e) => setLicence(e.target.value.toUpperCase())}
-              placeholder="e.g. 241D12345"
-              autoComplete="off"
-            />
-          </label>
-          <button type="button" className="btn btn-primary" onClick={() => void runLookup()} disabled={lookupBusy}>
-            {lookupBusy ? "Looking up…" : "Look up vehicle"}
-          </button>
-          {vehicle ? (
+          <h2 className="section-title">{carEntry === "manual" ? "Car details" : "Plate"}</h2>
+          {carEntry === "lookup" ? (
+            <>
+              <label className="field">
+                <span>Irish plate</span>
+                <input
+                  value={licence}
+                  onChange={(e) => setLicence(e.target.value.toUpperCase())}
+                  placeholder="e.g. 241D12345"
+                  autoComplete="off"
+                />
+              </label>
+              <div className="card-actions">
+                <button type="button" className="btn btn-primary" onClick={() => void runLookup()} disabled={lookupBusy}>
+                  {lookupBusy ? "Looking up…" : "Look up"}
+                </button>
+                <button type="button" className="btn btn-ghost" onClick={showManualEntry}>
+                  Enter details by hand
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="muted">Type the car if the plate lookup does not have it.</p>
+              <label className="field">
+                <span>Plate</span>
+                <input
+                  value={licence}
+                  onChange={(e) => updateManual({ licence: e.target.value.toUpperCase() })}
+                  autoComplete="off"
+                  required
+                />
+              </label>
+              <div className="field-grid">
+                <label className="field">
+                  <span>Make</span>
+                  <input value={make} onChange={(e) => updateManual({ make: e.target.value })} required />
+                </label>
+                <label className="field">
+                  <span>Model</span>
+                  <input value={model} onChange={(e) => updateManual({ model: e.target.value })} required />
+                </label>
+              </div>
+              <div className="field-grid">
+                <label className="field">
+                  <span>Year</span>
+                  <input
+                    inputMode="numeric"
+                    value={year}
+                    onChange={(e) => updateManual({ year: e.target.value.replace(/\D/g, "").slice(0, 4) })}
+                    required
+                  />
+                </label>
+                <label className="field">
+                  <span>Colour</span>
+                  <input value={color} onChange={(e) => updateManual({ color: e.target.value })} required />
+                </label>
+              </div>
+              <label className="field">
+                <span>Country</span>
+                <input value={vehicleCountry} onChange={(e) => updateManual({ country: e.target.value })} required />
+              </label>
+              <button type="button" className="btn btn-ghost" onClick={showLookupEntry}>
+                Back to lookup
+              </button>
+            </>
+          )}
+          {vehicle && carEntry === "lookup" ? (
             <div className="card">
               {vehicle.image ? <img src={vehicle.image} alt="" className="guest-vehicle-photo" /> : null}
               <h2>
@@ -609,7 +771,7 @@ export default function GuestBookPage() {
               </p>
             </div>
           ) : null}
-          {plateHint ? <p className="muted">{plateHint}</p> : null}
+          {carEntry === "lookup" && plateHint ? <p className="muted">{plateHint}</p> : null}
           {vehicle ? (
             <div className="wizard-flags">
               <label className="check-row">
@@ -620,13 +782,13 @@ export default function GuestBookPage() {
                   onChange={(e) => setIsSuv(e.target.checked)}
                 />
                 <span>
-                  SUV / MPV (20% surcharge)
+                  SUV / MPV (20% extra)
                   {suvLocked ? " — required for this body style." : ""}
                 </span>
               </label>
               <label className="check-row">
                 <input type="checkbox" checked={isExpress} onChange={(e) => setIsExpress(e.target.checked)} />
-                <span>Express service (€30) — two detailers when available.</span>
+                <span>Express (€30) — two people when available.</span>
               </label>
             </div>
           ) : null}
@@ -668,7 +830,7 @@ export default function GuestBookPage() {
 
       {!catalogLoading && step === 3 ? (
         <section className="wizard-panel">
-          <h2 className="section-title">Choose a valet type</h2>
+          <h2 className="section-title">Choose a type</h2>
           <ul className="stack-list">
             {valetTypes.map((item) => {
               const selected = asId(valet?.id) === asId(item.id);
@@ -688,8 +850,8 @@ export default function GuestBookPage() {
           </ul>
           {valet ? (
             <>
-              <h2 className="section-title">Add-ons (optional)</h2>
-              <p className="muted">Four or more add-ons: the cheapest is free.</p>
+              <h2 className="section-title">Add-ons</h2>
+              <p className="muted">Optional. Four or more, and the cheapest is free.</p>
               <ul className="stack-list">
                 {addOns.map((item) => {
                   const selected = selectedAddons.some((addon) => asId(addon.id) === asId(item.id));
@@ -720,9 +882,9 @@ export default function GuestBookPage() {
 
       {!catalogLoading && step === 4 ? (
         <section className="wizard-panel">
-          <h2 className="section-title">Where, when, and how we reach you</h2>
+          <h2 className="section-title">Where and when</h2>
           <AddressSearchInput
-            label="Service address"
+            label="Address"
             placeholder="Start typing your address"
             value={address}
             onSelect={(next) => {
@@ -739,17 +901,17 @@ export default function GuestBookPage() {
             <input type="date" min={todayIso()} value={dateIso} onChange={(e) => setDateIso(e.target.value)} />
           </label>
           <div>
-            <p className="field-label">Available hours</p>
+            <p className="field-label">Times</p>
             {!address?.city || !address?.country ? (
-              <p className="muted">Select an address to see hours from the detailer team.</p>
+              <p className="muted">Pick an address to see times.</p>
             ) : slotsLoading ? (
-              <p className="muted">Checking available hours…</p>
+              <p className="muted">Checking times…</p>
             ) : slotsError ? (
               <div className="banner banner-error" role="alert">
                 {slotsError}
               </div>
             ) : timeSlots.length === 0 ? (
-              <p className="muted">No available hours for this date and location. Try another date.</p>
+              <p className="muted">No times that day. Try another date.</p>
             ) : (
               <div className="slot-grid">
                 {timeSlots.map((slot) => (
@@ -802,15 +964,15 @@ export default function GuestBookPage() {
               placeholder="If you have one"
               maxLength={12}
             />
-            <p className="muted">Saved with this booking. It does not change today’s price.</p>
+            <p className="muted">Saved with this visit. It does not change today’s price.</p>
           </label>
           <label className="field">
-            <span>Special instructions (optional)</span>
+            <span>Notes (optional)</span>
             <textarea
               rows={3}
               value={instructions}
               onChange={(e) => setInstructions(e.target.value)}
-              placeholder="Gate code, parking notes, anything the detailer should know."
+              placeholder="Gate code, parking, anything we should know."
             />
           </label>
         </section>
@@ -819,13 +981,13 @@ export default function GuestBookPage() {
       {!catalogLoading && step === 5 && vehicle && service && valet && address ? (
         <section className="wizard-panel">
           <h2 className="section-title">Quote and pay</h2>
-          {quoteLoading ? <p className="muted">Verifying price with the server…</p> : null}
+          {quoteLoading ? <p className="muted">Checking the price…</p> : null}
           <div className="summary-grid">
             <article className="card">
-              <h2>Booking</h2>
+              <h2>This visit</h2>
               <dl className="meta">
                 <div>
-                  <dt>Vehicle</dt>
+                  <dt>Car</dt>
                   <dd>
                     {vehicleLabel({ make: vehicle.make, model: vehicle.model, licence: vehicle.licence })}
                     {isSuv ? " · SUV/MPV" : ""}
@@ -921,19 +1083,19 @@ export default function GuestBookPage() {
                   </div>
                 </dl>
               ) : (
-                <p className="muted">Price will appear once the quote is ready.</p>
+                <p className="muted">The price will show here in a moment.</p>
               )}
             </article>
           </div>
 
           <div className="card">
             <h2>Voucher code</h2>
-            <p className="muted">Winner / Gift Voucher. Optional — must match your email above.</p>
+            <p className="muted">Winner or gift code. Optional. It must match the email above.</p>
             <div className="voucher-row">
               <input
                 value={voucherCode}
                 onChange={(e) => setVoucherCode(e.target.value)}
-                placeholder="Enter code"
+                placeholder="Code"
                 disabled={Boolean(clientSecret) || paying}
                 autoCapitalize="characters"
               />
@@ -953,7 +1115,7 @@ export default function GuestBookPage() {
                   type="button"
                   className="text-btn text-btn-inline"
                   onClick={() => {
-                    const ok = window.confirm("Remove this voucher from the booking?");
+                    const ok = window.confirm("Remove this code?");
                     if (!ok) return;
                     setVoucher(null);
                   }}
@@ -980,7 +1142,7 @@ export default function GuestBookPage() {
           {clientSecret ? (
             <div className="card">
               <h2>Pay</h2>
-              {paying ? <p className="muted">Confirming payment and assigning your detailer…</p> : null}
+              {paying ? <p className="muted">Confirming payment…</p> : null}
               <StripeCheckout clientSecret={clientSecret}>
                 <PaymentForm
                   clientSecret={clientSecret}
@@ -1015,7 +1177,7 @@ export default function GuestBookPage() {
             Continue
           </button>
         ) : clientSecret ? (
-          <span className="muted">Complete payment above.</span>
+          <span className="muted">Pay above.</span>
         ) : (
           <button
             type="button"

@@ -62,7 +62,7 @@ export default function BranchesPage() {
             <Link to="/dashboard">Dashboard</Link>
           </p>
           <h1 className="page-title">Branches</h1>
-          <p className="lede">Only fleet owners can create branches and invite admins.</p>
+          <p className="lede">Fleet owners add branches and invite admins.</p>
         </section>
       </AppShell>
     );
@@ -76,7 +76,7 @@ export default function BranchesPage() {
             <Link to="/dashboard">Dashboard</Link>
           </p>
           <h1 className="page-title">Branches</h1>
-          <p className="lede">Add locations, set spend caps, and invite branch admins by email.</p>
+          <p className="lede">Add a place, set a spend cap, and invite an admin.</p>
         </div>
         <div className="vehicle-card-actions">
           <button
@@ -119,7 +119,7 @@ export default function BranchesPage() {
       {!loading && branches.length === 0 ? (
         <section className="card">
           <h2>No branches yet</h2>
-          <p className="muted">Create a branch first, then invite an admin to run it.</p>
+          <p className="muted">Add a branch, then invite someone to run it.</p>
           <div className="card-actions">
             <button
               type="button"
@@ -142,10 +142,10 @@ export default function BranchesPage() {
               <div>
                 <strong>{branch.name}</strong>
                 <p className="muted">
-                  {[branch.address, branch.city, branch.postcode].filter(Boolean).join(", ") || "No address on file"}
+                  {[branch.address, branch.city, branch.postcode].filter(Boolean).join(", ") || "No address yet"}
                 </p>
                 <p className="muted">
-                  {branch.vehicle_count ?? 0} vehicles · {branch.admin_count ?? 0} admins
+                  {branch.vehicle_count ?? 0} cars · {branch.admin_count ?? 0} admins
                 </p>
                 <p className="muted">
                   {branch.spend_limit != null && branch.spend_limit > 0
@@ -183,14 +183,14 @@ export default function BranchesPage() {
       <section className="welcome welcome--split">
         <div>
           <h2 className="section-title">Branch admins</h2>
-          <p className="muted">Pending invites expire; resend if they did not get the email.</p>
+          <p className="muted">Pending invites expire. Resend if the email did not arrive.</p>
         </div>
       </section>
 
       {!loading && admins.length === 0 ? (
         <section className="card">
           <h2>No admins yet</h2>
-          <p className="muted">Invite someone after you have at least one branch.</p>
+          <p className="muted">Invite someone once you have a branch.</p>
         </section>
       ) : null}
 

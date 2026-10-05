@@ -150,7 +150,7 @@ export default function ReviewDialog({ open, target, onClose, onSubmitted }: Rev
       setError(
         err instanceof Error
           ? err.message
-          : "Tip payment is still confirming. If you were charged, the detailer will be notified shortly.",
+          : "The tip is still confirming. If you were charged, it will go through shortly.",
       );
     } finally {
       setConfirmingTip(false);
@@ -158,7 +158,7 @@ export default function ReviewDialog({ open, target, onClose, onSubmitted }: Rev
   }
 
   const title =
-    phase === "done" ? "Thanks" : phase === "paying" ? "Add a tip" : "Rate this service";
+    phase === "done" ? "Thanks" : phase === "paying" ? "Add a tip" : "Rate this visit";
 
   return (
     <div className="dialog-backdrop" role="presentation" onClick={onClose}>
@@ -179,8 +179,8 @@ export default function ReviewDialog({ open, target, onClose, onSubmitted }: Rev
           {phase === "done" ? (
             <div className="banner banner-ok" role="status">
               {tipPaidAmount && tipPaidAmount > 0
-                ? `Your review and ${formatMoney(tipPaidAmount, country)} tip were submitted. The detailer has been notified.`
-                : "Your review was submitted. The detailer has been notified."}
+                ? `Review and ${formatMoney(tipPaidAmount, country)} tip sent.`
+                : "Review sent."}
             </div>
           ) : null}
 
@@ -196,12 +196,12 @@ export default function ReviewDialog({ open, target, onClose, onSubmitted }: Rev
                 {target.service_type ? <strong>{target.service_type}</strong> : null}
                 {target.vehicle_label ? <p className="muted">{target.vehicle_label}</p> : null}
                 {target.detailer_name ? (
-                  <p className="muted">Detailer · {target.detailer_name}</p>
+                  <p className="muted">{target.detailer_name}</p>
                 ) : null}
               </div>
 
               <fieldset className="field review-stars-field">
-                <legend>How was your service?</legend>
+                <legend>How was the visit?</legend>
                 <div className="review-stars" role="radiogroup" aria-label="Star rating">
                   {[1, 2, 3, 4, 5].map((star) => (
                     <button
@@ -231,7 +231,7 @@ export default function ReviewDialog({ open, target, onClose, onSubmitted }: Rev
                   value={comment}
                   maxLength={MAX_COMMENT_LEN}
                   onChange={(e) => setComment(e.target.value)}
-                  placeholder="Tell us what went well or what we could improve"
+                  placeholder="What went well, or what we should change"
                 />
               </label>
 
@@ -275,7 +275,7 @@ export default function ReviewDialog({ open, target, onClose, onSubmitted }: Rev
                   </label>
                 ) : null}
                 <p className="muted" style={{ marginTop: "0.5rem" }}>
-                  Tips go to the detailer that provided the service.
+                  Tips go to the person who did the visit.
                 </p>
               </fieldset>
 
@@ -284,7 +284,7 @@ export default function ReviewDialog({ open, target, onClose, onSubmitted }: Rev
                   ? "Submitting…"
                   : tipAmount > 0
                     ? `Submit & tip ${formatMoney(tipAmount, country)}`
-                    : "Submit review"}
+                    : "Send review"}
               </button>
             </form>
           ) : null}
@@ -297,10 +297,10 @@ export default function ReviewDialog({ open, target, onClose, onSubmitted }: Rev
                 </div>
               ) : null}
               <p className="muted">
-                Review saved. Complete payment to send{" "}
-                {formatMoney(tipPaidAmount || tipAmount, country)} to your detailer.
+                Review saved. Pay to send{" "}
+                {formatMoney(tipPaidAmount || tipAmount, country)}.
               </p>
-              {confirmingTip ? <p className="muted">Confirming tip payment…</p> : null}
+              {confirmingTip ? <p className="muted">Confirming the tip…</p> : null}
               <StripeCheckout clientSecret={clientSecret}>
                 <PaymentForm
                   clientSecret={clientSecret}

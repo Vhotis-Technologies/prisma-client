@@ -94,7 +94,7 @@ export default function AddressDialog({ open, initial, onClose, onSaved }: Addre
             ) : null}
             <AddressSearchInput
               label="Search address"
-              placeholder="Start typing your address"
+              placeholder="Search for the address"
               value={value}
               onSelect={setValue}
               onClear={() => setValue(null)}

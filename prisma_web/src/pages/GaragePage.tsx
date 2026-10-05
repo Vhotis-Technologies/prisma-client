@@ -24,11 +24,11 @@ export default function GaragePage() {
       <section className="welcome welcome--split">
         <div>
           <p className="kicker">Garage</p>
-          <h1 className="page-title">Your vehicles</h1>
-          <p className="lede">Look up an Irish plate, or enter details by hand.</p>
+          <h1 className="page-title">Your cars</h1>
+          <p className="lede">Add a car by plate, or type the details.</p>
         </div>
         <button type="button" className="btn btn-primary" onClick={() => setAdding(true)}>
-          Add vehicle
+          Add a car
         </button>
       </section>
 
@@ -38,12 +38,12 @@ export default function GaragePage() {
         </div>
       ) : null}
 
-      {loading ? <p className="muted">Loading your garage…</p> : null}
+      {loading ? <p className="muted">Loading…</p> : null}
 
       {!loading && vehicles.length === 0 ? (
         <section className="card">
-          <h2>No vehicles yet</h2>
-          <p className="muted">Add your first car to start booking.</p>
+          <h2>No cars yet</h2>
+          <p className="muted">Add a car before you book.</p>
         </section>
       ) : null}
 

@@ -46,10 +46,10 @@ import type {
 import { flattenVehicles, plateOf, type GarageVehicle } from "../types/garage";
 
 const STEPS = [
-  { id: 1, title: "Vehicle" },
+  { id: 1, title: "Car" },
   { id: 2, title: "Service" },
-  { id: 3, title: "Valet" },
-  { id: 4, title: "Details" },
+  { id: 3, title: "Type" },
+  { id: 4, title: "Place" },
   { id: 5, title: "Quote" },
 ] as const;
 
@@ -573,10 +573,8 @@ export default function BookPage() {
     <AppShell>
       <section className="welcome">
         <p className="kicker">Book</p>
-        <h1 className="page-title">Book a service</h1>
-        <p className="lede">
-          Vehicle, service, valet, and details — then pay.
-        </p>
+        <h1 className="page-title">Book a visit</h1>
+        <p className="lede">Pick a car, a package, a place, and a time.</p>
       </section>
 
       {promotion?.is_active ? (
@@ -587,9 +585,9 @@ export default function BookPage() {
 
       {freeWash?.can_use_free_wash ? (
         <div className="banner banner-ok" role="status">
-          Complimentary Quick Sparkle is available
-          {freeWash.free_wash_source ? ` via ${freeWash.free_wash_source}` : ""}. Choose it on the quote if this
-          booking is a Quick Sparkle.
+          A free Quick Sparkle is available
+          {freeWash.free_wash_source ? ` via ${freeWash.free_wash_source}` : ""}. Use it on the quote if this visit is a
+          Quick Sparkle.
         </div>
       ) : null}
 
@@ -617,18 +615,18 @@ export default function BookPage() {
         ))}
       </ol>
 
-      {catalogLoading ? <p className="muted">Loading booking options…</p> : null}
+      {catalogLoading ? <p className="muted">Loading packages…</p> : null}
 
       {!catalogLoading && step === 1 ? (
         <section className="wizard-panel">
-          <h2 className="section-title">Choose a vehicle</h2>
+          <h2 className="section-title">Choose a car</h2>
           {vehicles.length === 0 ? (
             <div className="card">
-              <h2>No vehicles yet</h2>
-              <p className="muted">Add a car in the garage before you book.</p>
+              <h2>No cars yet</h2>
+              <p className="muted">Add a car in Garage first.</p>
               <div className="card-actions">
                 <Link to="/garage" className="btn btn-primary">
-                  Go to garage
+                  Open garage
                 </Link>
               </div>
             </div>
@@ -666,13 +664,13 @@ export default function BookPage() {
                   onChange={(e) => setIsSuv(e.target.checked)}
                 />
                 <span>
-                  SUV / MPV (20% surcharge)
+                  SUV / MPV (20% extra)
                   {suvLocked ? " — required for this body style." : ""}
                 </span>
               </label>
               <label className="check-row">
                 <input type="checkbox" checked={isExpress} onChange={(e) => setIsExpress(e.target.checked)} />
-                <span>Express service (€30) — two detailers when available.</span>
+                <span>Express (€30) — two people when available.</span>
               </label>
             </div>
           ) : null}
@@ -714,7 +712,7 @@ export default function BookPage() {
 
       {!catalogLoading && step === 3 ? (
         <section className="wizard-panel">
-          <h2 className="section-title">Choose a valet type</h2>
+          <h2 className="section-title">Choose a type</h2>
           <ul className="stack-list">
             {valetTypes.map((item) => {
               const selected = asId(valet?.id) === asId(item.id);
@@ -735,8 +733,8 @@ export default function BookPage() {
 
           {valet ? (
             <>
-              <h2 className="section-title">Add-ons (optional)</h2>
-              <p className="muted">Four or more add-ons: the cheapest is free.</p>
+              <h2 className="section-title">Add-ons</h2>
+              <p className="muted">Optional. Four or more, and the cheapest is free.</p>
               <ul className="stack-list">
                 {addOns.map((item) => {
                   const selected = selectedAddons.some((addon) => asId(addon.id) === asId(item.id));
@@ -770,9 +768,7 @@ export default function BookPage() {
           <div className="welcome--split">
             <div>
               <h2 className="section-title">Where and when</h2>
-              <p className="muted">
-                Live crew slots are confirmed when you pay. Pick a preferred date and time for this quote.
-              </p>
+              <p className="muted">Choose a place and a time. We confirm the slot when you pay.</p>
             </div>
             <button type="button" className="btn btn-secondary" onClick={() => setAddingAddress(true)}>
               Add address
@@ -782,7 +778,7 @@ export default function BookPage() {
           {addresses.length === 0 ? (
             <div className="card">
               <h2>No addresses yet</h2>
-              <p className="muted">Save a service address first.</p>
+              <p className="muted">Add the place we should come to.</p>
               <div className="card-actions">
                 <button type="button" className="btn btn-primary" onClick={() => setAddingAddress(true)}>
                   Add an address
@@ -817,17 +813,17 @@ export default function BookPage() {
           </label>
 
           <div>
-            <p className="field-label">Available hours</p>
+            <p className="field-label">Times</p>
             {!address?.city || !address?.country ? (
-              <p className="muted">Select an address to see hours from the detailer team.</p>
+              <p className="muted">Pick an address to see times.</p>
             ) : slotsLoading ? (
-              <p className="muted">Checking available hours…</p>
+              <p className="muted">Checking times…</p>
             ) : slotsError ? (
               <div className="banner banner-error" role="alert">
                 {slotsError}
               </div>
             ) : timeSlots.length === 0 ? (
-              <p className="muted">No available hours for this date and location. Try another date.</p>
+              <p className="muted">No times that day. Try another date.</p>
             ) : (
               <div className="slot-grid">
                 {timeSlots.map((slot) => (
@@ -850,12 +846,12 @@ export default function BookPage() {
           </div>
 
           <label className="field">
-            <span>Special instructions (optional)</span>
+            <span>Notes (optional)</span>
             <textarea
               rows={3}
               value={instructions}
               onChange={(e) => setInstructions(e.target.value)}
-              placeholder="Gate code, parking notes, anything the detailer should know."
+              placeholder="Gate code, parking, anything we should know."
             />
           </label>
         </section>
@@ -864,15 +860,15 @@ export default function BookPage() {
       {!catalogLoading && step === 5 && vehicle && service && valet && address ? (
         <section className="wizard-panel">
           <h2 className="section-title">Quote</h2>
-          {quoteLoading ? <p className="muted">Verifying price with the server…</p> : null}
+          {quoteLoading ? <p className="muted">Checking the price…</p> : null}
 
           {elig.length >= 1 && !voucher ? (
             <div className="card">
               <h2>Complimentary Quick Sparkle</h2>
               <p className="muted">
                 {elig.length >= 2
-                  ? "You have more than one option. Choose how to apply it."
-                  : "This booking can use your complimentary Quick Sparkle."}
+                  ? "Pick one."
+                  : "This visit can use your free Quick Sparkle."}
               </p>
               <div className="stack-list">
                 {elig.includes("loyalty") ? (
@@ -883,7 +879,7 @@ export default function BookPage() {
                     disabled={Boolean(clientSecret)}
                   >
                     <strong>Loyalty</strong>
-                    <p className="muted">{quote?.quick_sparkle.remaining_loyalty ?? 0} left this cycle</p>
+                    <p className="muted">{quote?.quick_sparkle.remaining_loyalty ?? 0} left</p>
                   </button>
                 ) : null}
                 {elig.includes("partner") ? (
@@ -894,7 +890,7 @@ export default function BookPage() {
                     disabled={Boolean(clientSecret)}
                   >
                     <strong>Partner referral</strong>
-                    <p className="muted">Complimentary wash from your referral</p>
+                    <p className="muted">Free wash from your referral</p>
                   </button>
                 ) : null}
                 {elig.includes("subscription") ? (
@@ -924,18 +920,17 @@ export default function BookPage() {
                 onChange={(e) => setApplyPartnerDiscount(e.target.checked)}
               />
               <span>
-                Apply partner welcome discount ({quote.partner_booking_offer.percent}% off). Separate from complimentary
-                washes.
+                Use the partner welcome discount ({quote.partner_booking_offer.percent}% off). Separate from a free wash.
               </span>
             </label>
           ) : null}
 
           <div className="summary-grid">
             <article className="card">
-              <h2>Booking</h2>
+              <h2>This visit</h2>
               <dl className="meta">
                 <div>
-                  <dt>Vehicle</dt>
+                  <dt>Car</dt>
                   <dd>
                     {vehicleLabel({ make: vehicle.make, model: vehicle.model, licence: plateOf(vehicle) })}
                     {isSuv ? " · SUV/MPV" : ""}
@@ -1069,19 +1064,19 @@ export default function BookPage() {
                   </div>
                 </dl>
               ) : (
-                <p className="muted">Quote will appear once the server responds.</p>
+                <p className="muted">The price will show here in a moment.</p>
               )}
             </article>
           </div>
 
           <div className="card">
             <h2>Voucher code</h2>
-            <p className="muted">Winner / Gift Voucher. Optional</p>
+            <p className="muted">Winner or gift code. Optional.</p>
             <div className="voucher-row">
               <input
                 value={voucherCode}
                 onChange={(e) => setVoucherCode(e.target.value)}
-                placeholder="Enter code"
+                placeholder="Code"
                 disabled={Boolean(clientSecret) || paying}
                 autoCapitalize="characters"
               />
@@ -1101,7 +1096,7 @@ export default function BookPage() {
                   type="button"
                   className="text-btn text-btn-inline"
                   onClick={() => {
-                    const ok = window.confirm("Remove this voucher from the booking?");
+                    const ok = window.confirm("Remove this code?");
                     if (!ok) return;
                     setVoucher(null);
                   }}
@@ -1128,7 +1123,7 @@ export default function BookPage() {
           {clientSecret && stripePromise ? (
             <div className="card">
               <h2>Pay</h2>
-              {paying ? <p className="muted">Confirming payment and assigning your detailer…</p> : null}
+              {paying ? <p className="muted">Confirming payment…</p> : null}
               <StripeCheckout clientSecret={clientSecret}>
                 <PaymentForm
                   clientSecret={clientSecret}
@@ -1150,7 +1145,7 @@ export default function BookPage() {
             Continue
           </button>
         ) : clientSecret ? (
-          <span className="muted">Complete payment above.</span>
+          <span className="muted">Pay above.</span>
         ) : (
           <button
             type="button"
@@ -1158,7 +1153,7 @@ export default function BookPage() {
             onClick={() => void startCheckout()}
             disabled={!stepValid[5] || paying || !coolingOff}
           >
-            {paying ? "Starting…" : amountDue <= 0 ? "Confirm free booking" : `Pay ${formatMoney(amountDue, country)}`}
+            {paying ? "Starting…" : amountDue <= 0 ? "Confirm booking" : `Pay ${formatMoney(amountDue, country)}`}
           </button>
         )}
       </div>

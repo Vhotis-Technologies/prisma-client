@@ -36,7 +36,7 @@ function addressLine(appointment: UpcomingAppointment): string {
     appointment.address?.city,
     appointment.address?.post_code,
   ].filter(Boolean);
-  return parts.join(", ") || "Address to be confirmed";
+  return parts.join(", ") || "Place to confirm";
 }
 
 export default function DashboardPage() {
@@ -64,14 +64,14 @@ export default function DashboardPage() {
         <h1 className="page-title">Good to see you{greeting ? `, ${greeting}` : ""}.</h1>
         <p className="lede">
           {fleetOwner
-            ? "Spend, activity, and branches for this fleet."
+            ? "Spend and bookings for this fleet."
             : branchAdmin
-              ? "Spend, bookings, and vehicles for your branch."
+              ? "Bookings and cars for this branch."
               : partner
-                ? "Referral code, metrics, and commission."
+                ? "Your referral code and commission."
                 : otherBusiness
-                  ? "This business dashboard is not available on web yet."
-                  : "Your bookings, garage, and loyalty live here."}
+                  ? "This dashboard is not on the web yet."
+                  : "Upcoming visits, your cars, and loyalty."}
         </p>
       </section>
 
@@ -83,8 +83,8 @@ export default function DashboardPage() {
         <PartnerDashboard />
       ) : otherBusiness ? (
         <section className="card">
-          <h2>Coming soon on web</h2>
-          <p className="muted">This business dashboard is not available on web yet.</p>
+          <h2>Not on the web yet</h2>
+          <p className="muted">This dashboard is not on the web yet.</p>
         </section>
       ) : (
         <div className="dash-stack">
@@ -122,9 +122,9 @@ export default function DashboardPage() {
             ) : null}
             {upcoming.status === "ok" && upcoming.data.length === 0 ? (
               <div className="empty-block">
-                <p className="muted">No upcoming bookings. Book a wash when you are ready.</p>
+                <p className="muted">Nothing booked yet.</p>
                 <Link to="/book" className="btn btn-primary">
-                  Book a service
+                  Book
                 </Link>
               </div>
             ) : null}
@@ -159,7 +159,7 @@ export default function DashboardPage() {
           </section>
 
           <section className="card">
-            <h2>Recent service</h2>
+            <h2>Recent visits</h2>
             {recent.status === "loading" ? <p className="muted">Loading…</p> : null}
             {recent.status === "error" ? (
               <p className="banner banner-error" role="alert">
@@ -167,7 +167,7 @@ export default function DashboardPage() {
               </p>
             ) : null}
             {recent.status === "ok" && !recent.data ? (
-              <p className="muted">No completed services yet.</p>
+              <p className="muted">No finished visits yet.</p>
             ) : null}
             {recent.status === "ok" && recent.data ? (
               <div className="booking-item booking-item--flush">
@@ -272,8 +272,8 @@ function LoyaltyBlock({
       </div>
       <p className="muted">
         {isTop
-          ? "You are at the top tier."
-          : `Complete ${loyalty.washes_to_next} more wash${loyalty.washes_to_next === 1 ? "" : "es"} to reach ${TIER_LABEL[loyalty.next_tier || ""]}.`}
+          ? "You're on the top tier."
+          : `${loyalty.washes_to_next} more wash${loyalty.washes_to_next === 1 ? "" : "es"} to reach ${TIER_LABEL[loyalty.next_tier || ""]}.`}
       </p>
       <div className="progress-track" aria-hidden="true">
         <div className="progress-fill" style={{ width: `${pct}%` }} />
@@ -283,9 +283,9 @@ function LoyaltyBlock({
         {isTop ? "" : ` · ${upper} for ${TIER_LABEL[loyalty.next_tier || ""]}`}
       </p>
       <ul className="benefit-list">
-        <li>{discount > 0 ? `${discount}% off paid bookings` : "No service discount at this tier yet"}</li>
+        <li>{discount > 0 ? `${discount}% off paid bookings` : "No discount at this tier."}</li>
         {services.length === 0 ? (
-          <li>Complete more washes to unlock complimentary perks</li>
+          <li>More washes unlock a free Quick Sparkle.</li>
         ) : (
           services.map((item) => <li key={item}>{item}</li>)
         )}

@@ -61,7 +61,7 @@ export default function EditVehicleDialog({ vehicle, onClose, onSaved }: EditVeh
         onClick={(e) => e.stopPropagation()}
       >
         <div className="dialog-header">
-          <h2 id="edit-vehicle-title">Edit vehicle</h2>
+          <h2 id="edit-vehicle-title">Edit car</h2>
           <button type="button" className="text-btn" onClick={onClose}>
             Close
           </button>
@@ -74,7 +74,7 @@ export default function EditVehicleDialog({ vehicle, onClose, onSaved }: EditVeh
               </div>
             ) : null}
             <label className="field">
-              <span>Registration</span>
+              <span>Plate</span>
               <input
                 value={licence}
                 onChange={(e) => setLicence(e.target.value.toUpperCase())}

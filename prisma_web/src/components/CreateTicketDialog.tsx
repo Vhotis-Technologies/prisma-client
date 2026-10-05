@@ -61,7 +61,7 @@ export default function CreateTicketDialog({ open, onClose, onCreated }: CreateT
         onClick={(e) => e.stopPropagation()}
       >
         <div className="dialog-header">
-          <h2 id="ticket-dialog-title">Open a ticket</h2>
+          <h2 id="ticket-dialog-title">Ask for help</h2>
           <button type="button" className="text-btn" onClick={onClose}>
             Close
           </button>
@@ -74,7 +74,7 @@ export default function CreateTicketDialog({ open, onClose, onCreated }: CreateT
               </div>
             ) : null}
             <label className="field">
-              <span>Issue type</span>
+              <span>What is this about?</span>
               <select value={issueType} onChange={(e) => setIssueType(e.target.value as TicketIssueType)}>
                 {TICKET_ISSUE_TYPES.map((item) => (
                   <option key={item.value} value={item.value}>
@@ -84,11 +84,11 @@ export default function CreateTicketDialog({ open, onClose, onCreated }: CreateT
               </select>
             </label>
             <label className="field">
-              <span>Booking reference (optional)</span>
+              <span>Visit reference (optional)</span>
               <input
                 value={bookingReference}
                 onChange={(e) => setBookingReference(e.target.value)}
-                placeholder="If this is about a booking"
+                placeholder="If this is about a visit"
               />
             </label>
             <label className="field">
@@ -97,12 +97,12 @@ export default function CreateTicketDialog({ open, onClose, onCreated }: CreateT
                 rows={5}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Give us enough detail to look into it."
+                placeholder="Enough detail for us to look into it."
                 required
               />
             </label>
             <button type="submit" className="btn btn-primary btn-block" disabled={busy}>
-              {busy ? "Sending…" : "Submit ticket"}
+              {busy ? "Sending…" : "Send"}
             </button>
           </form>
         </div>

@@ -417,7 +417,7 @@ export default function SubscriptionPage() {
   const showComplimentary = Boolean(!isFleetOwner && complimentary && complimentaryMax > 0);
 
   const subscribeLabel = useMemo(() => {
-    if (needsCancelToSwitchClass) return "Cancel to switch vehicle class";
+    if (needsCancelToSwitchClass) return "Cancel to switch";
     if (canStartTrial && isFleetOwner) return "Start trial";
     if (managing) return "Switch plan";
     return "Subscribe";
@@ -430,8 +430,8 @@ export default function SubscriptionPage() {
         <h1 className="page-title">Subscription</h1>
         <p className="lede">
           {isFleetOwner
-            ? "One plan: invoice later and job photos. Trial includes the same perks. You can still book and pay now without a subscription."
-            : "Personal plans and complimentary washes."}
+            ? "Invoice later and job photos. You can still book and pay now without a plan."
+            : "Free washes, and a discount on paid visits."}
         </p>
       </section>
 
@@ -457,18 +457,17 @@ export default function SubscriptionPage() {
           Payment failed.
           {current.paymentFailureStatus.gracePeriodUntil
             ? ` Update your card before ${formatDate(isoDay(current.paymentFailureStatus.gracePeriodUntil))} to keep the plan.`
-            : " Update your payment method to keep the plan."}
+            : " Update your card to keep the plan."}
         </div>
       ) : null}
       {needsCancelToSwitchClass ? (
         <div className="banner banner-ok" role="status">
-          You currently have an active {vehicleCategoryLabel(current?.vehicleCategory)} subscription. To
-          switch to {vehicleCategoryLabel(vehicleCategory)}, cancel your current plan first, then subscribe
-          again.
+          You have an active {vehicleCategoryLabel(current?.vehicleCategory)} plan. Cancel it, then
+          subscribe to {vehicleCategoryLabel(vehicleCategory)}.
         </div>
       ) : null}
 
-      {loading ? <p className="muted">Loading subscription…</p> : null}
+      {loading ? <p className="muted">Loading…</p> : null}
 
       {managing && current ? (
         <section className="card">
@@ -501,7 +500,7 @@ export default function SubscriptionPage() {
             </div>
             <div>
               <dt>Last paid</dt>
-              <dd>{current.lastPaidOn ? formatDate(isoDay(current.lastPaidOn)) : "Never"}</dd>
+              <dd>{current.lastPaidOn ? formatDate(isoDay(current.lastPaidOn)) : "Not yet"}</dd>
             </div>
             <div>
               <dt>Billing</dt>
@@ -509,7 +508,7 @@ export default function SubscriptionPage() {
             </div>
             {!isFleetOwner && current.vehicleCategory ? (
               <div>
-                <dt>Vehicle class</dt>
+                <dt>Cars</dt>
                 <dd>{vehicleCategoryLabel(current.vehicleCategory)}</dd>
               </div>
             ) : null}
@@ -517,7 +516,7 @@ export default function SubscriptionPage() {
           {showComplimentary ? (
             <>
               <p className="muted">
-                Complimentary washes left: {complimentaryLeft} / {complimentaryMax}
+                Free washes left: {complimentaryLeft} of {complimentaryMax}
                 {complimentary?.period_label ? ` · ${complimentary.period_label}` : ""}
               </p>
               <div className="progress-track" aria-hidden="true">
@@ -544,7 +543,7 @@ export default function SubscriptionPage() {
       <section className="wizard-panel">
         <h2 className="section-title">Plans</h2>
         {!loading && plans.length === 0 ? (
-          <p className="muted">No plans are available right now.</p>
+          <p className="muted">No plans right now.</p>
         ) : null}
         {!isFleetOwner && plans.length > 0 ? (
           <div className="photo-tabs" role="tablist" aria-label="Vehicle class">
@@ -572,8 +571,7 @@ export default function SubscriptionPage() {
         ) : null}
         {!isFleetOwner && plans.length > 0 ? (
           <p className="muted">
-            Sedan plans cover saloon cars only. SUV/MPV plans cover larger vehicles and sedans. Switching
-            class requires cancelling your current plan first.
+            Sedan covers saloon cars. SUV / MPV covers larger vehicles and sedans. Cancel the current plan to switch.
           </p>
         ) : null}
         <ul className="stack-list">
@@ -603,8 +601,8 @@ export default function SubscriptionPage() {
                     <ul className="stack-copy">
                       {(tier.maxComplimentaryWashes ?? 0) > 0 ? (
                         <li>
-                          {tier.maxComplimentaryWashes} complimentary Prisma Quick Sparkle wash
-                          {tier.maxComplimentaryWashes === 1 ? "" : "es"} / period
+                          {tier.maxComplimentaryWashes} free Quick Sparkle
+                          {tier.maxComplimentaryWashes === 1 ? "" : "s"} each period
                         </li>
                       ) : null}
                       {(tier.serviceDiscountPercent ?? 0) > 0 ? (
@@ -646,7 +644,7 @@ export default function SubscriptionPage() {
         </ul>
         {canStartTrial && isFleetOwner ? (
           <p className="muted">
-            {isEarlyAdopter ? "Early adopter trial: 60 days." : "New fleets can start with a 30-day trial."}
+            {isEarlyAdopter ? "Early adopter trial: 60 days." : "New fleets start with a 30-day trial."}
           </p>
         ) : null}
       </section>
@@ -654,7 +652,7 @@ export default function SubscriptionPage() {
       {checkout && stripePromise ? (
         <section className="card">
           <h2>{checkout.kind === "payment" ? "Pay" : checkout.kind === "update" ? "New card" : "Save a card for trial"}</h2>
-          {busy ? <p className="muted">Confirming with the server…</p> : null}
+          {busy ? <p className="muted">Confirming…</p> : null}
           <StripeCheckout clientSecret={checkout.clientSecret}>
             <PaymentForm
               clientSecret={checkout.clientSecret}
@@ -691,7 +689,7 @@ export default function SubscriptionPage() {
       <section className="card">
         <h2>Billing history</h2>
         {billing.length === 0 ? (
-          <p className="muted">No invoices yet.</p>
+          <p className="muted">No bills yet.</p>
         ) : (
           <ul className="booking-list">
             {billing.map((row) => {
@@ -721,7 +719,7 @@ export default function SubscriptionPage() {
                   <p className="booking-meta">{formatMoney(Number(row.amount || 0), country)}</p>
                   {isPendingCheckout ? (
                     <p className="muted" style={{ marginTop: "0.35rem", fontSize: "0.9rem" }}>
-                      Tap pending to finish payment or cancel this checkout.
+                      Tap pending to pay or cancel.
                     </p>
                   ) : null}
                 </li>
@@ -756,7 +754,7 @@ export default function SubscriptionPage() {
             <div className="dialog-body">
               <p>
                 Checkout for <strong>{billingPlanLabel(pendingBillingRow)}</strong> was not
-                finished. Complete payment now, or cancel to discard it.
+                finished. Pay now, or cancel it.
               </p>
               <p className="muted">
                 {formatMoney(Number(pendingBillingRow.amount || 0), country)}
@@ -797,7 +795,7 @@ export default function SubscriptionPage() {
           >
             <div className="dialog-header">
               <h2 id="cancel-sub-title">
-                {needsCancelToSwitchClass ? "Switch vehicle class" : "Cancel subscription"}
+                {needsCancelToSwitchClass ? "Switch cars" : "Cancel plan"}
               </h2>
               <button type="button" className="btn btn-ghost" onClick={() => setCancelOpen(false)}>
                 Close
@@ -806,16 +804,16 @@ export default function SubscriptionPage() {
             <div className="dialog-body">
               <p>
                 {needsCancelToSwitchClass
-                  ? `Sedan and SUV/MPV plans cannot run at the same time. Cancel your ${vehicleCategoryLabel(current?.vehicleCategory)} plan now, then subscribe to ${vehicleCategoryLabel(vehicleCategory)} at the matching price.`
+                  ? `Sedan and SUV / MPV plans cannot run together. Cancel the ${vehicleCategoryLabel(current?.vehicleCategory)} plan, then subscribe to ${vehicleCategoryLabel(vehicleCategory)}.`
                   : current?.status === "pending"
-                    ? "Checkout is not finished, so nothing has been charged. Discard it to choose another plan."
+                    ? "Nothing has been charged. Discard this checkout to pick another plan."
                     : current?.isTrialing
-                      ? "Cancelling the trial ends access immediately."
-                      : "Cancel at period end to keep access until the current term finishes, or cancel now."}
+                      ? "Cancelling the trial ends it now."
+                      : "Cancel at the end of this period to keep access until then, or cancel now."}
               </p>
               <div className="card-actions">
                 <button type="button" className="btn btn-secondary" onClick={() => setCancelOpen(false)}>
-                  Keep subscription
+                  Keep plan
                 </button>
                 {current?.status !== "pending" && !current?.isTrialing && !needsCancelToSwitchClass ? (
                   <button

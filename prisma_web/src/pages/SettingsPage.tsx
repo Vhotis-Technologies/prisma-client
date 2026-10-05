@@ -284,30 +284,30 @@ export default function SettingsPage() {
       kicker: "Account",
       title: "Profile",
       lede: editable
-        ? "Name and contact details used across bookings and support."
-        : "Branch admin profiles are managed by the fleet owner.",
+        ? "The name and phone on your bookings."
+        : "Your fleet owner manages this profile.",
     },
     email: {
       kicker: "Account",
       title: "Email",
-      lede: "Web does not use push notifications. These control the emails we send.",
+      lede: "Which emails we send you.",
     },
     notifications: {
       kicker: "Account",
       title: "Notifications",
-      lede: "In-app notices from your bookings. This page checks for new ones every 45 seconds.",
+      lede: "Updates from your bookings.",
     },
     tickets: {
       kicker: "Account",
       title: "Tickets",
-      lede: "Open a support ticket if something goes wrong with a booking, payment, or account.",
+      lede: "Ask for help with a booking, a payment, or your account.",
     },
     addresses: {
       kicker: "Account",
       title: "Addresses",
       lede: branchScoped
-        ? "These are your branch locations. Personal service addresses are for personal accounts."
-        : "Used when you book a wash. Search with Google Places, then adjust the fields if needed.",
+        ? "Places for this branch."
+        : "Where we come to the car.",
     },
   };
 
@@ -333,7 +333,7 @@ export default function SettingsPage() {
         ) : null}
         {section === "tickets" ? (
           <button type="button" className="btn btn-primary" onClick={() => setTicketOpen(true)}>
-            Open a ticket
+            Ask for help
           </button>
         ) : null}
         {section === "addresses" && !branchScoped ? (
@@ -474,7 +474,7 @@ export default function SettingsPage() {
           {!inboxLoading && notifications.length === 0 ? (
             <section className="card">
               <h2>No notifications</h2>
-              <p className="muted">Booking updates will appear here. We do not send browser push on web.</p>
+              <p className="muted">Booking updates show up here.</p>
             </section>
           ) : null}
 
@@ -515,7 +515,7 @@ export default function SettingsPage() {
           {!ticketsLoading && tickets.length === 0 ? (
             <section className="card">
               <h2>No tickets yet</h2>
-              <p className="muted">If you need help, open a ticket and we will follow up by email.</p>
+              <p className="muted">Ask for help and we reply by email.</p>
             </section>
           ) : null}
 
@@ -557,8 +557,8 @@ export default function SettingsPage() {
               <h2>No addresses yet</h2>
               <p className="muted">
                 {branchScoped
-                  ? "No branch locations are set up yet."
-                  : "Add a service address so it is ready when you book."}
+                  ? "No branch places yet."
+                  : "Add the place we should come to."}
               </p>
               {branchScoped ? null : (
                 <div className="card-actions">

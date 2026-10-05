@@ -116,9 +116,10 @@ export function fetchGuestTimeslots(params: Record<string, string | number>) {
 }
 
 /**
- * Create a guest user + PaymentIntent. Contact details and lookup_token are required.
- * Optional `referral_code` is stored on the shadow user and does not change `amount`.
- * @param body - name, email, phone, lookup_token, booking_data, amount, optional referral_code.
+ * Start guest checkout. Contact details are required, plus either a lookup_token
+ * or typed vehicle details. The account is created when the booking is confirmed.
+ * Optional `referral_code` is stored then and does not change `amount`.
+ * @param body - name, email, phone, booking_data, amount, lookup_token or vehicle, optional referral_code.
  */
 export function createGuestPaymentSheet(body: Record<string, unknown>) {
   return postData<PaymentSheetResponse>(

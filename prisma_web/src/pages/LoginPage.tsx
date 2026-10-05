@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { loginErrorMessage, useAuth } from "../auth/AuthProvider";
-import BrandMark from "../components/BrandMark";
+import AuthSplit from "../components/AuthSplit";
 import { referralQuery } from "../lib/referralLink";
 
 export default function LoginPage() {
@@ -41,22 +41,14 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="auth-layout">
-      <aside className="auth-panel">
-        <BrandMark inverted />
-        <div className="auth-panel-copy">
-          <p className="auth-kicker">Client portal</p>
-          <h1>Care for every vehicle, from one place.</h1>
-          <p>
-            Book services, manage your garage, get rewards and follow every visit 
-          </p>
-        </div>
-      </aside>
-
-      <main className="auth-main">
+    <AuthSplit
+      kicker="Sign in"
+      headline="Welcome back."
+      support="Use the email and password for your account."
+    >
         <div className="auth-card">
-          <h2>Welcome back</h2>
-          <p className="lede">Sign in to continue to your dashboard.</p>
+          <h2>Your account</h2>
+          <p className="lede">Book on the web or in the app.</p>
 
           <form className="auth-form" onSubmit={(e) => void onSubmit(e)}>
             {error ? (
@@ -88,7 +80,7 @@ export default function LoginPage() {
                   autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter your password"
+                  placeholder="Your password"
                   required
                 />
                 <button
@@ -119,7 +111,6 @@ export default function LoginPage() {
             New to Prisma Car Care? <Link to={`/welcome${refQuery}`}>Get started</Link>
           </p>
         </div>
-      </main>
-    </div>
+    </AuthSplit>
   );
 }

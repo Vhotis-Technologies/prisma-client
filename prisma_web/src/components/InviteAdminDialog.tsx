@@ -71,7 +71,7 @@ export default function InviteAdminDialog({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="dialog-header">
-          <h2 id="invite-dialog-title">Invite a branch admin</h2>
+          <h2 id="invite-dialog-title">Invite an admin</h2>
           <button type="button" className="text-btn" onClick={onClose}>
             Close
           </button>
@@ -83,7 +83,7 @@ export default function InviteAdminDialog({
                 {error}
               </div>
             ) : null}
-            <p className="muted">They get an email to set a password on this web app, then they can sign in.</p>
+            <p className="muted">They get an email to set a password, then they can sign in.</p>
             <label className="field">
               <span>Name</span>
               <input value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" required />

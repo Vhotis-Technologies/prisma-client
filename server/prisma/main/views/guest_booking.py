@@ -1,12 +1,15 @@
 """
 Public guest checkout APIs: catalog, Ireland reg lookup, quote, timeslots, payment, claim.
 
-Guests never receive a JWT until they claim. Contact details are collected at payment
-time and stored on a ``User`` with ``is_guest=True``. An optional referral code on
-``create_payment_sheet`` is stored on that same shadow user and does not discount
-the wash being paid. Winner and gift vouchers tied to the guest email are supported;
-loyalty, complimentary washes, and bulk booking are not. Claiming sets a password
-on the same row so garage, history, and the referral link are preserved.
+Guests never receive a JWT until they claim. A paid checkout stores the car and
+contact details until Stripe confirms; the ``User`` (``is_guest=True``), vehicle,
+and address are created in the webhook with the booking. A zero-amount voucher
+booking creates that account in the same request, because the booking is written
+immediately. Quote and voucher preview stay anonymous. An optional referral code
+is stored on the shadow user when the account is created and does not discount
+the wash being paid. Loyalty, complimentary washes, and bulk booking are not
+available. Claiming sets a password on the same row so garage, history, and the
+referral link are preserved.
 """
 from __future__ import annotations
 
@@ -44,7 +47,7 @@ from main.models import (
 from main.services.booking_quote import quote_booking_for_user
 from main.services.gift_voucher import (
     compute_gift_discount,
-    gift_voucher_eligible_for_checkout,
+    gift_voucher_matches_email,
     gift_voucher_validity_issue,
     gift_voucher_validity_user_message,
 )
@@ -52,7 +55,7 @@ from main.services.winner_voucher import (
     amount_due_cents,
     compute_winner_discount,
     normalize_winner_code,
-    voucher_eligible_for_checkout,
+    winner_voucher_matches_email,
     winner_voucher_validity_issue,
     winner_voucher_validity_user_message,
 )
@@ -63,15 +66,16 @@ from main.services.guest import (
     GuestPlateBlocked,
     GuestReferralInvalid,
     PLATE_OWNED_BY_REGISTERED,
+    assert_guest_referral_code,
     canonical_guest_country,
     canonical_guest_registration,
-    apply_guest_referral,
     claim_guest_account,
-    get_or_create_guest_user,
     get_valid_guest_access_token,
+    guest_checkout_cache_key,
+    guest_vehicle_fields_for_checkout,
     guest_vehicle_ownership_status,
-    persist_guest_address,
-    persist_guest_vehicle,
+    GUEST_CHECKOUT_TTL_SECONDS,
+    open_guest_account_for_booking,
     sanitize_guest_booking_data,
     sanitize_guest_phone,
     serialize_guest_claim_preview,
@@ -146,16 +150,19 @@ class _GuestPayRequest:
         self.data = data
 
 
-def _guest_user_for_voucher_apply(body: dict):
+def _guest_voucher_email(body: dict) -> str:
     """
-    Resolve the shadow guest user for voucher validation.
+    Checkout email for a voucher preview.
 
-    Uses the same email as checkout so voucher assignment matches payment.
+    Confirms the address is not a registered account. Does not create a guest
+    and does not assign the voucher.
 
     Raises:
         GuestEmailInUse: Registered account owns this email.
         ValueError: Missing or invalid contact fields.
     """
+    from main.services.guest import assert_guest_email_available
+
     email = (body.get("email") or "").strip().lower()
     name = (body.get("name") or "").strip()
     phone = sanitize_guest_phone(body.get("phone") or "")
@@ -163,7 +170,65 @@ def _guest_user_for_voucher_apply(body: dict):
         raise ValueError("Name and a valid email are required to apply a voucher.")
     if len("".join(ch for ch in phone if ch.isdigit())) < 7:
         raise ValueError("A phone number is required to apply a voucher.")
-    return get_or_create_guest_user(name=name, email=email, phone=phone)
+    assert_guest_email_available(email)
+    return email
+
+
+def _drop_placeholder_ids(booking_data: dict) -> dict:
+    """Remove stub vehicle and address ids the guest form sends before rows exist."""
+    data = dict(booking_data)
+    for key in ("vehicle", "address"):
+        payload = data.get(key)
+        if not isinstance(payload, dict):
+            continue
+        payload = dict(payload)
+        raw_id = payload.get("id")
+        try:
+            uuid.UUID(str(raw_id))
+        except (ValueError, TypeError, AttributeError):
+            payload.pop("id", None)
+        data[key] = payload
+    return data
+
+
+def _guest_amount_due_cents(email: str, booking_data: dict) -> int:
+    """
+    Server price for this guest checkout, matched to the email's voucher if any.
+
+    Writes the server totals onto ``booking_data``. Does not create a user or
+    assign the voucher.
+    """
+    from main.services.booking_quote import apply_server_pre_voucher_total
+
+    if booking_data.get("winner_voucher_id") and booking_data.get("gift_voucher_id"):
+        raise ValueError("Use only one of winner voucher or gift voucher per booking")
+    pre_total = apply_server_pre_voucher_total(None, booking_data)
+    discount = Decimal("0")
+    winner_id = booking_data.get("winner_voucher_id")
+    gift_id = booking_data.get("gift_voucher_id")
+    if winner_id:
+        try:
+            voucher = WinnerVoucher.objects.get(pk=winner_id)
+        except WinnerVoucher.DoesNotExist as exc:
+            raise ValueError("Invalid winner voucher") from exc
+        if not winner_voucher_matches_email(voucher, email):
+            raise ValueError("This voucher cannot be used for this booking")
+        discount = compute_winner_discount(voucher, pre_total)
+        booking_data["winner_voucher_discount_applied"] = float(discount)
+    elif gift_id:
+        try:
+            voucher = GiftVoucher.objects.get(pk=gift_id)
+        except GiftVoucher.DoesNotExist as exc:
+            raise ValueError("Invalid gift voucher") from exc
+        if not gift_voucher_matches_email(voucher, email):
+            raise ValueError("This voucher cannot be used for this booking")
+        discount = compute_gift_discount(voucher, pre_total)
+        booking_data["gift_voucher_discount_applied"] = float(discount)
+    due = pre_total - discount
+    if due < 0:
+        due = Decimal("0")
+    booking_data["total_amount"] = float(due)
+    return amount_due_cents(pre_total, discount)
 
 
 def _voucher_apply_response(voucher_type: str, voucher, pre: Decimal, discount: Decimal, due: Decimal):
@@ -431,7 +496,7 @@ class GuestBookingView(APIView):
         Validate a winner discount code for a guest checkout email.
 
         Body: ``code``, ``pre_voucher_total_amount``, ``name``, ``email``, ``phone``.
-        Creates or reuses the shadow guest user so eligibility matches payment.
+        Does not create an account or assign the voucher.
         """
         if _ip_limited(request, "guest_apply_winner_voucher", "20/h"):
             return _limit_response("Too many voucher attempts. Please try again later.")
@@ -445,7 +510,7 @@ class GuestBookingView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         try:
-            user = _guest_user_for_voucher_apply(body)
+            email = _guest_voucher_email(body)
         except GuestEmailInUse as exc:
             return Response({"error": str(exc), "code": exc.code}, status=status.HTTP_409_CONFLICT)
         except ValueError as exc:
@@ -461,7 +526,7 @@ class GuestBookingView(APIView):
                 {"error": winner_voucher_validity_user_message(validity_issue)},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        if not voucher_eligible_for_checkout(voucher, user):
+        if not winner_voucher_matches_email(voucher, email):
             return Response(
                 {"error": "This code cannot be used with this email"},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -491,7 +556,7 @@ class GuestBookingView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         try:
-            user = _guest_user_for_voucher_apply(body)
+            email = _guest_voucher_email(body)
         except GuestEmailInUse as exc:
             return Response({"error": str(exc), "code": exc.code}, status=status.HTTP_409_CONFLICT)
         except ValueError as exc:
@@ -507,7 +572,7 @@ class GuestBookingView(APIView):
                 {"error": gift_voucher_validity_user_message(validity_issue)},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        if not gift_voucher_eligible_for_checkout(voucher, user):
+        if not gift_voucher_matches_email(voucher, email):
             return Response(
                 {"error": "This code cannot be used with this email"},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -612,13 +677,17 @@ class GuestBookingView(APIView):
 
     def create_payment_sheet(self, request):
         """
-        Create a guest user, persist vehicle/address, then reuse the paid booking sheet.
+        Start guest checkout without creating an account.
 
-        Extra IP limit: 8/hour. Body must include name, email, phone, ``lookup_token``,
-        and ``booking_data``. Optional ``referral_code`` (also ``referred_code`` /
-        ``referredCode``) is attached to the shadow user and does not change
-        ``amount``. Loyalty fields in ``booking_data`` are stripped; vouchers
-        are validated at payment when present.
+        Extra IP limit: 8/hour. Body must include name, email, phone, ``booking_data``,
+        and either ``lookup_token`` or typed ``vehicle`` details. Optional
+        ``referral_code`` (also ``referred_code`` / ``referredCode``) is checked now
+        and stored when the booking is written. It does not change ``amount``.
+
+        A charge above zero caches the checkout and returns a Stripe PaymentIntent.
+        The guest, car, and address are created when that payment succeeds. A zero
+        amount (voucher covers the total) creates the account in this request,
+        because the booking is written immediately.
         """
         if _ip_limited(request, "guest_create_payment_sheet", "8/h"):
             return _limit_response("Too many checkout attempts. Please try again later.")
@@ -628,6 +697,8 @@ class GuestBookingView(APIView):
         email = (body.get("email") or "").strip().lower()
         phone = sanitize_guest_phone(body.get("phone") or "")
         lookup_token = (body.get("lookup_token") or "").strip()
+        typed_vehicle = body.get("vehicle") if isinstance(body.get("vehicle"), dict) else None
+        referral_code = body.get("referral_code") or body.get("referred_code") or body.get("referredCode")
         if not name or not email or not _EMAIL_RE.match(email):
             return Response(
                 {"error": "Name and a valid email are required."},
@@ -638,9 +709,9 @@ class GuestBookingView(APIView):
                 {"error": "A phone number is required so the detailer can reach you."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        if not lookup_token:
+        if not lookup_token and not typed_vehicle:
             return Response(
-                {"error": "Vehicle lookup is required."},
+                {"error": "Look up the plate or enter the car details."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -650,76 +721,123 @@ class GuestBookingView(APIView):
                 {"error": "booking_data is required"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        booking_data = sanitize_guest_booking_data(booking_data)
+        booking_data = _drop_placeholder_ids(sanitize_guest_booking_data(booking_data))
 
         try:
-            user = get_or_create_guest_user(name=name, email=email, phone=phone)
-            # Record only. sanitize_guest_booking_data still blocks a discount on this wash.
-            apply_guest_referral(
-                user,
-                body.get("referral_code") or body.get("referred_code") or body.get("referredCode"),
+            vehicle_fields = guest_vehicle_fields_for_checkout(
+                email=email,
+                lookup_token=lookup_token,
+                typed=None if lookup_token else typed_vehicle,
             )
+            assert_guest_referral_code(email, referral_code or "")
+            expected_cents = _guest_amount_due_cents(email, booking_data)
         except GuestEmailInUse as exc:
             return Response({"error": str(exc), "code": exc.code}, status=status.HTTP_409_CONFLICT)
         except GuestReferralInvalid as exc:
             return Response({"error": str(exc), "code": exc.code}, status=status.HTTP_400_BAD_REQUEST)
-        except ValueError as exc:
-            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            vehicle = persist_guest_vehicle(user, lookup_token)
-            address_payload = booking_data.get("address") if isinstance(booking_data.get("address"), dict) else {}
-            address = persist_guest_address(user, address_payload)
         except GuestPlateBlocked as exc:
             return Response({"error": str(exc), "code": exc.code}, status=status.HTTP_400_BAD_REQUEST)
         except ValueError as exc:
             return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
-        vehicle_payload = booking_data.get("vehicle") if isinstance(booking_data.get("vehicle"), dict) else {}
-        vehicle_payload.update(
-            {
-                "id": str(vehicle.id),
-                "make": vehicle.make,
-                "model": vehicle.model,
-                "year": vehicle.year,
-                "color": vehicle.color,
-                "registration_number": vehicle.registration_number,
-                "licence": vehicle.registration_number,
-                "country": vehicle.country,
-                "body_style": vehicle.body_style,
-            }
-        )
-        booking_data["vehicle"] = vehicle_payload
-        booking_data["address"] = {
-            "id": str(address.id),
-            "address": address.address,
-            "post_code": address.post_code,
-            "city": address.city,
-            "country": address.country,
-            "latitude": float(address.latitude) if address.latitude is not None else None,
-            "longitude": float(address.longitude) if address.longitude is not None else None,
-        }
+        try:
+            amount = int(body.get("amount", expected_cents) or 0)
+        except (TypeError, ValueError):
+            return Response({"error": "amount must be an integer number of cents."}, status=status.HTTP_400_BAD_REQUEST)
+        if abs(amount - expected_cents) > 2:
+            return Response(
+                {"error": "Payment amount does not match the balance due. Refresh and try again."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         booking_reference = body.get("booking_reference") or booking_data.get("booking_reference")
         if not booking_reference:
             booking_reference = f"APT{int(time.time() * 1000)}{str(uuid.uuid4())[:8].upper()}"
         booking_data["booking_reference"] = booking_reference
 
-        detailer_booking_data = build_detailer_payload_from_booking_data(
-            booking_data, user, booking_reference
-        )
+        snapshot = {
+            "name": name,
+            "email": email,
+            "phone": phone,
+            "referral_code": referral_code or "",
+            "vehicle": vehicle_fields,
+            "booking_data": booking_data,
+            "booking_reference": booking_reference,
+        }
 
-        amount = body.get("amount", 0)
-        pay_request = _GuestPayRequest(
-            user,
+        if expected_cents == 0:
+            from main.models import User
+
+            email_already_used = User.objects.filter(email__iexact=email).exists()
+            try:
+                user, booked = open_guest_account_for_booking(snapshot)
+            except GuestEmailInUse as exc:
+                return Response({"error": str(exc), "code": exc.code}, status=status.HTTP_409_CONFLICT)
+            except GuestReferralInvalid as exc:
+                return Response({"error": str(exc), "code": exc.code}, status=status.HTTP_400_BAD_REQUEST)
+            except GuestPlateBlocked as exc:
+                return Response({"error": str(exc), "code": exc.code}, status=status.HTTP_400_BAD_REQUEST)
+            except ValueError as exc:
+                return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            detailer_booking_data = build_detailer_payload_from_booking_data(
+                booked, user, booking_reference
+            )
+            pay_request = _GuestPayRequest(
+                user,
+                {
+                    "booking_data": booked,
+                    "detailer_booking_data": detailer_booking_data,
+                    "booking_reference": booking_reference,
+                    "amount": 0,
+                },
+            )
+            pay_response = PaymentView().create_payment_sheet(pay_request)
+            # A failed zero-amount checkout did not write a booking, so a brand-new guest is removed.
+            if pay_response.status_code >= 400 and not email_already_used:
+                User.objects.filter(pk=user.pk, is_guest=True).delete()
+            return pay_response
+
+        checkout_id = secrets.token_urlsafe(32)
+        cache.set(guest_checkout_cache_key(checkout_id), snapshot, timeout=GUEST_CHECKOUT_TTL_SECONDS)
+
+        address = booking_data.get("address") if isinstance(booking_data.get("address"), dict) else {}
+        country = canonical_guest_country(address.get("country"))
+        currency = "gbp" if country == "United Kingdom" else "eur"
+
+        import stripe
+        from django.conf import settings as dj_settings
+
+        if not getattr(dj_settings, "STRIPE_SECRET_KEY", None):
+            return Response(
+                {"error": "Stripe is not configured."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+        stripe.api_key = dj_settings.STRIPE_SECRET_KEY
+        try:
+            payment_intent = stripe.PaymentIntent.create(
+                amount=expected_cents,
+                currency=currency,
+                receipt_email=email,
+                automatic_payment_methods={"enabled": True},
+                metadata={
+                    "type": "guest_booking",
+                    "guest_checkout_id": checkout_id,
+                    "booking_reference": booking_reference,
+                },
+            )
+        except stripe.error.StripeError as exc:
+            cache.delete(guest_checkout_cache_key(checkout_id))
+            logger.exception("guest payment intent failed for %s", booking_reference)
+            return Response({"error": str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+
+        return Response(
             {
-                "booking_data": booking_data,
-                "detailer_booking_data": detailer_booking_data,
+                "paymentIntent": payment_intent.client_secret,
+                "paymentIntentId": payment_intent.id,
                 "booking_reference": booking_reference,
-                "amount": amount,
             },
+            status=status.HTTP_200_OK,
         )
-        return PaymentView().create_payment_sheet(pay_request)
 
     def confirm_payment_intent(self, request):
         """

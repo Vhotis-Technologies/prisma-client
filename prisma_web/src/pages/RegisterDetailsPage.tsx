@@ -9,7 +9,7 @@ import type { BusinessAddress, RegisterCredentials, SignUpAccountType } from "..
 
 const ACCOUNT_TITLE: Record<SignUpAccountType, string> = {
   b2c: "Personal",
-  fleet_operator: "Fleet operator",
+  fleet_operator: "Fleet",
   dealership: "Dealership",
 };
 
@@ -44,19 +44,19 @@ export default function RegisterDetailsPage() {
   const panelCopy = useMemo(() => {
     if (accountType === "fleet_operator") {
       return {
-        headline: "Set up your fleet.",
-        support: "Add your business details so branches and vehicles can live under one account.",
+        headline: "Your fleet account.",
+        support: "Add the business, then you can add branches and cars.",
       };
     }
     if (accountType === "dealership") {
       return {
-        headline: "Join as a dealership partner.",
-        support: "Your business profile unlocks partnership tools and fleet features.",
+        headline: "Your dealership account.",
+        support: "Add the business. Partnership tools sit on the same account.",
       };
     }
     return {
-      headline: "A few details, then you are in.",
-      support: "Create a personal account to book and manage your vehicles.",
+      headline: "Your details.",
+      support: "Name, email, and a password. Then you can book.",
     };
   }, [accountType]);
 
@@ -127,12 +127,12 @@ export default function RegisterDetailsPage() {
       <div className="auth-card auth-card--wide">
         <div className="account-chip">
           <span>
-            Signing up as <strong>{ACCOUNT_TITLE[accountType]}</strong>
+            Account: <strong>{ACCOUNT_TITLE[accountType]}</strong>
           </span>
           <Link to={`/register${referralQuery()}`}>Change</Link>
         </div>
         <h2>Your details</h2>
-        <p className="lede">Complete your details to finish signing up.</p>
+        <p className="lede">This is what we use to sign you in.</p>
 
         <form className="auth-form" onSubmit={(e) => void onSubmit(e)}>
           {error ? (
@@ -224,7 +224,7 @@ export default function RegisterDetailsPage() {
               </label>
               <AddressSearchInput
                 label="Business address"
-                placeholder="Search for your business address..."
+                placeholder="Search for the address"
                 value={businessAddress}
                 onSelect={setBusinessAddress}
                 onClear={() => setBusinessAddress(null)}
@@ -234,10 +234,10 @@ export default function RegisterDetailsPage() {
 
           <div className="legal-links">
             <button type="button" className="text-btn text-btn-inline" onClick={() => setLegalKind("terms")}>
-              Read terms of service
+              Terms
             </button>
             <button type="button" className="text-btn text-btn-inline" onClick={() => setLegalKind("privacy")}>
-              Read privacy policy
+              Privacy policy
             </button>
           </div>
 
@@ -247,7 +247,7 @@ export default function RegisterDetailsPage() {
               checked={termsAccepted}
               onChange={(e) => setTermsAccepted(e.target.checked)}
             />
-            <span>I have read and accept the terms of service and privacy policy.</span>
+            <span>I accept the terms and the privacy policy.</span>
           </label>
 
           <button
@@ -262,7 +262,7 @@ export default function RegisterDetailsPage() {
         <p className="auth-footer">
           Already have an account? <Link to={`/login${referralQuery()}`}>Sign in</Link>
           {" · "}
-          <Link to={`/book/guest${referralQuery()}`}>Book without an account</Link>
+          <Link to={`/book/guest${referralQuery()}`}>Book as a guest</Link>
         </p>
       </div>
 

@@ -101,9 +101,9 @@ export default function GuestClaimPage() {
 
   return (
     <AuthSplit
-      kicker="Keep your booking"
-      headline="Create a password for this email."
-      support="Your vehicle and visit history stay on this account — you are not starting over."
+      kicker="Guest"
+      headline="Set a password."
+      support="The car and this visit stay on the account."
     >
       <div className="auth-card">
         {tokenState.status === "checking" ? (
@@ -120,18 +120,18 @@ export default function GuestClaimPage() {
             <p className="auth-footer">
               <Link to="/login">Sign in</Link>
               {" · "}
-              <Link to="/book/guest">Book without an account</Link>
+              <Link to="/book/guest">Book as a guest</Link>
             </p>
           </>
         ) : null}
 
         {tokenState.status === "already" ? (
           <>
-            <h2>Account already created</h2>
+            <h2>Password already set</h2>
             <p className="lede">
               {tokenState.email
-                ? `A password is already set for ${tokenState.email}. Sign in to see your garage and history.`
-                : "A password is already set for this booking. Sign in to continue."}
+                ? `A password is already set for ${tokenState.email}. Sign in to see your garage.`
+                : "A password is already set. Sign in to continue."}
             </p>
             <p className="auth-footer">
               <Link to="/login">Sign in</Link>
@@ -145,14 +145,14 @@ export default function GuestClaimPage() {
             <p className="lede">
               {tokenState.email
                 ? `Set a password for ${tokenState.email}.`
-                : "Set a password for this booking."}
+                : "Set a password for this visit."}
             </p>
             {tokenState.vehicleLine || tokenState.bookingReference ? (
               <p className="muted">
                 {[tokenState.vehicleLine, tokenState.bookingReference ? `Ref ${tokenState.bookingReference}` : ""]
                   .filter(Boolean)
                   .join(" · ")}{" "}
-                will appear in your garage and history.
+                will show in your garage and history.
               </p>
             ) : null}
 
@@ -181,7 +181,7 @@ export default function GuestClaimPage() {
                     {showPassword ? "Hide" : "Show"}
                   </button>
                 </div>
-                <p className="field-hint">8+ characters, with upper and lowercase letters.</p>
+                <p className="field-hint">At least eight characters, with one uppercase and one lowercase letter.</p>
               </label>
 
               <label className="field">
