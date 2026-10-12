@@ -267,6 +267,18 @@ const useBooking = () => {
     }
   }, [selectedVehicle]);
 
+  useEffect(() => {
+    if (selectedValetType || !valetTypes?.length) return;
+    const handWash = valetTypes.find(
+      (item) => item.name.trim().toLowerCase() === "hand wash",
+    );
+    if (handWash) setSelectedValetType(handWash);
+  }, [valetTypes, selectedValetType]);
+
+  useEffect(() => {
+    if (currentStep === 3) setCurrentStep(4);
+  }, [currentStep]);
+
   const resetBooking = useCallback(() => {
     setSelectedVehicle(null);
     setSelectedServiceType(null);
@@ -1025,6 +1037,10 @@ const useBooking = () => {
    * // Advances from step 1 to step 2 if step 1 is valid
    */
   const handleNextStep = useCallback(() => {
+    if (currentStep === 2) {
+      setCurrentStep(4);
+      return;
+    }
     if (currentStep < 5) {
       setCurrentStep(currentStep + 1);
     }
@@ -1041,6 +1057,10 @@ const useBooking = () => {
    * // Moves from step 3 back to step 2
    */
   const handlePreviousStep = useCallback(() => {
+    if (currentStep === 4) {
+      setCurrentStep(2);
+      return;
+    }
     if (currentStep > 1) {
       setCurrentStep(currentStep - 1);
     }
@@ -1059,8 +1079,9 @@ const useBooking = () => {
    * handleGoToStep(3); // Navigates directly to step 3 (Valet Type Selection)
    */
   const handleGoToStep = useCallback((step: number) => {
-    if (step >= 1 && step <= 5) {
-      setCurrentStep(step);
+    const next = step === 3 ? 4 : step;
+    if (next >= 1 && next <= 5) {
+      setCurrentStep(next);
     }
   }, []);
 
@@ -1100,8 +1121,8 @@ const useBooking = () => {
           }
           return true;
         }
-        case 2: // Service type selection
-          return selectedServiceType !== null;
+        case 2: // Service type selection. Hand wash is chosen automatically.
+          return selectedServiceType !== null && selectedValetType !== null;
         case 3: // Valet type selection
           return selectedValetType !== null;
         case 4: // Date, time, and location

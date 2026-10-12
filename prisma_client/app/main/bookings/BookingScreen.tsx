@@ -1,7 +1,8 @@
 /**
  * Booking screen: multi-step flow for single-vehicle and bulk bookings.
  *
- * Steps (single): Vehicle → Service → Valet → Details (address, date, time, add-ons, special instructions) → Summary → Confirm.
+ * Steps (single): Vehicle → Service → Details (address, date, time, add-ons, special instructions) → Summary → Confirm.
+ * Hand wash is selected automatically.
  * Bulk: Service + vehicle count → Valet → Address + date + instructions → Check capacity → Choose window → Pay.
  * Uses useBooking (single) and useBulkBooking (bulk); payment via usePayment + eventApi (create_payment_sheet, confirm_payment_intent).
  * See docs/BOOKING_FLOW.md for the full flow.
@@ -376,7 +377,6 @@ const BookingScreen = () => {
   const steps: BookingStep[] = [
     { id: 1, title: "Vehicle", icon: "car" },
     { id: 2, title: "Service", icon: "construct" },
-    { id: 3, title: "Valet", icon: "water" },
     { id: 4, title: "Details", icon: "calendar" },
     { id: 5, title: "Summary", icon: "checkmark-circle" },
   ];
@@ -460,6 +460,11 @@ const BookingScreen = () => {
                 onSelect={handleServiceTypeSelection}
               />
             ))}
+            {!isLoadingValetTypes && !selectedValetType ? (
+              <StyledText variant="bodyMedium" style={{ color: textColor, marginTop: 12 }}>
+                Hand wash is not available right now.
+              </StyledText>
+            ) : null}
           </View>
         );
 

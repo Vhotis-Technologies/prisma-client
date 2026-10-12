@@ -3,6 +3,7 @@ import { NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 import { isBulkBookingEligible } from "../lib/account";
 import { isDealershipPartner } from "../lib/format";
+import SupportPhone from "./SupportPhone";
 import BrandMark from "./BrandMark";
 import { useBookingLiveUpdates } from "../app-hooks/useBookingLiveUpdates";
 
@@ -209,6 +210,7 @@ export default function AppShell({ children }: AppShellProps) {
           )}
         </button>
         <BrandMark inverted />
+        <SupportPhone />
       </header>
 
       <div className="shell-scrim" hidden={!open} onClick={() => setOpen(false)} />
@@ -216,6 +218,7 @@ export default function AppShell({ children }: AppShellProps) {
       <aside id="app-sidebar" className="shell-sidebar">
         <div className="shell-sidebar-brand">
           <BrandMark inverted />
+          <SupportPhone />
         </div>
         <nav className="shell-nav" aria-label="Main">
           <p className="shell-nav-label">Work</p>

@@ -15,6 +15,7 @@ import {
 import { formatClock, formatDate, formatDuration, formatMoney, vehicleLabel } from "../lib/format";
 import { hasStripeKey, intentIdFromClientSecret } from "../lib/stripe";
 import { readReferralCode, referralQuery } from "../lib/referralLink";
+import { handWashValet } from "../lib/serviceLead";
 import { vehicleBodyStyleRequiresSuvMpvSurcharge } from "../lib/vehicleBodyStyle";
 import { parseCrewSlots, type TimeSlot } from "../store/api/eventApi";
 import {
@@ -35,9 +36,8 @@ import type { BusinessAddress } from "../types/user";
 const STEPS = [
   { id: 1, title: "Car" },
   { id: 2, title: "Service" },
-  { id: 3, title: "Type" },
-  { id: 4, title: "Place" },
-  { id: 5, title: "Pay" },
+  { id: 3, title: "Place" },
+  { id: 4, title: "Pay" },
 ] as const;
 
 function asId(value: string | number | undefined): string {
@@ -154,8 +154,8 @@ function vehicleFromManual(fields: {
 }
 
 /**
- * Five-step guest checkout: look up a plate or type the car, then service, type, place, and pay.
- * The price quote does not create an account.
+ * Four-step guest checkout: car, service, place, and pay.
+ * Hand wash is applied automatically. The price quote does not create an account.
  */
 export default function GuestBookPage() {
   const navigate = useNavigate();
@@ -164,7 +164,6 @@ export default function GuestBookPage() {
   const [catalogLoading, setCatalogLoading] = useState(true);
 
   const [serviceTypes, setServiceTypes] = useState<ServiceType[]>([]);
-  const [valetTypes, setValetTypes] = useState<ValetType[]>([]);
   const [addOns, setAddOns] = useState<AddOn[]>([]);
 
   const [licence, setLicence] = useState("");
@@ -245,9 +244,8 @@ export default function GuestBookPage() {
       carEntry === "manual"
         ? Boolean(manualVehicle)
         : Boolean(vehicle && lookupToken && lookup?.plate.can_book !== false),
-    2: Boolean(service),
-    3: Boolean(valet),
-    4: Boolean(
+    2: Boolean(service && valet),
+    3: Boolean(
       address?.address?.trim() &&
         address.city?.trim() &&
         address.country?.trim() &&
@@ -256,7 +254,7 @@ export default function GuestBookPage() {
         contactEmail.trim() &&
         contactPhone.trim().length >= 7,
     ),
-    5: Boolean(quote && payable && coolingOff),
+    4: Boolean(quote && payable && coolingOff),
   };
 
   useEffect(() => {
@@ -266,8 +264,10 @@ export default function GuestBookPage() {
         const catalog = await fetchGuestCatalog();
         if (cancelled) return;
         setServiceTypes(catalog.services || []);
-        setValetTypes(catalog.valets || []);
         setAddOns(catalog.add_ons || []);
+        const wash = handWashValet(catalog.valets || []);
+        setValet(wash);
+        if (!wash) setError("Hand wash is not available right now.");
       } catch (err) {
         if (!cancelled) setError(authErrorMessage(err, "Could not load packages."));
       } finally {
@@ -285,7 +285,7 @@ export default function GuestBookPage() {
   }, [vehicle]);
 
   useEffect(() => {
-    if (step !== 4) return;
+    if (step !== 3) return;
     if (!address?.city || !address?.country || !dateIso) {
       setTimeSlots([]);
       setSlotsError(null);
@@ -358,7 +358,7 @@ export default function GuestBookPage() {
   }, [service, selectedAddons, isSuv, isExpress, vehicle?.body_style, address?.latitude, address?.longitude]);
 
   useEffect(() => {
-    if (step !== 5) return;
+    if (step !== 4) return;
     void loadQuote();
   }, [step, loadQuote]);
 
@@ -453,7 +453,7 @@ export default function GuestBookPage() {
       setError("This car needs the SUV / MPV extra.");
       return;
     }
-    setStep((current) => Math.min(5, current + 1));
+    setStep((current) => Math.min(4, current + 1));
   }
 
   function goToConfirmation(bookingReference: string, free = false) {
@@ -671,7 +671,7 @@ export default function GuestBookPage() {
               className={`wizard-step${step === item.id ? " is-current" : ""}${step > item.id ? " is-done" : ""}`}
               onClick={() => {
                 if (item.id > step) return;
-                if (step === 5 && item.id < 5) {
+                if (step === 4 && item.id < 4) {
                   // Drop a stale PaymentIntent if the guest edits earlier steps.
                   setClientSecret(null);
                   setPaymentIntentId(null);
@@ -825,30 +825,7 @@ export default function GuestBookPage() {
               );
             })}
           </ul>
-        </section>
-      ) : null}
-
-      {!catalogLoading && step === 3 ? (
-        <section className="wizard-panel">
-          <h2 className="section-title">Choose a type</h2>
-          <ul className="stack-list">
-            {valetTypes.map((item) => {
-              const selected = asId(valet?.id) === asId(item.id);
-              return (
-                <li key={asId(item.id)}>
-                  <button
-                    type="button"
-                    className={`stack-card${selected ? " is-selected" : ""}`}
-                    onClick={() => setValet(item)}
-                  >
-                    <strong>{item.name}</strong>
-                    <p className="muted">{item.description}</p>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-          {valet ? (
+          {service && addOns.length > 0 ? (
             <>
               <h2 className="section-title">Add-ons</h2>
               <p className="muted">Optional. Four or more, and the cheapest is free.</p>
@@ -880,7 +857,7 @@ export default function GuestBookPage() {
         </section>
       ) : null}
 
-      {!catalogLoading && step === 4 ? (
+      {!catalogLoading && step === 3 ? (
         <section className="wizard-panel">
           <h2 className="section-title">Where and when</h2>
           <AddressSearchInput
@@ -978,7 +955,7 @@ export default function GuestBookPage() {
         </section>
       ) : null}
 
-      {!catalogLoading && step === 5 && vehicle && service && valet && address ? (
+      {!catalogLoading && step === 4 && vehicle && service && valet && address ? (
         <section className="wizard-panel">
           <h2 className="section-title">Quote and pay</h2>
           {quoteLoading ? <p className="muted">Checking the price…</p> : null}
@@ -1161,7 +1138,7 @@ export default function GuestBookPage() {
           type="button"
           className="btn btn-secondary"
           onClick={() => {
-            if (step === 5) {
+            if (step === 4) {
               // Drop a stale PaymentIntent if the guest goes back from pay.
               setClientSecret(null);
               setPaymentIntentId(null);
@@ -1172,8 +1149,8 @@ export default function GuestBookPage() {
         >
           Back
         </button>
-        {step < 5 ? (
-          <button type="button" className="btn btn-primary" onClick={goNext} disabled={!stepValid[step as 1 | 2 | 3 | 4]}>
+        {step < 4 ? (
+          <button type="button" className="btn btn-primary" onClick={goNext} disabled={!stepValid[step as 1 | 2 | 3]}>
             Continue
           </button>
         ) : clientSecret ? (
@@ -1183,7 +1160,7 @@ export default function GuestBookPage() {
             type="button"
             className="btn btn-primary"
             onClick={() => void startCheckout()}
-            disabled={!stepValid[5] || paying || !coolingOff}
+            disabled={!stepValid[4] || paying || !coolingOff}
           >
             {paying
               ? "Starting…"

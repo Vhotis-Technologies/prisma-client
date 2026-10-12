@@ -15,6 +15,7 @@ import {
 } from "../lib/bookingCheckout";
 import { formatClock, formatDate, formatDuration, formatMoney, vehicleLabel } from "../lib/format";
 import { hasStripeKey, intentIdFromClientSecret, stripePromise } from "../lib/stripe";
+import { handWashValet } from "../lib/serviceLead";
 import { vehicleBodyStyleRequiresSuvMpvSurcharge } from "../lib/vehicleBodyStyle";
 import {
   checkFreeWash,
@@ -48,9 +49,8 @@ import { flattenVehicles, plateOf, type GarageVehicle } from "../types/garage";
 const STEPS = [
   { id: 1, title: "Car" },
   { id: 2, title: "Service" },
-  { id: 3, title: "Type" },
-  { id: 4, title: "Place" },
-  { id: 5, title: "Quote" },
+  { id: 3, title: "Place" },
+  { id: 4, title: "Quote" },
 ] as const;
 
 function asId(value: string | number | undefined): string {
@@ -169,7 +169,6 @@ export default function BookPage() {
   const [vehicles, setVehicles] = useState<GarageVehicle[]>([]);
   const [addresses, setAddresses] = useState<SavedAddress[]>([]);
   const [serviceTypes, setServiceTypes] = useState<ServiceType[]>([]);
-  const [valetTypes, setValetTypes] = useState<ValetType[]>([]);
   const [addOns, setAddOns] = useState<AddOn[]>([]);
   const [promotion, setPromotion] = useState<Promotion | null>(null);
   const [freeWash, setFreeWash] = useState<FreeWashCheck | null>(null);
@@ -238,7 +237,13 @@ export default function BookPage() {
 
       if (addressesRes.status === "fulfilled") setAddresses(addressesRes.value.addresses || []);
       if (servicesRes.status === "fulfilled") setServiceTypes(servicesRes.value || []);
-      if (valetsRes.status === "fulfilled") setValetTypes(valetsRes.value || []);
+      if (valetsRes.status === "fulfilled") {
+        const wash = handWashValet(valetsRes.value || []);
+        setValet(wash);
+        if (!wash) setError("Hand wash is not available right now.");
+      } else {
+        setError(authErrorMessage(valetsRes.reason, "Hand wash is not available right now."));
+      }
       if (addonsRes.status === "fulfilled") setAddOns(addonsRes.value || []);
       if (promoRes.status === "fulfilled") setPromotion(promoRes.value || null);
       if (freeRes.status === "fulfilled") setFreeWash(freeRes.value || null);
@@ -258,7 +263,7 @@ export default function BookPage() {
   }, [vehicle]);
 
   useEffect(() => {
-    if (business || step !== 4) return;
+    if (business || step !== 3) return;
     if (!address?.city || !address?.country || !dateIso) {
       setTimeSlots([]);
       setSlotsError(null);
@@ -311,7 +316,7 @@ export default function BookPage() {
   }, [business, step, address, dateIso, durationMinutes, isExpress]);
 
   useEffect(() => {
-    if (step !== 5) {
+    if (step !== 4) {
       setQuote(null);
       setComplimentary(null);
       setApplyPartnerDiscount(false);
@@ -324,7 +329,7 @@ export default function BookPage() {
   }, [step]);
 
   useEffect(() => {
-    if (step !== 5 || !service || clientSecret) return;
+    if (step !== 4 || !service || clientSecret) return;
     let cancelled = false;
     setQuoteLoading(true);
     setError(null);
@@ -385,15 +390,14 @@ export default function BookPage() {
     const suvOk = !vehicle || !suvLocked || isSuv;
     return {
       1: Boolean(vehicle) && suvOk,
-      2: Boolean(service),
-      3: Boolean(valet),
-      4: Boolean(address && timeSlot && dateIso >= todayIso()) && !slotsLoading && !slotsError,
-      5: Boolean(quote) && !quoteLoading && (elig.length < 2 || Boolean(complimentary)),
+      2: Boolean(service && valet),
+      3: Boolean(address && timeSlot && dateIso >= todayIso()) && !slotsLoading && !slotsError,
+      4: Boolean(quote) && !quoteLoading && (elig.length < 2 || Boolean(complimentary)),
     };
   }, [vehicle, suvLocked, isSuv, service, valet, address, timeSlot, dateIso, quote, quoteLoading, elig.length, complimentary, slotsLoading, slotsError]);
 
   function goNext() {
-    if (step < 5 && stepValid[step as 1 | 2 | 3 | 4 | 5]) setStep(step + 1);
+    if (step < 4 && stepValid[step as 1 | 2 | 3 | 4]) setStep(step + 1);
   }
 
   function goBack() {
@@ -707,31 +711,7 @@ export default function BookPage() {
               );
             })}
           </ul>
-        </section>
-      ) : null}
-
-      {!catalogLoading && step === 3 ? (
-        <section className="wizard-panel">
-          <h2 className="section-title">Choose a type</h2>
-          <ul className="stack-list">
-            {valetTypes.map((item) => {
-              const selected = asId(valet?.id) === asId(item.id);
-              return (
-                <li key={asId(item.id)}>
-                  <button
-                    type="button"
-                    className={`stack-card${selected ? " is-selected" : ""}`}
-                    onClick={() => setValet(item)}
-                  >
-                    <strong>{item.name}</strong>
-                    <p className="muted">{item.description}</p>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-
-          {valet ? (
+          {service && addOns.length > 0 ? (
             <>
               <h2 className="section-title">Add-ons</h2>
               <p className="muted">Optional. Four or more, and the cheapest is free.</p>
@@ -763,7 +743,7 @@ export default function BookPage() {
         </section>
       ) : null}
 
-      {!catalogLoading && step === 4 ? (
+      {!catalogLoading && step === 3 ? (
         <section className="wizard-panel">
           <div className="welcome--split">
             <div>
@@ -857,7 +837,7 @@ export default function BookPage() {
         </section>
       ) : null}
 
-      {!catalogLoading && step === 5 && vehicle && service && valet && address ? (
+      {!catalogLoading && step === 4 && vehicle && service && valet && address ? (
         <section className="wizard-panel">
           <h2 className="section-title">Quote</h2>
           {quoteLoading ? <p className="muted">Checking the price…</p> : null}
@@ -1140,8 +1120,8 @@ export default function BookPage() {
         <button type="button" className="btn btn-secondary" onClick={goBack} disabled={step === 1 && !clientSecret}>
           Back
         </button>
-        {step < 5 ? (
-          <button type="button" className="btn btn-primary" onClick={goNext} disabled={!stepValid[step as 1 | 2 | 3 | 4]}>
+        {step < 4 ? (
+          <button type="button" className="btn btn-primary" onClick={goNext} disabled={!stepValid[step as 1 | 2 | 3]}>
             Continue
           </button>
         ) : clientSecret ? (
@@ -1151,7 +1131,7 @@ export default function BookPage() {
             type="button"
             className="btn btn-primary"
             onClick={() => void startCheckout()}
-            disabled={!stepValid[5] || paying || !coolingOff}
+            disabled={!stepValid[4] || paying || !coolingOff}
           >
             {paying ? "Starting…" : amountDue <= 0 ? "Confirm booking" : `Pay ${formatMoney(amountDue, country)}`}
           </button>

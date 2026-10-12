@@ -541,7 +541,7 @@ select {
   margin: 0 0 1.25rem;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.45rem;
 }
 
@@ -798,6 +798,7 @@ select {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 0.75rem;
   padding: 0.65rem 1.15rem;
   background: var(--panel);
@@ -819,6 +820,18 @@ select {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+.support-phone {
+  color: #fff;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.support-phone:hover {
+  color: #fff;
+  text-decoration: underline;
 }
 
 .guest-shell-main {
@@ -1341,6 +1354,10 @@ select {
 }
 
 .shell-sidebar-brand {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
   padding: 0.55rem 0.85rem;
   background: var(--panel);
   color: var(--panel-text);
@@ -2134,6 +2151,10 @@ code {
     background: var(--panel);
     color: var(--panel-text);
     border-bottom: 3px solid var(--primary);
+  }
+
+  .shell-topbar .support-phone {
+    margin-left: auto;
   }
 
   .shell-menu-btn {

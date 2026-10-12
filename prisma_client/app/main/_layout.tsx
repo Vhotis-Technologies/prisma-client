@@ -1,4 +1,4 @@
-import { StyleSheet, View, Pressable, StatusBar } from "react-native";
+import { Linking, StyleSheet, View, Pressable, StatusBar } from "react-native";
 import React, { useState, useEffect } from "react";
 import {
   SafeAreaView,
@@ -36,6 +36,15 @@ const CustomHeader = ({ name }: { name: string }) => {
           { name}
         </StyledText>
       </View>
+      <Pressable
+        onPress={() => Linking.openURL("tel:+353899765197")}
+        accessibilityRole="link"
+        accessibilityLabel="Call Prisma on +353 89 976 5197"
+      >
+        <StyledText variant="bodyMedium" style={{ color: textColor }}>
+          +353 89 976 5197
+        </StyledText>
+      </Pressable>
       <View style={styles.headerButtons}>
         <View style={styles.notificationContainer}>
           <Pressable
