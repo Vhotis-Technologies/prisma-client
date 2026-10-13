@@ -33,6 +33,7 @@ export function bulkPayableAfterComplimentary(
   pricing: ReturnType<typeof bulkPricing>,
   applied: number,
   isSuv: boolean,
+  suvSurchargePercent: number,
 ) {
   const used = Math.min(Math.max(0, applied), pricing.count);
   const paidWashes = Math.max(0, pricing.count - used);
@@ -42,7 +43,7 @@ export function bulkPayableAfterComplimentary(
   const discountPercent = pricing.count > BULK_DISCOUNT_THRESHOLD ? BULK_DISCOUNT_PERCENT : 0;
   const discountAmount = money((combined * discountPercent) / 100);
   const afterDiscount = money(Math.max(0, combined - discountAmount));
-  const suvSurcharge = isSuv ? money(afterDiscount * 0.20) : 0;
+  const suvSurcharge = isSuv ? money(afterDiscount * (suvSurchargePercent / 100)) : 0;
   const payable = money(afterDiscount + suvSurcharge);
   const credit = money(Math.max(0, pricing.total - payable));
   return { payable, credit, paidWashes, washCharge, addonCharge };
@@ -64,6 +65,7 @@ export function bulkPricing(input: {
   addons: AddOn[];
   numberOfVehicles: number;
   isSuv: boolean;
+  suvSurchargePercent: number;
 }) {
   const count = Math.max(0, Math.floor(input.numberOfVehicles) || 0);
   const unit = input.service ? fleetUnitPrice(input.service) : 0;
@@ -75,7 +77,9 @@ export function bulkPricing(input: {
   const discountPercent = count > BULK_DISCOUNT_THRESHOLD ? BULK_DISCOUNT_PERCENT : 0;
   const discountAmount = money((subtotalWithAddons * discountPercent) / 100);
   const afterDiscount = money(Math.max(0, subtotalWithAddons - discountAmount));
-  const suvSurcharge = input.isSuv ? money(afterDiscount * 0.20) : 0;
+  const suvSurcharge = input.isSuv
+    ? money(afterDiscount * (input.suvSurchargePercent / 100))
+    : 0;
   const total = money(afterDiscount + suvSurcharge);
   const duration = (input.service?.duration || 60) + addonMinutes;
   return {

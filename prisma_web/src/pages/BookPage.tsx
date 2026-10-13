@@ -10,6 +10,8 @@ import {
   buildCheckoutPayloads,
   newBookingReference,
   quoteChargeLines,
+  suvLineLabel,
+  suvOptionLabel,
   saveConfirmationSnapshot,
   waitForPaymentConfirmation,
 } from "../lib/bookingCheckout";
@@ -134,7 +136,13 @@ function priceBreakdown(
   const resolvedSticker = lines.sticker_total_inc_vat;
   const compSave =
     fullSticker > resolvedSticker + 0.005 ? Number((fullSticker - resolvedSticker).toFixed(2)) : 0;
-  const charges = quoteChargeLines(lines, payable, isSuv, isExpress);
+  const charges = quoteChargeLines(
+    lines,
+    payable,
+    isSuv,
+    isExpress,
+    quote.suv_surcharge_percent ?? 0,
+  );
   return {
     stickerSubtotalIncVat: lines.sticker_total_inc_vat,
     suvSurchargeIncVat: charges.suvSurchargeIncVat,
@@ -169,6 +177,7 @@ export default function BookPage() {
   const [vehicles, setVehicles] = useState<GarageVehicle[]>([]);
   const [addresses, setAddresses] = useState<SavedAddress[]>([]);
   const [serviceTypes, setServiceTypes] = useState<ServiceType[]>([]);
+  const [suvSurchargePercent, setSuvSurchargePercent] = useState<number | null>(null);
   const [addOns, setAddOns] = useState<AddOn[]>([]);
   const [promotion, setPromotion] = useState<Promotion | null>(null);
   const [freeWash, setFreeWash] = useState<FreeWashCheck | null>(null);
@@ -236,7 +245,10 @@ export default function BookPage() {
       else setError(authErrorMessage(vehiclesRes.reason, "Could not load your garage."));
 
       if (addressesRes.status === "fulfilled") setAddresses(addressesRes.value.addresses || []);
-      if (servicesRes.status === "fulfilled") setServiceTypes(servicesRes.value || []);
+      if (servicesRes.status === "fulfilled") {
+        setServiceTypes(servicesRes.value.services || []);
+        setSuvSurchargePercent(servicesRes.value.suvSurchargePercent);
+      }
       if (valetsRes.status === "fulfilled") {
         const wash = handWashValet(valetsRes.value || []);
         setValet(wash);
@@ -668,7 +680,7 @@ export default function BookPage() {
                   onChange={(e) => setIsSuv(e.target.checked)}
                 />
                 <span>
-                  SUV / MPV (20% extra)
+                  {suvOptionLabel(quote?.suv_surcharge_percent ?? suvSurchargePercent)}
                   {suvLocked ? " — required for this body style." : ""}
                 </span>
               </label>
@@ -973,7 +985,7 @@ export default function BookPage() {
                   </div>
                   {breakdown.suvSurchargeIncVat > 0 ? (
                     <div>
-                      <dt>SUV / MPV (20%)</dt>
+                      <dt>{suvLineLabel(quote?.suv_surcharge_percent ?? suvSurchargePercent)}</dt>
                       <dd>{formatMoney(breakdown.suvSurchargeIncVat, country)}</dd>
                     </div>
                   ) : null}

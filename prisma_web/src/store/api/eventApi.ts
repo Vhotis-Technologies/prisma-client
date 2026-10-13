@@ -21,8 +21,20 @@ type CrewTimeSlot = {
   is_available?: boolean;
 };
 
-export function fetchServiceType() {
-  return getData<ServiceType[]>("/api/v1/events/get_service_type/");
+export type ServiceCatalog = {
+  services: ServiceType[];
+  suvSurchargePercent: number;
+};
+
+export async function fetchServiceType(): Promise<ServiceCatalog> {
+  const data = await getData<{
+    services: ServiceType[];
+    suv_surcharge_percent: number;
+  }>("/api/v1/events/get_service_type/");
+  return {
+    services: data.services || [],
+    suvSurchargePercent: Number(data.suv_surcharge_percent),
+  };
 }
 
 export function fetchValetType() {

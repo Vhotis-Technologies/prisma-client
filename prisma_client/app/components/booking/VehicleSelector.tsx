@@ -9,6 +9,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useThemeColor } from "@/hooks/useThemeColor";
 import { MyVehiclesProps } from "@/app/interfaces/GarageInterface";
+import { suvExtraCopy, suvRequiredCopy } from "@/app/utils/suvSurcharge";
 import { vehicleBodyStyleRequiresSuvMpvSurcharge } from "@/app/utils/vehicleBodyStyle";
 import StyledText from "@/app/components/helpers/StyledText";
 import CircleCheckbox from "@/app/components/helpers/CircleCheckbox";
@@ -24,6 +25,7 @@ interface VehicleSelectorProps {
   onSUVChange: (isSUV: boolean) => void;
   isExpressService?: boolean;
   onExpressServiceChange?: (isExpressService: boolean) => void;
+  suvSurchargePercent?: number | null;
 }
 
 const VehicleSelector: React.FC<VehicleSelectorProps> = ({
@@ -35,6 +37,7 @@ const VehicleSelector: React.FC<VehicleSelectorProps> = ({
   onSUVChange,
   isExpressService = false,
   onExpressServiceChange,
+  suvSurchargePercent = null,
 }) => {
   const cardColor = useThemeColor({}, "cards");
   const textColor = useThemeColor({}, "text");
@@ -186,7 +189,7 @@ const VehicleSelector: React.FC<VehicleSelectorProps> = ({
                     },
                   ]}
                 >
-                  Additional 20% surcharge for SUV / MPV cleaning
+                  {suvExtraCopy(suvSurchargePercent)}
                 </StyledText>
               </View>
               <CircleCheckbox checked={isSUV} accentColor={primaryPurpleColor} />
@@ -198,7 +201,7 @@ const VehicleSelector: React.FC<VehicleSelectorProps> = ({
               style={[styles.bodyStyleHint, { color: textColor }]}
             >
               {
-                "This vehicle's registered body style requires the SUV / MPV option (20% surcharge)."
+                suvRequiredCopy(suvSurchargePercent)
               }
             </StyledText>
           )}

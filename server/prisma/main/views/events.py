@@ -23,6 +23,7 @@ from main.models import BookedAppointment, BookedAppointmentImage, ServiceType, 
 from main.services.booking_quote import (
     build_quick_sparkle_entitlements,
     quote_booking_for_user,
+    suv_surcharge_percent,
     validate_complimentary_choice,
     validate_booking_financials,
     consume_complimentary_quick_sparkle,
@@ -188,7 +189,7 @@ class EventsView(APIView):
             
 
     def get_service_type(self, request):
-        """Return all service types ordered by price. Each with id, name, description, price, duration, fleet_price."""
+        """Return service types plus the admin SUV surcharge percent."""
         try:
             service_types = ServiceType.objects.all().order_by('price')
             service_type_data = []
@@ -202,7 +203,13 @@ class EventsView(APIView):
                     "fleet_price": float(service.fleet_price) if service.fleet_price else None,
                 }
                 service_type_data.append(service_items)
-            return Response(service_type_data, status=status.HTTP_200_OK)
+            return Response(
+                {
+                    "services": service_type_data,
+                    "suv_surcharge_percent": float(suv_surcharge_percent()),
+                },
+                status=status.HTTP_200_OK,
+            )
         except Exception as e:
             logger = logging.getLogger('main.views.booking')
             logger.error(f"Error fetching service types: {str(e)}")

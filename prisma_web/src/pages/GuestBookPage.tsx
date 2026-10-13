@@ -10,6 +10,8 @@ import {
   buildCheckoutPayloads,
   newBookingReference,
   quoteChargeLines,
+  suvLineLabel,
+  suvOptionLabel,
   saveConfirmationSnapshot,
 } from "../lib/bookingCheckout";
 import { formatClock, formatDate, formatDuration, formatMoney, vehicleLabel } from "../lib/format";
@@ -164,6 +166,7 @@ export default function GuestBookPage() {
   const [catalogLoading, setCatalogLoading] = useState(true);
 
   const [serviceTypes, setServiceTypes] = useState<ServiceType[]>([]);
+  const [suvSurchargePercent, setSuvSurchargePercent] = useState<number | null>(null);
   const [addOns, setAddOns] = useState<AddOn[]>([]);
 
   const [licence, setLicence] = useState("");
@@ -216,7 +219,13 @@ export default function GuestBookPage() {
   const payable = quote?.payable_full ?? null;
   const amountDue = voucher ? voucher.amountDue : payable?.total ?? 0;
   const guestCharges = quote?.pricing_lines_full
-    ? quoteChargeLines(quote.pricing_lines_full, payable, isSuv, isExpress)
+    ? quoteChargeLines(
+        quote.pricing_lines_full,
+        payable,
+        isSuv,
+        isExpress,
+        quote.suv_surcharge_percent ?? 0,
+      )
     : null;
   const breakdown: PriceSummaryBreakdown | null = quote?.pricing_lines_full && guestCharges
     ? {
@@ -264,6 +273,7 @@ export default function GuestBookPage() {
         const catalog = await fetchGuestCatalog();
         if (cancelled) return;
         setServiceTypes(catalog.services || []);
+        setSuvSurchargePercent(Number(catalog.suv_surcharge_percent));
         setAddOns(catalog.add_ons || []);
         const wash = handWashValet(catalog.valets || []);
         setValet(wash);
@@ -782,7 +792,7 @@ export default function GuestBookPage() {
                   onChange={(e) => setIsSuv(e.target.checked)}
                 />
                 <span>
-                  SUV / MPV (20% extra)
+                  {suvOptionLabel(quote?.suv_surcharge_percent ?? suvSurchargePercent)}
                   {suvLocked ? " — required for this body style." : ""}
                 </span>
               </label>
@@ -1032,7 +1042,7 @@ export default function GuestBookPage() {
                   </div>
                   {breakdown.suvSurchargeIncVat > 0 ? (
                     <div>
-                      <dt>SUV / MPV (20%)</dt>
+                      <dt>{suvLineLabel(quote?.suv_surcharge_percent ?? suvSurchargePercent)}</dt>
                       <dd>{formatMoney(breakdown.suvSurchargeIncVat, country)}</dd>
                     </div>
                   ) : null}

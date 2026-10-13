@@ -20,6 +20,47 @@ import { BackButton } from "@/app/components/shared/BackButton";
 import { canUsePersonalGarage } from "@/app/utils/account";
 import { useBookingLiveUpdates } from "@/app/app-hooks/useBookingLiveUpdates";
 
+/* Thin strip above the header: email | opening hours | phone on one line */
+const SupportStrip = () => {
+  const divider = (
+    <View style={styles.supportDivider} />
+  );
+  return (
+    <View style={styles.supportStrip}>
+      <Pressable
+        style={styles.supportItem}
+        onPress={() => Linking.openURL("mailto:support@prismavalet.com")}
+        accessibilityRole="link"
+        accessibilityLabel="Email support@prismavalet.com"
+      >
+        <Ionicons name="mail-outline" size={12} color="#FFFFFF" />
+        <StyledText variant="bodySmall" style={styles.supportText}>
+          support@prismavalet.com
+        </StyledText>
+      </Pressable>
+      {divider}
+      <View style={styles.supportItem}>
+        <Ionicons name="time-outline" size={12} color="#FFFFFF" />
+        <StyledText variant="bodySmall" style={styles.supportText}>
+          9am-9pm
+        </StyledText>
+      </View>
+      {divider}
+      <Pressable
+        style={styles.supportItem}
+        onPress={() => Linking.openURL("tel:+353899765197")}
+        accessibilityRole="link"
+        accessibilityLabel="Call Prisma on +353 89 976 5197"
+      >
+        <Ionicons name="call-outline" size={12} color="#FFFFFF" />
+        <StyledText variant="bodySmall" style={styles.supportText}>
+          +353 89 976 5197
+        </StyledText>
+      </Pressable>
+    </View>
+  );
+};
+
 /* This is the custom header component visible at the top of the main layout */
 const CustomHeader = ({ name }: { name: string }) => {
   const { unreadCount } = useNotification();
@@ -36,15 +77,6 @@ const CustomHeader = ({ name }: { name: string }) => {
           { name}
         </StyledText>
       </View>
-      <Pressable
-        onPress={() => Linking.openURL("tel:+353899765197")}
-        accessibilityRole="link"
-        accessibilityLabel="Call Prisma on +353 89 976 5197"
-      >
-        <StyledText variant="bodyMedium" style={{ color: textColor }}>
-          +353 89 976 5197
-        </StyledText>
-      </Pressable>
       <View style={styles.headerButtons}>
         <View style={styles.notificationContainer}>
           <Pressable
@@ -118,6 +150,7 @@ export default function MainLayout() {
               currentTheme === "dark" ? "light-content" : "dark-content"
             }
           />
+          <SupportStrip />
           <CustomHeader name={user?.name || ""} />
           <Divider style={{ marginTop: 5, marginBottom: 5 }} />
           <View style={{ flex: 1}}>
@@ -227,6 +260,29 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     paddingVertical: 5,
+  },
+  supportStrip: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    backgroundColor: "#02070D",
+  },
+  supportItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+  },
+  supportDivider: {
+    width: 1,
+    height: 12,
+    backgroundColor: "rgba(255,255,255,0.3)",
+  },
+  supportText: {
+    color: "#FFFFFF",
+    fontSize: 11,
   },
   headerButtons: {
     flexDirection: "row",

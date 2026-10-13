@@ -88,6 +88,7 @@ export type BookingQuoteResponse = {
   };
   partner_booking_offer: PartnerBookingOfferPayload | null;
   vat_rate_percent: number;
+  suv_surcharge_percent?: number;
   subscription_coverage?: BookingSubscriptionCoverage | null;
   travel_surcharge?: number;
 };
@@ -122,10 +123,20 @@ const createBookingApi = createApi({
      *  duration : number
      * }
      */
-    fetchServiceType: builder.query<ServiceTypeProps[], void>({
+    fetchServiceType: builder.query<
+      { services: ServiceTypeProps[]; suvSurchargePercent: number },
+      void
+    >({
       query: () => ({
         url: "/api/v1/events/get_service_type/",
         method: "GET",
+      }),
+      transformResponse: (raw: {
+        services?: ServiceTypeProps[];
+        suv_surcharge_percent?: number;
+      }) => ({
+        services: raw?.services ?? [],
+        suvSurchargePercent: Number(raw?.suv_surcharge_percent ?? 0),
       }),
     }),
     /**

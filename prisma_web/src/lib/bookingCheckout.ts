@@ -153,12 +153,28 @@ export function buildCheckoutPayloads(input: PayloadInput): {
   return { bookingData, detailerData };
 }
 
-/** Split a server sticker into service, SUV 20%, express, and travel for the quote UI. */
+export function formatSuvPercent(percent: number): string {
+  const rounded = Math.round(percent * 100) / 100;
+  return Number.isInteger(rounded) ? String(rounded) : String(rounded);
+}
+
+export function suvOptionLabel(percent: number | null | undefined): string {
+  if (percent == null || Number.isNaN(percent)) return "SUV / MPV";
+  return `SUV / MPV (${formatSuvPercent(percent)}% extra)`;
+}
+
+export function suvLineLabel(percent: number | null | undefined): string {
+  if (percent == null || Number.isNaN(percent)) return "SUV / MPV";
+  return `SUV / MPV (${formatSuvPercent(percent)}%)`;
+}
+
+/** Split a server sticker into service, SUV surcharge, express, and travel for the quote UI. */
 export function quoteChargeLines(
   lines: BookingQuotePricingLines,
   payable: BookingQuoteAmounts | null | undefined,
   isSuv: boolean,
   isExpress: boolean,
+  suvSurchargePercent = 0,
 ) {
   const travel = Number(
     payable?.travel_surcharge ?? lines.travel_surcharge_inc_vat ?? 0,
@@ -175,7 +191,11 @@ export function quoteChargeLines(
       0,
       lines.sticker_total_inc_vat - travel - express,
     );
-    suv = isSuv ? Number((remainder - remainder / 1.2).toFixed(2)) : 0;
+    const rate = suvSurchargePercent / 100;
+    suv =
+      isSuv && rate > 0
+        ? Number((remainder - remainder / (1 + rate)).toFixed(2))
+        : 0;
   }
   const serviceIncVat = Math.max(
     0,

@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import BrandMark from "./BrandMark";
-import SupportPhone from "./SupportPhone";
+import SupportBar from "./SupportBar";
 
 type GuestBookShellProps = {
   children: ReactNode;
@@ -22,9 +22,9 @@ export default function GuestBookShell({
 }: GuestBookShellProps) {
   return (
     <div className="guest-shell">
+      <SupportBar />
       <header className="guest-shell-header">
         <BrandMark inverted />
-        <SupportPhone />
         <nav className="guest-shell-nav">
           <Link to={backTo} className="btn btn-ghost">
             {backLabel}

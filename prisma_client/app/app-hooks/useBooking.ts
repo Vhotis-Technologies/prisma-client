@@ -157,8 +157,11 @@ const useBooking = () => {
     error: promotionsError,
   } = useFetchPromotionsQuery();
 
-  const { data: serviceTypes, isLoading: isLoadingServiceTypes } =
+  const { data: serviceCatalog, isLoading: isLoadingServiceTypes } =
     useFetchServiceTypeQuery();
+  const serviceTypes = serviceCatalog?.services;
+  const suvSurchargePercent = serviceCatalog?.suvSurchargePercent;
+  const suvRate = (suvSurchargePercent ?? 0) / 100;
   const { data: valetTypes, isLoading: isLoadingValetTypes } =
     useFetchValetTypeQuery();
   const [bookAppointment, { isLoading: isLoadingBooking }] =
@@ -1234,14 +1237,14 @@ const useBooking = () => {
    * Price calculation:
    * - Base price: From selected service type
    * - Addon costs: Sum of all selected addon prices
-   * - SUV surcharge: 20% of total price (base + addons) if vehicle is marked as SUV
+   * - SUV surcharge: admin percent of total price (base + addons) if vehicle is marked as SUV
    * - Total = Base price + Addon costs + SUV surcharge
    *
    * @returns The total price in euros
    * @type {number}
    *
    * @example
-   * const totalPrice = getTotalPrice(); // Returns 112.5 if base price is 75, addons cost 18.75, and SUV surcharge is 20% of 93.75
+   * const totalPrice = getTotalPrice(); // Base price plus add-ons, then the admin SUV percent when selected
    */
   const getTotalPrice = useCallback((): number => {
     const basePrice = selectedServiceType?.price || 0;
@@ -1250,10 +1253,10 @@ const useBooking = () => {
       0
     );
     const totalBeforeSurcharge = basePrice + addonCosts;
-    const suvSurcharge = isSUV ? totalBeforeSurcharge * 0.20 : 0;
+    const suvSurcharge = isSUV ? totalBeforeSurcharge * suvRate : 0;
     const expressServiceFee = isExpressService ? 30 : 0;
     return totalBeforeSurcharge + suvSurcharge + expressServiceFee;
-  }, [selectedServiceType, isSUV, isExpressService, selectedAddons]);
+  }, [selectedServiceType, isSUV, isExpressService, selectedAddons, suvRate]);
 
   /**
    * Gets the base price of the selected service
@@ -1313,7 +1316,7 @@ const useBooking = () => {
       0
     );
     const totalBeforeSurcharge = basePrice + addonCosts;
-    const suvSurcharge = isSUV ? totalBeforeSurcharge * 0.20 : 0;
+    const suvSurcharge = isSUV ? totalBeforeSurcharge * suvRate : 0;
     const expressServiceFee = isExpressService ? 30 : 0;
     const totalBeforeDiscount = totalBeforeSurcharge + suvSurcharge + expressServiceFee;
 
@@ -1326,6 +1329,7 @@ const useBooking = () => {
     selectedAddons,
     isSUV,
     isExpressService,
+    suvRate,
   ]);
 
   /**
@@ -1367,7 +1371,7 @@ const useBooking = () => {
       0
     );
     const totalBeforeSurcharge = basePrice + addonCosts;
-    const suvSurcharge = isSUV ? totalBeforeSurcharge * 0.20 : 0;
+    const suvSurcharge = isSUV ? totalBeforeSurcharge * suvRate : 0;
     const expressServiceFee = isExpressService ? 30 : 0;
     const totalBeforeDiscount = totalBeforeSurcharge + suvSurcharge + expressServiceFee;
 
@@ -1383,6 +1387,7 @@ const useBooking = () => {
     selectedAddons,
     isSUV,
     isExpressService,
+    suvRate,
   ]);
   /**
    * Gets the express service fee amount (€30 when express service is selected).
@@ -1394,7 +1399,7 @@ const useBooking = () => {
   }, [isExpressService]);
 
   /**
-   * Gets the SUV surcharge amount (20% of base + addons when isSUV is true).
+   * Gets the SUV surcharge amount (admin percent of base + addons when isSUV is true).
    *
    * @returns SUV surcharge in euros
    */
@@ -1414,8 +1419,8 @@ const useBooking = () => {
       0
     );
     const totalBeforeSurcharge = basePrice + addonCosts;
-    return isSUV ? totalBeforeSurcharge * 0.20 : 0;
-  }, [isSUV, selectedServiceType, user?.is_fleet_owner, user?.is_branch_admin, selectedAddons]);
+    return isSUV ? totalBeforeSurcharge * suvRate : 0;
+  }, [isSUV, selectedServiceType, user?.is_fleet_owner, user?.is_branch_admin, selectedAddons, suvRate]);
 
   /**
    * Calculate final price with option to exclude service base price (for free washes)
@@ -1473,7 +1478,7 @@ const useBooking = () => {
       const suvSurcharge = excludeServicePrice
         ? 0
         : isSUV
-          ? subtotal * 0.20
+          ? subtotal * suvRate
           : 0;
 
       const expressServiceFee = isExpressService ? 30 : 0;
@@ -1528,6 +1533,7 @@ const useBooking = () => {
       user?.is_dealership,
       user?.partner_referral_code,
       promotions,
+      suvRate,
     ]
   );
 
@@ -1623,7 +1629,7 @@ const useBooking = () => {
       0
     );
     const totalBeforeSurcharge = basePrice + addonCosts;
-    const suvSurcharge = isSUV ? totalBeforeSurcharge * 0.20 : 0;
+    const suvSurcharge = isSUV ? totalBeforeSurcharge * suvRate : 0;
     const expressServiceFee = isExpressService ? 30 : 0;
 
     return totalBeforeSurcharge + suvSurcharge + expressServiceFee;
@@ -1637,6 +1643,7 @@ const useBooking = () => {
     serverQuote,
     winnerVoucherApplied,
     getResolvedPricingLines,
+    suvRate,
   ]);
 
   /**
@@ -2045,7 +2052,9 @@ const useBooking = () => {
     ) {
       showSnackbarWithConfig({
         message:
-          "This vehicle's registered body style counts as an SUV or MPV. Turn on SUV / MPV to apply the required 20% surcharge.",
+          suvSurchargePercent == null
+            ? "This vehicle's registered body style counts as an SUV or MPV. Turn on SUV / MPV to apply the surcharge."
+            : `This vehicle's registered body style counts as an SUV or MPV. Turn on SUV / MPV to apply the required ${suvSurchargePercent}% surcharge.`,
         type: "error",
         duration: 5000,
       });
@@ -2350,6 +2359,7 @@ const useBooking = () => {
     quoteBookingMut,
     complimentarySparkleSource,
     isSUV,
+    suvSurchargePercent,
     isExpressService,
     showSnackbarWithConfig,
     selectedDate,
@@ -2651,6 +2661,7 @@ const useBooking = () => {
     selectedDay,
     addOns,
     serviceTypes,
+    suvSurchargePercent,
     valetTypes,
     user,
     isLoadingAddOns,

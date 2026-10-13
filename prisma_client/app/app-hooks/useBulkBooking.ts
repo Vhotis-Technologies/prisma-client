@@ -4,7 +4,7 @@
 import { useState, useCallback, useEffect } from "react";
 import dayjs from "dayjs";
 import type { ServiceTypeProps, ValetTypeProps, AddOnsProps } from "@/app/interfaces/BookingInterfaces";
-import { useLazyCheckBulkCapacityQuery } from "@/app/store/api/eventApi";
+import { useFetchServiceTypeQuery, useLazyCheckBulkCapacityQuery } from "@/app/store/api/eventApi";
 import type { MyAddressProps } from "@/app/interfaces/ProfileInterfaces";
 
 export interface BulkCapacityOption {
@@ -40,6 +40,8 @@ export const MIN_BULK_VEHICLES = 2;
  */
 export function useBulkBooking() {
   const [checkCapacity] = useLazyCheckBulkCapacityQuery();
+  const { data: serviceCatalog } = useFetchServiceTypeQuery();
+  const suvSurchargePercent = serviceCatalog?.suvSurchargePercent;
   const [selectedServiceType, setSelectedServiceType] =
     useState<ServiceTypeProps | null>(null);
   const [selectedValetType, setSelectedValetType] =
@@ -111,7 +113,7 @@ export function useBulkBooking() {
     numberOfVehicles > BULK_DISCOUNT_THRESHOLD ? BULK_DISCOUNT_PERCENT : 0;
   const discountAmount = (subtotalWithAddons * discountPercent) / 100;
   const amountAfterDiscount = Math.max(0, subtotalWithAddons - discountAmount);
-  const suvSurcharge = isSUV ? amountAfterDiscount * 0.20 : 0;
+  const suvSurcharge = isSUV ? amountAfterDiscount * ((suvSurchargePercent ?? 0) / 100) : 0;
   const total = amountAfterDiscount + suvSurcharge;
 
   /**
@@ -313,6 +315,7 @@ export function useBulkBooking() {
     discountPercent,
     discountAmount,
     suvSurcharge,
+    suvSurchargePercent,
     total,
     addonPriceTotal,
     addonDurationTotal,

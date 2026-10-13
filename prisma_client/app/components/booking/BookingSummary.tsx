@@ -16,6 +16,7 @@ import {
 import StyledText from "@/app/components/helpers/StyledText";
 import SquareCheckbox from "@/app/components/helpers/SquareCheckbox";
 import { formatDate } from "@/app/utils/methods";
+import { suvLineCopy } from "@/app/utils/suvSurcharge";
 
 interface BookingSummaryProps {
   vehicle: MyVehiclesProps;
@@ -46,6 +47,7 @@ interface BookingSummaryProps {
   /** Shown when Sedan plan does not cover an SUV/MPV booking. */
   subscriptionCoverageMessage?: string | null;
   onUpgradeSubscriptionPress?: () => void;
+  suvSurchargePercent?: number | null;
 }
 
 const BookingSummary: React.FC<BookingSummaryProps> = ({
@@ -76,6 +78,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
   onCoolingOffConsentChange,
   subscriptionCoverageMessage,
   onUpgradeSubscriptionPress,
+  suvSurchargePercent = null,
 }) => {
   const srv = priceSummaryBreakdown ?? null;
   const cardColor = useThemeColor({}, "cards");
@@ -458,7 +461,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
                   variant="bodyMedium"
                   style={[styles.priceLabel, { color: textColor }]}
                 >
-                  SUV / MPV (20%):
+                  {suvLineCopy(suvSurchargePercent)}:
                 </StyledText>
                 <StyledText
                   variant="bodyMedium"

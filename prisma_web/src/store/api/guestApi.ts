@@ -37,6 +37,7 @@ export type GuestCatalogResponse = {
   services: ServiceType[];
   valets: ValetType[];
   add_ons: AddOn[];
+  suv_surcharge_percent: number;
 };
 
 /** Public service, valet, and add-on lists for guest checkout. No auth. */

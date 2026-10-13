@@ -5,7 +5,7 @@ import AddressDialog from "../components/AddressDialog";
 import AppShell from "../components/AppShell";
 import PaymentForm from "../components/PaymentForm";
 import StripeCheckout from "../components/StripeCheckout";
-import { saveConfirmationSnapshot, waitForPaymentConfirmation } from "../lib/bookingCheckout";
+import { formatSuvPercent, saveConfirmationSnapshot, suvLineLabel, waitForPaymentConfirmation } from "../lib/bookingCheckout";
 import {
   MIN_BULK_VEHICLES,
   buildBulkBookingData,
@@ -87,6 +87,7 @@ export default function BulkBookPage() {
 
   const [addresses, setAddresses] = useState<SavedAddress[]>([]);
   const [serviceTypes, setServiceTypes] = useState<ServiceType[]>([]);
+  const [suvSurchargePercent, setSuvSurchargePercent] = useState<number | null>(null);
   const [valetTypes, setValetTypes] = useState<ValetType[]>([]);
   const [addOns, setAddOns] = useState<AddOn[]>([]);
 
@@ -117,8 +118,15 @@ export default function BulkBookPage() {
   const vehicleTotal = typeof vehicleCount === "number" && vehicleCount > 0 ? vehicleCount : 0;
 
   const pricing = useMemo(
-    () => bulkPricing({ service, addons: selectedAddons, numberOfVehicles: vehicleTotal, isSuv }),
-    [service, selectedAddons, vehicleTotal, isSuv],
+    () =>
+      bulkPricing({
+        service,
+        addons: selectedAddons,
+        numberOfVehicles: vehicleTotal,
+        isSuv,
+        suvSurchargePercent: suvSurchargePercent ?? 0,
+      }),
+    [service, selectedAddons, vehicleTotal, isSuv, suvSurchargePercent],
   );
 
   const isQuickSparkle = isQuickSparkleService(service);
@@ -131,6 +139,7 @@ export default function BulkBookPage() {
     pricing,
     complimentaryApplied,
     isSuv,
+    suvSurchargePercent ?? 0,
   );
 
   const loadCatalog = useCallback(async () => {
@@ -152,7 +161,10 @@ export default function BulkBookPage() {
       } else {
         setError(authErrorMessage(addressesRes.reason, "Could not load service addresses."));
       }
-      if (servicesRes.status === "fulfilled") setServiceTypes(servicesRes.value || []);
+      if (servicesRes.status === "fulfilled") {
+        setServiceTypes(servicesRes.value.services || []);
+        setSuvSurchargePercent(servicesRes.value.suvSurchargePercent);
+      }
       if (valetsRes.status === "fulfilled") setValetTypes(valetsRes.value || []);
       if (addonsRes.status === "fulfilled") setAddOns(addonsRes.value || []);
       if (invoiceLaterRes.status === "fulfilled") {
@@ -471,7 +483,11 @@ export default function BulkBookPage() {
           </label>
           <label className="check-row">
             <input type="checkbox" checked={isSuv} onChange={(e) => setIsSuv(e.target.checked)} />
-            <span>SUV / MPV cars — 20% extra for the whole order.</span>
+            <span>
+              {suvSurchargePercent == null
+                ? "SUV / MPV cars."
+                : `SUV / MPV cars — ${formatSuvPercent(suvSurchargePercent)}% extra for the whole order.`}
+            </span>
           </label>
         </section>
       ) : null}
@@ -667,7 +683,7 @@ export default function BulkBookPage() {
                   ) : null}
                   {isSuv ? (
                     <div>
-                      <dt>SUV / MPV (20%)</dt>
+                      <dt>{suvLineLabel(suvSurchargePercent)}</dt>
                       <dd>{formatMoney(pricing.suvSurcharge, country)}</dd>
                     </div>
                   ) : null}

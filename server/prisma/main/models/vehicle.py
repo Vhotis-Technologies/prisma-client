@@ -6,7 +6,9 @@ Core flow: :class:`Vehicle` + :class:`VehicleOwnership` → :class:`BookedAppoin
 """
 import time
 import uuid
+from decimal import Decimal
 
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
 
@@ -127,6 +129,40 @@ class ServiceType(models.Model):
         if user and (user.is_fleet_owner or user.is_branch_admin):
             return self.fleet_price if self.fleet_price is not None else self.price
         return self.price
+
+
+class SuvSurcharge(models.Model):
+    """Single admin row holding the SUV / MPV surcharge percent. Quotes read it instead of a fixed percent."""
+
+    suv_surcharge_percent = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal("15.00"),
+        validators=[MinValueValidator(Decimal("0")), MaxValueValidator(Decimal("100"))],
+        help_text="Percent added for SUV / MPV bookings, on the service and add-on total.",
+    )
+
+    class Meta:
+        verbose_name = "SUV surcharge"
+        verbose_name_plural = "SUV surcharge"
+
+    def __str__(self):
+        return f"SUV / MPV surcharge {self.suv_surcharge_percent}%"
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        return
+
+    @classmethod
+    def current(cls):
+        row, _created = cls.objects.get_or_create(
+            pk=1,
+            defaults={"suv_surcharge_percent": Decimal("15.00")},
+        )
+        return row
 
 
 class ValetType(models.Model):

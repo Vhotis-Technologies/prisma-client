@@ -2,6 +2,7 @@
   --font-sans: "Barlow", "Helvetica Neue", Helvetica, Arial, sans-serif;
   --font-display: "Archivo", "Barlow", sans-serif;
   --sidebar-width: 14.25rem;
+  --support-bar-h: 1.95rem;
 
   --bg: #e7f0f8;
   --bg-elevated: #ffffff;
@@ -822,16 +823,53 @@ select {
   gap: 0.5rem;
 }
 
-.support-phone {
+/* Top strip: email | opening hours | phone, one line */
+.support-bar {
+  position: sticky;
+  top: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  height: var(--support-bar-h);
+  padding: 0 1.15rem;
+  background: #02070d;
   color: #fff;
-  font-weight: 600;
-  text-decoration: none;
-  white-space: nowrap;
+  font-size: 0.78rem;
+  font-weight: 500;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.support-phone:hover {
+.support-bar-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0 0.85rem;
+  border-left: 1px solid rgba(255, 255, 255, 0.28);
+  color: #fff;
+  text-decoration: none;
+  white-space: nowrap;
+  line-height: 1;
+}
+
+.support-bar-item:first-child {
+  border-left: 0;
+}
+
+.support-bar-item:last-child {
+  padding-right: 0;
+}
+
+a.support-bar-item:hover {
   color: #fff;
   text-decoration: underline;
+}
+
+.support-bar-item svg {
+  width: 0.85rem;
+  height: 0.85rem;
+  flex-shrink: 0;
+  opacity: 0.85;
 }
 
 .guest-shell-main {
@@ -1328,7 +1366,7 @@ select {
 
 /* App shell */
 .shell {
-  min-height: 100svh;
+  min-height: calc(100svh - var(--support-bar-h));
   display: flex;
 }
 
@@ -1344,8 +1382,8 @@ select {
   width: var(--sidebar-width);
   flex-shrink: 0;
   position: sticky;
-  top: 0;
-  height: 100svh;
+  top: var(--support-bar-h);
+  height: calc(100svh - var(--support-bar-h));
   display: flex;
   flex-direction: column;
   background: #fff;
@@ -2131,6 +2169,12 @@ code {
   padding: 0.12rem 0.4rem;
 }
 
+@media (max-width: 480px) {
+  .support-bar-item svg {
+    display: none;
+  }
+}
+
 @media (max-width: 860px) {
   .auth-intro h1 {
     font-size: 1.65rem;
@@ -2140,21 +2184,37 @@ code {
     display: flex;
   }
 
+  :root {
+    --support-bar-h: 1.7rem;
+  }
+
+  .support-bar {
+    justify-content: center;
+    padding: 0 0.5rem;
+    font-size: 0.68rem;
+  }
+
+  .support-bar-item {
+    gap: 0.28rem;
+    padding: 0 0.5rem;
+  }
+
+  .support-bar-item svg {
+    width: 0.72rem;
+    height: 0.72rem;
+  }
+
   .shell-topbar {
     display: flex;
     align-items: center;
     gap: 0.7rem;
     position: sticky;
-    top: 0;
+    top: var(--support-bar-h);
     z-index: 50;
     padding: 0.55rem 0.85rem;
     background: var(--panel);
     color: var(--panel-text);
     border-bottom: 3px solid var(--primary);
-  }
-
-  .shell-topbar .support-phone {
-    margin-left: auto;
   }
 
   .shell-menu-btn {
@@ -2182,10 +2242,10 @@ code {
 
   .shell-sidebar {
     position: fixed;
-    top: 3.05rem;
+    top: calc(var(--support-bar-h) + 3.05rem);
     left: 0;
     z-index: 40;
-    height: calc(100svh - 3.05rem);
+    height: calc(100svh - var(--support-bar-h) - 3.05rem);
     transform: translateX(-100%);
     transition: transform 0.2s ease;
   }
@@ -2197,7 +2257,7 @@ code {
   .shell-scrim {
     display: block;
     position: fixed;
-    inset: 3.05rem 0 0 0;
+    inset: calc(var(--support-bar-h) + 3.05rem) 0 0 0;
     z-index: 35;
     background: rgba(33, 33, 33, 0.35);
   }

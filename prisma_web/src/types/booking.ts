@@ -60,7 +60,7 @@ export type BookingQuotePricingLines = {
   partner_referral_discount_inc_vat: number;
   subscription_discount_inc_vat: number;
   subscription_discount_percent: number;
-  /** 20% of service + add-ons when the vehicle is SUV/MPV. VAT-inclusive. */
+  /** Admin SUV / MPV percent of service + add-ons. VAT-inclusive. */
   suv_surcharge_inc_vat?: number;
   /** Flat express fee. VAT-inclusive. */
   express_fee_inc_vat?: number;
@@ -106,6 +106,7 @@ export type BookingQuote = {
     expires_at: string | null;
   } | null;
   vat_rate_percent: number;
+  suv_surcharge_percent?: number;
   travel_surcharge?: number;
 };
 

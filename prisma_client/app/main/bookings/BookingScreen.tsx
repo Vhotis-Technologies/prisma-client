@@ -24,6 +24,7 @@ import { useThemeColor } from "@/hooks/useThemeColor";
 import { router } from "expo-router";
 
 // Import booking components
+import { suvExtraCopy, suvLineCopy } from "@/app/utils/suvSurcharge";
 import VehicleSelector from "@/app/components/booking/VehicleSelector";
 import ServiceTypeCard from "@/app/components/booking/ServiceTypeCard";
 import ValetTypeCard from "@/app/components/booking/ValetTypeCard";
@@ -206,6 +207,7 @@ const BookingScreen = () => {
     // Data
     addOns,
     serviceTypes,
+    suvSurchargePercent,
     valetTypes,
     isLoadingAddOns,
     isLoadingServiceTypes,
@@ -440,6 +442,7 @@ const BookingScreen = () => {
             onSUVChange={handleSUVChange}
             isExpressService={isExpressService}
             onExpressServiceChange={handleExpressServiceChange}
+            suvSurchargePercent={suvSurchargePercent}
           />
         );
 
@@ -837,6 +840,7 @@ const BookingScreen = () => {
                     addonDuration={getAddonDuration()}
                     formatPrice={formatPrice}
                     user={user || undefined}
+                    suvSurchargePercent={serverQuote?.suv_surcharge_percent ?? suvSurchargePercent}
                     originalPrice={
                       winnerVoucherApplied || getPriceSummaryBreakdown()
                         ? undefined
@@ -1177,7 +1181,7 @@ const BookingScreen = () => {
                     },
                   ]}
                 >
-                  Additional 20% surcharge for SUV / MPV cleaning
+                  {suvExtraCopy(bulk.suvSurchargePercent)}
                 </StyledText>
               </View>
               <CircleCheckbox
@@ -1339,7 +1343,7 @@ const BookingScreen = () => {
                     variant="bodySmall"
                     style={{ color: textColor, marginTop: 4 }}
                   >
-                    SUV / MPV surcharge (20%): +€{bulk.suvSurcharge.toFixed(2)}
+                    {suvLineCopy(bulk.suvSurchargePercent)} surcharge: +€{bulk.suvSurcharge.toFixed(2)}
                   </StyledText>
                 )}
                 <StyledText

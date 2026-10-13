@@ -3,7 +3,7 @@ import { NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 import { isBulkBookingEligible } from "../lib/account";
 import { isDealershipPartner } from "../lib/format";
-import SupportPhone from "./SupportPhone";
+import SupportBar from "./SupportBar";
 import BrandMark from "./BrandMark";
 import { useBookingLiveUpdates } from "../app-hooks/useBookingLiveUpdates";
 
@@ -159,19 +159,35 @@ export default function AppShell({ children }: AppShellProps) {
     { to: "/garage", label: "Garage", icon: "car" },
     { to: "/history", label: "History", icon: "history" },
   ];
-  if (user?.is_fleet_owner) work.push({ to: "/branches", label: "Branches", icon: "branches" });
-  if (isDealershipPartner(user)) work.push({ to: "/payouts", label: "Payouts", icon: "payouts" });
+  if (user?.is_fleet_owner)
+    work.push({ to: "/branches", label: "Branches", icon: "branches" });
+  if (isDealershipPartner(user))
+    work.push({ to: "/payouts", label: "Payouts", icon: "payouts" });
 
   const account: NavItem[] = [
     { to: "/settings/email", label: "Email", icon: "email", match: "exact" },
-    { to: "/settings/notifications", label: "Notifications", icon: "bell", match: "exact" },
+    {
+      to: "/settings/notifications",
+      label: "Notifications",
+      icon: "bell",
+      match: "exact",
+    },
     { to: "/settings/tickets", label: "Tickets", icon: "tickets" },
-    { to: "/settings/addresses", label: "Addresses", icon: "pin", match: "exact" },
+    {
+      to: "/settings/addresses",
+      label: "Addresses",
+      icon: "pin",
+      match: "exact",
+    },
     { to: "/settings/payments", label: "Payments", icon: "card" },
     { to: "/settings/subscriptions", label: "Subscription", icon: "spark" },
   ];
   if (isBulkBookingEligible(user)) {
-    account.push({ to: "/settings/invoices", label: "Invoices", icon: "invoice" });
+    account.push({
+      to: "/settings/invoices",
+      label: "Invoices",
+      icon: "invoice",
+    });
   }
 
   function renderItems(items: NavItem[]) {
@@ -180,7 +196,9 @@ export default function AppShell({ children }: AppShellProps) {
         key={item.to}
         to={item.to}
         end={item.match === "exact"}
-        className={() => (isItemActive(item, location.pathname) ? "is-active" : undefined)}
+        className={() =>
+          isItemActive(item, location.pathname) ? "is-active" : undefined
+        }
       >
         <Icon name={item.icon} />
         <span>{item.label}</span>
@@ -189,6 +207,8 @@ export default function AppShell({ children }: AppShellProps) {
   }
 
   return (
+    <>
+    <SupportBar />
     <div className={`shell${open ? " is-nav-open" : ""}`}>
       <header className="shell-topbar">
         <button
@@ -200,25 +220,39 @@ export default function AppShell({ children }: AppShellProps) {
           onClick={() => setOpen((value) => !value)}
         >
           {open ? (
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden="true">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.9"
+              aria-hidden="true"
+            >
               <path d="M6 6l12 12M18 6 6 18" />
             </svg>
           ) : (
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden="true">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.9"
+              aria-hidden="true"
+            >
               <path d="M4 7h16M4 12h16M4 17h16" />
             </svg>
           )}
         </button>
         <BrandMark inverted />
-        <SupportPhone />
       </header>
 
-      <div className="shell-scrim" hidden={!open} onClick={() => setOpen(false)} />
+      <div
+        className="shell-scrim"
+        hidden={!open}
+        onClick={() => setOpen(false)}
+      />
 
       <aside id="app-sidebar" className="shell-sidebar">
         <div className="shell-sidebar-brand">
           <BrandMark inverted />
-          <SupportPhone />
         </div>
         <nav className="shell-nav" aria-label="Main">
           <p className="shell-nav-label">Work</p>
@@ -231,7 +265,9 @@ export default function AppShell({ children }: AppShellProps) {
             <NavLink
               to="/settings/profile"
               end
-              className={({ isActive }) => `shell-user${isActive ? " is-active" : ""}`}
+              className={({ isActive }) =>
+                `shell-user${isActive ? " is-active" : ""}`
+              }
               aria-label="Open profile"
             >
               <span className="shell-avatar" aria-hidden="true">
@@ -258,5 +294,6 @@ export default function AppShell({ children }: AppShellProps) {
       </aside>
       <main className="shell-main">{children}</main>
     </div>
+    </>
   );
 }

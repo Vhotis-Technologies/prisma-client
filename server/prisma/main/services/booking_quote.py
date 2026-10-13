@@ -2,8 +2,8 @@
 Server-side booking price quote and complimentary Quick Sparkle validation.
 
 Mirrors client useBooking.calculateFinalPrice (VAT-inclusive line items, 13.5% VAT split,
-4+ addons discount, SUV 20%, express €30, travel surcharge €10 for B2C 25-35km from Spire,
-loyalty/promotion % on pre-VAT-inclusive subtotal).
+4+ addons discount, SUV surcharge from SuvSurcharge, express €30, travel surcharge €10
+for B2C 25-35km from Spire, loyalty/promotion % on pre-VAT-inclusive subtotal).
 """
 from __future__ import annotations
 
@@ -17,6 +17,21 @@ from django.utils import timezone
 
 # All bookings (B2C, guest, fleet/B2B). Display is not VAT-registered yet.
 VAT_RATE = Decimal("0.135")
+
+
+def suv_surcharge_percent() -> Decimal:
+    """SUV / MPV percent from the admin SUV surcharge row."""
+    from main.models import SuvSurcharge
+
+    percent = Decimal(SuvSurcharge.current().suv_surcharge_percent)
+    if percent < 0:
+        return Decimal("0")
+    return percent
+
+
+def suv_surcharge_rate() -> Decimal:
+    """Fraction applied to the service and add-on total when the booking is SUV / MPV."""
+    return suv_surcharge_percent() / Decimal("100")
 # Canonical product name in admin/marketing; detection uses case-insensitive substring (see is_quick_sparkle_service_name).
 CANONICAL_QUICK_SPARKLE_LABEL = "Prisma Quick Sparkle"
 COMPLIMENTARY_SOURCES = frozenset({"loyalty", "subscription", "partner"})
@@ -405,7 +420,7 @@ def compute_price_breakdown_parts(
     if exclude_service_price:
         suv = Decimal("0")
     else:
-        suv = money(sub * Decimal("0.20")) if is_suv else Decimal("0")
+        suv = money(sub * suv_surcharge_rate()) if is_suv else Decimal("0")
     express_fee = Decimal("30") if is_express else Decimal("0")
     travel_surcharge = _travel_surcharge_for_location(user, latitude, longitude)
     total_before_discount = money(sub + suv + express_fee + travel_surcharge)
@@ -1007,6 +1022,7 @@ def quote_booking_for_user(
             "message": mismatch_message,
         },
         "travel_surcharge": travel_surcharge_float,
+        "suv_surcharge_percent": float(suv_surcharge_percent()),
     }
 
 
@@ -1155,14 +1171,14 @@ def _compute_bulk_total(
     )
     discount_amount = money(combined * Decimal(str(discount_percent)) / Decimal("100"))
     after_discount = money(max(Decimal("0"), combined - discount_amount))
-    suv_surcharge = money(after_discount * Decimal("0.20")) if is_suv else Decimal("0")
+    suv_surcharge = money(after_discount * suv_surcharge_rate()) if is_suv else Decimal("0")
     return money(after_discount + suv_surcharge)
 
 
 def expected_bulk_total_from_booking_data(user, booking_data: dict) -> Decimal:
     """
     Recompute bulk order total (fleet/partner bulk flow).
-    Mirrors client useBulkBooking: N × service + N × addons, bulk % off, then 20% SUV.
+    Mirrors client useBulkBooking: N × service + N × addons, bulk % off, then the admin SUV percent.
     """
     service, addons, is_suv, _is_express = _parse_booking_data_service_addons(
         booking_data, user

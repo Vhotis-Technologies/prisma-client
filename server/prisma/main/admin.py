@@ -11,7 +11,7 @@ from django.core.exceptions import ValidationError
 from django import forms
 from django.db import models
 from django.utils import timezone
-from .models import User, Vehicle, VehicleOwnership, VehicleEvent, Fleet, FleetMember, FleetVehicle, VehicleTransfer, ServiceType, ValetType, DetailerProfile, BookedAppointment, Address, AddOns, Notification, LoyaltyProgram, Promotions, PaymentTransaction, RefundRecord, TermsAndConditions, PrivacyPolicy, Referral, AccountInvite, Branch, SubscriptionTier, SubscriptionPlan, FleetSubscription, SubscriptionBilling, EventDataManagement, BookedAppointmentImage, Partner, PartnerBankAccount, PartnerPayoutRequest, ReferralAttribution, CommissionEarning, CommissionPayout, PartnerMetricsCache, CommissionAdminLog, PendingBooking, BulkOrder, WinnerVoucher, GiftVoucher, B2CSubcriptionTier, B2CSubcriptionPlan, B2CSubcription, B2CSubcriptionBilling, GuestAccessToken
+from .models import User, Vehicle, VehicleOwnership, VehicleEvent, Fleet, FleetMember, FleetVehicle, VehicleTransfer, ServiceType, SuvSurcharge, ValetType, DetailerProfile, BookedAppointment, Address, AddOns, Notification, LoyaltyProgram, Promotions, PaymentTransaction, RefundRecord, TermsAndConditions, PrivacyPolicy, Referral, AccountInvite, Branch, SubscriptionTier, SubscriptionPlan, FleetSubscription, SubscriptionBilling, EventDataManagement, BookedAppointmentImage, Partner, PartnerBankAccount, PartnerPayoutRequest, ReferralAttribution, CommissionEarning, CommissionPayout, PartnerMetricsCache, CommissionAdminLog, PendingBooking, BulkOrder, WinnerVoucher, GiftVoucher, B2CSubcriptionTier, B2CSubcriptionPlan, B2CSubcription, B2CSubcriptionBilling, GuestAccessToken
 
 
 
@@ -369,6 +369,20 @@ class ServiceTypeAdmin(admin.ModelAdmin):
         if 'description' in fields:
             fields.remove('description')
         return fields
+
+@admin.register(SuvSurcharge)
+class SuvSurchargeAdmin(admin.ModelAdmin):
+    """One row: SUV / MPV surcharge percent used by booking quotes."""
+
+    list_display = ("suv_surcharge_percent",)
+    fields = ("suv_surcharge_percent",)
+
+    def has_add_permission(self, request):
+        return not SuvSurcharge.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
 
 @admin.register(ValetType)
 class ValetTypeAdmin(admin.ModelAdmin):

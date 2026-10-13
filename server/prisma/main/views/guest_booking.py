@@ -44,7 +44,7 @@ from main.models import (
     ValetType,
     WinnerVoucher,
 )
-from main.services.booking_quote import quote_booking_for_user
+from main.services.booking_quote import quote_booking_for_user, suv_surcharge_percent
 from main.services.gift_voucher import (
     compute_gift_discount,
     gift_voucher_matches_email,
@@ -353,7 +353,12 @@ class GuestBookingView(APIView):
             for add_on in AddOns.objects.all().order_by("price")
         ]
         return Response(
-            {"services": services, "valets": valets, "add_ons": add_ons},
+            {
+                "services": services,
+                "valets": valets,
+                "add_ons": add_ons,
+                "suv_surcharge_percent": float(suv_surcharge_percent()),
+            },
             status=status.HTTP_200_OK,
         )
 
