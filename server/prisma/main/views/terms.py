@@ -3,6 +3,8 @@ Terms and privacy API: fetch latest Terms and Conditions and Privacy Policy (All
 
 Actions: get_terms, get_privacy_policy. Returns HTML content for in-app display.
 """
+import re
+
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -118,6 +120,12 @@ class TermsView(APIView):
         """Returns the latest Privacy Policy from the PrivacyPolicy model."""
         try:
             privacy_policy = PrivacyPolicy.objects.latest('last_updated')
+            # Mark <strong> tags that open a <p> as section titles; leave inline bold untouched.
+            privacy_content = re.sub(
+                r'(<p\b[^>]*>\s*)<strong>',
+                r'\1<strong class="section-title">',
+                privacy_policy.content or '',
+            )
             primary_blue = '#5B9BD5'
             text_dark = '#2C3E50'
             text_muted = '#6B7C8D'
@@ -151,15 +159,18 @@ class TermsView(APIView):
                         color: {primary_blue};
                     }}
                     p {{
-                        margin-bottom: 10px;
+                        margin-bottom: 14px;
                         margin-top: 0;
                         color: {text_muted};
                         line-height: 1.6;
-                        font-size: 10px;
+                        font-size: 15px;
                     }}
-                    p strong:first-child {{
+                    /* Section headers - bold blue (same as Terms). Only <strong> tags that open a
+                       paragraph get the .section-title class (added below), so inline bold such as
+                       ('<strong>we</strong>') stays inline. */
+                    p strong.section-title {{
                         display: block;
-                        font-size: 12px;
+                        font-size: 16px;
                         font-weight: bold;
                         margin-bottom: 8px;
                         margin-top: 18px;
@@ -179,12 +190,18 @@ class TermsView(APIView):
                     }}
                     li {{
                         margin-bottom: 6px;
+                        color: {text_muted};
+                        line-height: 1.6;
+                        font-size: 15px;
+                    }}
+                    li p, li li {{
+                        font-size: 15px;
                     }}
                 </style>
             </head>
             <body>
                 <div class="privacy-content">
-                    {privacy_policy.content}
+                    {privacy_content}
                 </div>
             </body>
             </html>
