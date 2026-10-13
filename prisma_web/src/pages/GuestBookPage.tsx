@@ -718,7 +718,7 @@ export default function GuestBookPage() {
                   {lookupBusy ? "Looking up…" : "Look up"}
                 </button>
                 <button type="button" className="btn btn-ghost" onClick={showManualEntry}>
-                  Enter details by hand
+                  Enter details manually
                 </button>
               </div>
             </>
